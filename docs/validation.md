@@ -37,6 +37,28 @@ Measure:
 - note-edit burden;
 - reviewer trust and comprehension.
 
+## Demo-readiness gate
+
+The hackathon build is ready to present only when:
+
+- the complete consent-to-review path runs locally in under three minutes;
+- every Agent Activity entry resolves to an immutable event envelope;
+- poor hand framing pauses capture, requests at most one correction, verifies
+  recovery, and can still end as `not measurable`;
+- the current camera and microphone capture is live or unmistakably labeled as
+  fixture playback;
+- all prior encounters remain visibly labeled synthetic;
+- the same deterministic fixture yields three included encounters and one
+  prompt-version exclusion;
+- every generated claim resolves to a measurement, source clip, and grounding
+  event;
+- acceptance and rejection produce different history outcomes; and
+- the interface makes no diagnosis, progression, cause, or treatment claim.
+
+Rehearse the preferred live path and every labeled fallback described in
+[the demo experience](demo-experience.md). Demo smoothness cannot come from
+fabricated agent activity or hidden fixture substitution.
+
 ## Later validation
 
 Only after the three-capability loop works should a measurement advance through:

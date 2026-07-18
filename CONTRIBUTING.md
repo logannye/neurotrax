@@ -1,11 +1,12 @@
 # Contributing
 
-Thank you for contributing to Neuro Encounter.
+Thank you for contributing to Neurotrax.
 
 ## Before opening a change
 
 1. Read the [architecture](docs/architecture.md) and
-   [safety requirements](docs/safety.md).
+   [safety requirements](docs/safety.md), then review the
+   [demo experience](docs/demo-experience.md).
 2. State the intended use of the change.
 3. Identify which of the three product capabilities it strengthens.
 4. Document expected failures, quality requirements, and validation status.
@@ -21,6 +22,10 @@ Every pull request should explain:
 - consent and retention implications;
 - new clinical or safety claims, if any;
 - how the change was checked.
+
+Any agent activity shown in the interface must correspond to a real event,
+decision, action, or verified outcome. Do not add simulated chain-of-thought or
+decorative activity that cannot be audited.
 
 If a change does not improve Guided Capture, Personal Trajectory, Clinician
 Evidence Card, or a required safety foundation, leave it out of the MVP.

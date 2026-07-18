@@ -3,6 +3,8 @@
   "containsPHI": false,
   "encounterId": "demo-encounter-002",
   "participantId": "synthetic-participant-001",
+  "captureMode": "live",
+  "fixtureDisclosure": null,
   "protocolId": "macbook-check-in.v0.1",
   "captureAdapter": {
     "id": "macbook-browser",
@@ -18,14 +20,14 @@
   },
   "context": {
     "medicationPhase": "not-collected",
-    "notes": "Synthetic example"
+    "notes": "Synthetic current encounter demonstrating one bounded framing correction"
   },
   "tasks": [
     {
       "taskId": "standard-speech.v0.1",
       "promptVersion": "prototype-sentence.v0.1",
-      "startedAt": "2026-07-18T16:00:00Z",
-      "endedAt": "2026-07-18T16:00:15Z",
+      "startedAt": "2026-07-18T16:00:02Z",
+      "endedAt": "2026-07-18T16:00:17Z",
       "retryCount": 0,
       "quality": {
         "status": "pass",
@@ -58,8 +60,33 @@
       "taskId": "seated-finger-tap.v0.1",
       "promptVersion": "finger-tap-instruction.v0.1",
       "startedAt": "2026-07-18T16:00:20Z",
-      "endedAt": "2026-07-18T16:00:30Z",
-      "retryCount": 0,
+      "endedAt": "2026-07-18T16:00:42Z",
+      "retryCount": 1,
+      "qualityAttempts": [
+        {
+          "attempt": 1,
+          "status": "retry",
+          "assessedAt": "2026-07-18T16:00:22.900Z",
+          "ruleId": "tap-hand-visibility.v0.1",
+          "ruleVersion": "0.1.0",
+          "processorVersion": "placeholder-0.1",
+          "failedChecks": [
+            "hand-visible"
+          ],
+          "agentAction": "request-hand-reposition"
+        },
+        {
+          "attempt": 2,
+          "status": "pass",
+          "assessedAt": "2026-07-18T16:00:31.900Z",
+          "ruleId": "tap-hand-visibility.v0.1",
+          "ruleVersion": "0.1.0",
+          "processorVersion": "placeholder-0.1",
+          "recoveredChecks": [
+            "hand-visible"
+          ]
+        }
+      ],
       "quality": {
         "status": "pass",
         "checks": {
@@ -89,5 +116,5 @@
       ]
     }
   ],
-  "reviewStatus": "pending"
+  "reviewStatus": "accepted"
 }

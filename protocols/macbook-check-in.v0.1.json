@@ -2,12 +2,13 @@
   "id": "macbook-check-in.v0.1",
   "status": "non-clinical-prototype",
   "captureAdapter": "macbook-browser",
-  "description": "A seated audiovisual check-in used to test capture, quality, comparison, and review infrastructure.",
+  "description": "A seated Neurotrax demo check-in used to test capture, bounded correction, comparison, and review infrastructure.",
   "consentRequired": true,
   "maxRetriesPerTask": 1,
   "tasks": [
     {
       "id": "standard-speech.v0.1",
+      "promptVersion": "prototype-sentence.v0.1",
       "modality": "audio-video",
       "durationSeconds": 15,
       "instruction": "Read the displayed prototype sentence at a comfortable pace.",
@@ -20,9 +21,19 @@
     },
     {
       "id": "seated-finger-tap.v0.1",
+      "promptVersion": "finger-tap-instruction.v0.1",
       "modality": "video",
       "durationSeconds": 10,
       "instruction": "With the selected hand visible, tap the index finger and thumb as comfortably and consistently as possible.",
+      "demoQualityPolicy": {
+        "id": "tap-hand-visibility.v0.1",
+        "version": "0.1.0",
+        "processorId": "hand-landmark-visibility",
+        "processorVersion": "placeholder-0.1",
+        "handLandmarkVisibilityFractionAtLeast": 0.85,
+        "maxCorrectionAttempts": 1,
+        "onExhaustion": "not-measurable"
+      },
       "qualityChecks": [
         "camera-stable",
         "hand-visible",

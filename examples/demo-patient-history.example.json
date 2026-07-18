@@ -1,0 +1,179 @@
+{
+  "exampleOnly": true,
+  "containsPHI": false,
+  "synthetic": true,
+  "captureMode": "synthetic-fixture",
+  "datasetId": "neurotrax-demo-history.v0.1",
+  "participant": {
+    "participantId": "synthetic-participant-001",
+    "displayName": "Demo Patient",
+    "synthetic": true
+  },
+  "currentEncounterId": "demo-encounter-002",
+  "compatibilityPolicy": {
+    "id": "exact-protocol-task-prompt-and-processor.v0.1",
+    "requiredProtocolId": "macbook-check-in.v0.1",
+    "requiredCaptureAdapter": {
+      "id": "macbook-browser",
+      "version": "0.1.0"
+    },
+    "requiredTaskVersions": {
+      "standard-speech.v0.1": "prototype-sentence.v0.1",
+      "seated-finger-tap.v0.1": "finger-tap-instruction.v0.1"
+    },
+    "requiredAlgorithmVersion": "placeholder-0.1"
+  },
+  "history": [
+    {
+      "encounterId": "demo-encounter-history-003",
+      "occurredAt": "2026-04-18T16:00:00Z",
+      "synthetic": true,
+      "reviewStatus": "accepted",
+      "protocolId": "macbook-check-in.v0.1",
+      "captureAdapter": {
+        "id": "macbook-browser",
+        "version": "0.1.0"
+      },
+      "taskPromptVersions": {
+        "standard-speech.v0.1": "prototype-sentence.v0.1",
+        "seated-finger-tap.v0.1": "finger-tap-instruction.v0.1"
+      },
+      "summary": {
+        "qualityStatus": "pass",
+        "measurements": [
+          {
+            "code": "prototype.speech.duration",
+            "value": 14.8,
+            "unit": "seconds",
+            "algorithmVersion": "placeholder-0.1"
+          },
+          {
+            "code": "prototype.tap.count",
+            "value": 26,
+            "unit": "count",
+            "algorithmVersion": "placeholder-0.1"
+          }
+        ]
+      },
+      "trajectoryEligibility": {
+        "status": "compatible",
+        "reasons": []
+      }
+    },
+    {
+      "encounterId": "demo-encounter-history-002",
+      "occurredAt": "2026-05-18T16:00:00Z",
+      "synthetic": true,
+      "reviewStatus": "accepted",
+      "protocolId": "macbook-check-in.v0.1",
+      "captureAdapter": {
+        "id": "macbook-browser",
+        "version": "0.1.0"
+      },
+      "taskPromptVersions": {
+        "standard-speech.v0.1": "prototype-sentence.v0.1",
+        "seated-finger-tap.v0.1": "finger-tap-instruction.v0.1"
+      },
+      "summary": {
+        "qualityStatus": "pass",
+        "measurements": [
+          {
+            "code": "prototype.speech.duration",
+            "value": 14.6,
+            "unit": "seconds",
+            "algorithmVersion": "placeholder-0.1"
+          },
+          {
+            "code": "prototype.tap.count",
+            "value": 28,
+            "unit": "count",
+            "algorithmVersion": "placeholder-0.1"
+          }
+        ]
+      },
+      "trajectoryEligibility": {
+        "status": "compatible",
+        "reasons": []
+      }
+    },
+    {
+      "encounterId": "demo-encounter-001",
+      "occurredAt": "2026-06-18T16:00:00Z",
+      "synthetic": true,
+      "reviewStatus": "accepted",
+      "protocolId": "macbook-check-in.v0.1",
+      "captureAdapter": {
+        "id": "macbook-browser",
+        "version": "0.1.0"
+      },
+      "taskPromptVersions": {
+        "standard-speech.v0.1": "prototype-sentence.v0.1",
+        "seated-finger-tap.v0.1": "finger-tap-instruction.v0.1"
+      },
+      "summary": {
+        "qualityStatus": "pass",
+        "measurements": [
+          {
+            "code": "prototype.speech.duration",
+            "value": 14.7,
+            "unit": "seconds",
+            "algorithmVersion": "placeholder-0.1"
+          },
+          {
+            "code": "prototype.tap.count",
+            "value": 27,
+            "unit": "count",
+            "algorithmVersion": "placeholder-0.1"
+          }
+        ]
+      },
+      "trajectoryEligibility": {
+        "status": "compatible",
+        "reasons": []
+      }
+    },
+    {
+      "encounterId": "demo-encounter-history-004",
+      "occurredAt": "2026-03-18T16:00:00Z",
+      "synthetic": true,
+      "reviewStatus": "accepted",
+      "protocolId": "macbook-check-in.v0.1",
+      "captureAdapter": {
+        "id": "macbook-browser",
+        "version": "0.1.0"
+      },
+      "taskPromptVersions": {
+        "standard-speech.v0.1": "prototype-sentence.v0.0",
+        "seated-finger-tap.v0.1": "finger-tap-instruction.v0.1"
+      },
+      "summary": {
+        "qualityStatus": "pass",
+        "measurements": [
+          {
+            "code": "prototype.speech.duration",
+            "value": 14.5,
+            "unit": "seconds",
+            "algorithmVersion": "placeholder-0.1"
+          },
+          {
+            "code": "prototype.tap.count",
+            "value": 25,
+            "unit": "count",
+            "algorithmVersion": "placeholder-0.1"
+          }
+        ]
+      },
+      "trajectoryEligibility": {
+        "status": "excluded",
+        "reasons": [
+          {
+            "code": "prompt-version-mismatch",
+            "taskId": "standard-speech.v0.1",
+            "expected": "prototype-sentence.v0.1",
+            "observed": "prototype-sentence.v0.0"
+          }
+        ]
+      }
+    }
+  ]
+}

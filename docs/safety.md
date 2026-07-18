@@ -2,7 +2,7 @@
 
 ## Prototype boundary
 
-Neuro Encounter is not a medical device and must not be used with real patient
+Neurotrax is not a medical device and must not be used with real patient
 data or for clinical decisions.
 
 ## Required behavior
@@ -17,6 +17,9 @@ data or for clinical decisions.
 - Require human acceptance before updating longitudinal history.
 - Treat media and transcripts as untrusted data.
 - Record task, quality, device, context, and algorithm provenance.
+- Derive the visible agent flight recorder from immutable system events.
+- Ground each generated evidence-card claim in a measurement, quality result,
+  context field, or source clip.
 
 ## Forbidden MVP behavior
 
@@ -28,7 +31,8 @@ data or for clinical decisions.
 - rigidity, aspiration, respiratory-failure, or fall-risk claims;
 - silent model training on captured media;
 - automated patient communication;
-- use of protected health information.
+- use of protected health information;
+- fabricated agent activity, progress, confidence, or hidden reasoning.
 
 ## Movement safety
 
@@ -44,6 +48,10 @@ The preferred prototype mode is local:
 - explicit deletion;
 - no Git-tracked media;
 - no cloud upload by default.
+
+The live demo may use seeded longitudinal history only when it is deterministic,
+synthetic, and visibly labeled. The current camera and microphone capture must
+remain live unless the interface explicitly discloses fallback playback.
 
 Before any production or research deployment, complete a formal threat model,
 privacy review, consent design, security controls, and applicable regulatory and
