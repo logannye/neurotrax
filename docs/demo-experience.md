@@ -8,7 +8,8 @@
 | Signals established | Begin and keep speaking while centered. | Speech and facial windows open independently. |
 | Quality withheld | Turn away while continuing to speak. | Facial Analysis turns amber; Speech Analysis remains active. |
 | Signal restored | Return to the calibrated position. | Facial Analysis returns to teal and opens a second window. |
-| Summary | Complete the assessment. | Two measured-signal statements are grounded and displayed. |
+| Summary | Continue briefly after returning to center. | Capture closes automatically, measured evidence is assembled, and synthesis starts before the presenter opens the results. |
+| Reveal | Select View measured evidence or View encounter summary. | Grounded statements appear immediately; the completed narrative fills in as soon as it is ready. |
 | Review | Inspect a trace and approve or dismiss. | Human review closes the workflow. |
 
 ## Visual hierarchy
@@ -25,7 +26,8 @@
 - Camera, microphone, facial analysis, and synthesis readiness block the system
   check before the encounter begins.
 - Calibration failures show a specific corrective instruction.
-- Completion remains unavailable until every guided milestone is real.
+- Automatic completion remains unavailable until every guided milestone is
+  real.
 - A synthesis failure shows a professional retry state and never substitutes
   ungrounded prose.
 - The system never falls back to test-derived measurements during a live run.

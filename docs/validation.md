@@ -12,7 +12,9 @@ The unit suite covers:
 - face visibility, geometry, pose, and illumination guidance;
 - facial withholding and recovery;
 - guided completion milestones;
+- automatic capture finalization and synthesis prefetch;
 - current-encounter fact selection;
+- deterministic claim and boundary assembly;
 - schema, refusal, retry, timeout, grounding, and clinical-language rejection.
 
 The browser suite covers:
@@ -47,7 +49,9 @@ must:
 3. produce speech and facial measurements;
 4. visibly withhold only facial analysis during turn-away;
 5. visibly restore facial analysis after return;
-6. produce two grounded statements within 20 seconds;
+6. make two grounded statements available immediately and complete the
+   clinician-readable narrative within 8 seconds under the demo network
+   conditions;
 7. open both traces;
 8. record a human review decision;
 9. release camera and microphone access;

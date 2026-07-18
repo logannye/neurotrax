@@ -31,8 +31,15 @@ pnpm demo:smoke
 pnpm dev
 ```
 
-The smoke command makes one real request to `gpt-5.6` and validates the
-structured-output and grounding contracts.
+The smoke command makes one real request to the configured low-latency
+`gpt-5.6-luna` synthesis service and validates the structured-output and
+grounding contracts. Application readiness also performs one cached warm-up
+request when the page first loads, moving connection and service initialization
+before the encounter begins.
+
+Automated browser tests set `NEUROTRAX_SKIP_SYNTHESIS_WARMUP=1` because their
+synthesis endpoint is intercepted with a deterministic response. Do not set
+that variable for a live presentation.
 
 ## Presentation rehearsal
 
@@ -43,8 +50,16 @@ structured-output and grounding contracts.
 5. Run the system check and wait for every lane to reach Ready.
 6. During capture, keep speaking through the turn-away interval.
 7. Return to the original calibrated position until Signal restored appears.
-8. Verify that Complete assessment becomes enabled.
-9. Confirm that both summary statements open a complete grounding trace.
+8. Confirm that capture closes automatically after the final valid facial
+   window and that the camera and microphone are released.
+9. Select **View measured evidence** or **View encounter summary**. Summary
+   synthesis begins before this action, so a completed card may already be
+   waiting.
+10. Confirm that both summary statements open a complete grounding trace.
+
+Clinical Synthesis uses priority processing, no reasoning pass, and a bounded
+response size. Request timing is written only to the browser operator console
+and the `Server-Timing` response header.
 
 ## Operator-only test capture
 
@@ -67,6 +82,6 @@ for a live assessment.
   frame width.
 - **Speech verification stalls:** reduce background noise and speak naturally
   for another two seconds.
-- **Complete assessment remains disabled:** follow the current on-screen cue;
-  the flow requires initial measurement, withholding, recovery, and a final
-  facial window.
+- **Assessment does not close automatically:** follow the current on-screen
+  cue; the flow requires initial measurement, withholding, recovery, and a
+  final facial window.

@@ -69,7 +69,12 @@ async function installEvidenceMock(page: Page): Promise<void> {
         model: "service-response",
         promptVersion: "test-contract",
         responseId: "test-response",
-        attemptCount: 1
+        attemptCount: 1,
+        timing: {
+          totalMs: 120,
+          modelMs: 116,
+          validationMs: 1
+        }
       })
     });
   });
@@ -83,7 +88,7 @@ async function runGuidedCapture(page: Page): Promise<void> {
   await page.locator("#start-button").click();
   await expect(page.locator("#start-button")).toHaveText("Begin assessment");
   await page.locator("#start-button").click();
-  await expect(page.locator("#stop-button")).toBeEnabled({
+  await expect(page.locator("#stop-button")).toHaveText(/View/, {
     timeout: 10_000
   });
   await expect(
@@ -92,6 +97,7 @@ async function runGuidedCapture(page: Page): Promise<void> {
   await expect(
     page.locator('[data-milestone="recovered"]')
   ).toHaveClass(/is-complete/);
+  await expect(page.locator("#stop-button")).toBeEnabled();
   await page.locator("#stop-button").click();
   await expect(page.locator("#evidence-card")).toBeVisible();
   await expect(page.locator(".evidence-claim")).toHaveCount(2);
@@ -141,4 +147,66 @@ test("dismiss completes review without approving the summary", async ({
     "Summary dismissed."
   );
   await expect(page.locator("#review-state")).toHaveText("Dismissed");
+});
+
+test("prefetches synthesis and exposes measured evidence during service latency", async ({
+  page
+}) => {
+  await installReadinessMock(page);
+  let requestStarted = false;
+  await page.route("**/api/evidence-card", async (route) => {
+    requestStarted = true;
+    const payload = route.request().postDataJSON() as {
+      facts: Array<{
+        claimId: string;
+        statement: string;
+      }>;
+    };
+    await new Promise((resolve) => setTimeout(resolve, 600));
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        draft: {
+          headline: "Two encounter signals are ready for review",
+          summary:
+            "Pitch variability and facial movement were measured during technically usable portions of the encounter.",
+          claims: payload.facts,
+          boundaryStatement: boundary
+        },
+        grounding: {
+          status: "pass",
+          errors: [],
+          groundedClaimIds: payload.facts.map((fact) => fact.claimId)
+        },
+        model: "service-response",
+        promptVersion: "test-contract",
+        responseId: "delayed-test-response",
+        attemptCount: 1,
+        timing: {
+          totalMs: 600,
+          modelMs: 596,
+          validationMs: 1
+        }
+      })
+    });
+  });
+
+  await page.goto("/?testCapture=1&fast=1");
+  await page.locator("#consent-checkbox").check();
+  await page.locator("#start-button").click();
+  await expect(page.locator("#start-button")).toHaveText("Begin assessment");
+  await page.locator("#start-button").click();
+  await expect.poll(() => requestStarted).toBe(true);
+  await expect(page.locator("#stop-button")).toHaveText(
+    "View measured evidence"
+  );
+  await page.locator("#stop-button").click();
+  await expect(page.locator("#evidence-headline")).toHaveText(
+    "Measured evidence assembled"
+  );
+  await expect(page.locator(".evidence-claim")).toHaveCount(2);
+  await expect(page.locator("#evidence-headline")).toHaveText(
+    "Two encounter signals are ready for review"
+  );
 });

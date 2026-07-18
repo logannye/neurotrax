@@ -24,9 +24,14 @@ capabilities. These are research-prototype contracts, not clinical schemas.
 
 ## Evidence and review
 
-- `EvidenceClaimFact` is a pre-grounded fact the model may select.
-- `EvidenceCardDraft` permits one headline, one short summary, and at most two
-  exact claim references.
+- `EvidenceClaimFact` is a pre-grounded fact the application attaches to the
+  final summary.
+- `EvidenceNarrativeDraft` permits only a headline and short summary from the
+  synthesis service.
+- `EvidenceCardDraft` attaches exactly two pre-grounded claim references and
+  the review boundary in application code.
+- `EvidenceSynthesisTiming` records total, service, and validation latency for
+  operator diagnostics.
 - `GroundingResult` records deterministic pass/fail and errors.
 - `ReviewDecision` records human Accept or Reject and whether page-session
   history changed.

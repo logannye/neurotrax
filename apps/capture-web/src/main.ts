@@ -6,14 +6,19 @@ import {
   type ConductorSession,
   type FaceLandmarkFrame
 } from "@neurotrax/ambient-core";
-import { createEncounterClaimFacts } from "@neurotrax/evidence-core";
+import {
+  createEncounterClaimFacts,
+  EVIDENCE_BOUNDARY
+} from "@neurotrax/evidence-core";
 import type {
   AmbientActorId,
   AmbientEventType,
   CaptureCalibration,
   EncounterObservation,
+  EvidenceCardClaim,
   EvidenceCardDraft,
   EvidenceClaimFact,
+  EvidenceSynthesisTiming,
   EventEnvelope,
   GroundingResult,
   ReviewDecision,
@@ -44,6 +49,7 @@ type CaptureState =
   | "ready"
   | "capturing"
   | "analyzing"
+  | "summary-ready"
   | "review"
   | "reviewed"
   | "error";
@@ -55,6 +61,7 @@ interface EvidenceApiResult {
   promptVersion: string;
   responseId: string;
   attemptCount: number;
+  timing: EvidenceSynthesisTiming;
 }
 
 interface FaceWorkerFrameMessage {
@@ -170,6 +177,8 @@ let allEvents: EventEnvelope[] = [];
 let latestObservation: EncounterObservation | null = null;
 let latestClaimFacts: EvidenceClaimFact[] = [];
 let latestEvidence: EvidenceApiResult | null = null;
+let captureFinalizationScheduled = false;
+let resultsVisible = false;
 const voiceTracker = createVoiceActivityTracker();
 const guidedDemo = createGuidedDemoController();
 
@@ -233,6 +242,7 @@ function updateState(nextState: CaptureState, detail?: string): void {
     ready: "Check complete",
     capturing: "Assessment live",
     analyzing: "Preparing summary",
+    "summary-ready": "Summary ready",
     review: "Review ready",
     reviewed: "Complete",
     error: "Needs attention"
@@ -244,10 +254,22 @@ function updateState(nextState: CaptureState, detail?: string): void {
   resetButton.hidden = !["review", "reviewed", "error"].includes(nextState);
 
   if (nextState === "idle" || nextState === "ready") {
+    stopButton.textContent = "Complete assessment";
     refreshStartAvailability();
   }
   if (nextState === "capturing") {
-    stopButton.disabled = !guidedDemo.snapshot().canComplete;
+    stopButton.textContent = "Complete assessment";
+    stopButton.disabled = true;
+  }
+  if (nextState === "analyzing") {
+    stopButton.textContent = latestObservation
+      ? "View measured evidence"
+      : "Preparing summary";
+    stopButton.disabled = !latestObservation || resultsVisible;
+  }
+  if (nextState === "summary-ready") {
+    stopButton.textContent = "View encounter summary";
+    stopButton.disabled = false;
   }
   if (detail) captureHint.textContent = detail;
 }
@@ -274,7 +296,7 @@ function updateMilestones(snapshot: GuidedDemoSnapshot): void {
     "is-complete",
     snapshot.recoveryObserved && snapshot.postRecoveryWindowObserved
   );
-  stopButton.disabled = !snapshot.canComplete;
+  stopButton.disabled = true;
 
   if (snapshot.phase === "establishing") {
     guidanceStep.textContent = "Step 1 of 4";
@@ -298,11 +320,20 @@ function updateMilestones(snapshot: GuidedDemoSnapshot): void {
       "A final facial window is being measured.";
   } else {
     guidanceStep.textContent = "Capture complete";
-    guidanceTitle.textContent = "Ready to prepare summary";
+    guidanceTitle.textContent = "Preparing encounter summary";
     guidanceDetail.textContent =
-      "Both signal lanes and the recovery sequence are complete.";
+      "Both signal lanes are complete. The camera and microphone will now be released.";
     captureHint.textContent =
-      "All assessment requirements are complete.";
+      "All assessment requirements are complete. Preparing the encounter summary.";
+  }
+
+  if (
+    snapshot.canComplete &&
+    state === "capturing" &&
+    !captureFinalizationScheduled
+  ) {
+    captureFinalizationScheduled = true;
+    queueMicrotask(() => void finalizeCapture());
   }
 }
 
@@ -833,6 +864,8 @@ async function runSystemCheck(): Promise<void> {
 
 function prepareConductor(): void {
   if (!calibration) throw new Error("System check is required.");
+  captureFinalizationScheduled = false;
+  resultsVisible = false;
   audioFrames = [];
   receivedFaceFrameCount = 0;
   latestAudioFeature = null;
@@ -990,7 +1023,10 @@ async function releaseMedia(): Promise<void> {
   );
 }
 
-function renderObservation(observation: EncounterObservation): void {
+function renderObservation(
+  observation: EncounterObservation,
+  reveal = true
+): void {
   aggregateGrid.replaceChildren();
   const faceWindows = observation.qualitySummary.faceWindowCount;
   resultSummary.replaceChildren(
@@ -1043,24 +1079,16 @@ function renderObservation(observation: EncounterObservation): void {
     card.append(header, value, footer);
     aggregateGrid.append(card);
   }
-  resultsPanel.hidden = false;
+  if (reveal) {
+    resultsPanel.hidden = false;
+    resultsVisible = true;
+  }
 }
 
-function renderEvidence(result: EvidenceApiResult): void {
-  evidenceLoading.hidden = true;
-  evidenceError.hidden = true;
-  retryEvidenceButton.hidden = true;
-  evidenceCard.hidden = false;
-  evidenceHeadline.textContent = result.draft.headline;
-  evidenceSummary.textContent = result.draft.summary;
-  boundaryStatement.textContent = result.draft.boundaryStatement;
-  evidenceStatusChip.textContent = "Ready for review";
+function renderClaimButtons(claims: EvidenceCardClaim[]): void {
   evidenceClaims.replaceChildren();
-  reviewOutcome.textContent = "";
-  acceptButton.disabled = false;
-  rejectButton.disabled = false;
 
-  for (const claim of result.draft.claims) {
+  for (const claim of claims) {
     const button = document.createElement("button");
     button.type = "button";
     button.className = "evidence-claim";
@@ -1075,6 +1103,44 @@ function renderEvidence(result: EvidenceApiResult): void {
     button.addEventListener("click", () => openTrace(claim.claimId));
     evidenceClaims.append(button);
   }
+}
+
+function renderPendingEvidence(): void {
+  evidenceLoading.hidden = false;
+  evidenceLoading.textContent =
+    "Clinical Synthesis is preparing the clinician encounter summary.";
+  evidenceError.hidden = true;
+  retryEvidenceButton.hidden = true;
+  evidenceCard.hidden = false;
+  evidenceHeadline.textContent = "Measured evidence assembled";
+  evidenceSummary.textContent =
+    "Speech and facial findings are grounded to their measured windows while the encounter narrative is prepared.";
+  boundaryStatement.textContent = EVIDENCE_BOUNDARY;
+  evidenceStatusChip.textContent = "Preparing summary";
+  reviewOutcome.textContent = "";
+  acceptButton.disabled = true;
+  rejectButton.disabled = true;
+  renderClaimButtons(
+    latestClaimFacts.map((fact) => ({
+      claimId: fact.claimId,
+      statement: fact.statement
+    }))
+  );
+}
+
+function renderEvidence(result: EvidenceApiResult): void {
+  evidenceLoading.hidden = true;
+  evidenceError.hidden = true;
+  retryEvidenceButton.hidden = true;
+  evidenceCard.hidden = false;
+  evidenceHeadline.textContent = result.draft.headline;
+  evidenceSummary.textContent = result.draft.summary;
+  boundaryStatement.textContent = result.draft.boundaryStatement;
+  evidenceStatusChip.textContent = "Ready for review";
+  reviewOutcome.textContent = "";
+  acceptButton.disabled = false;
+  rejectButton.disabled = false;
+  renderClaimButtons(result.draft.claims);
 }
 
 function openTrace(claimId: string): void {
@@ -1196,6 +1262,7 @@ async function synthesizeEvidence(): Promise<void> {
       );
     }
     latestEvidence = body;
+    console.info("[Neurotrax operator] Clinical synthesis timing", body.timing);
     const drafted = emitWorkflowEvent(
       "evidence-card",
       "evidence-card.drafted",
@@ -1204,7 +1271,8 @@ async function synthesizeEvidence(): Promise<void> {
       {
         responseId: body.responseId,
         promptVersion: body.promptVersion,
-        attemptCount: body.attemptCount
+        attemptCount: body.attemptCount,
+        timing: body.timing
       },
       latestClaimFacts.flatMap((fact) => fact.supportRefs)
     );
@@ -1232,10 +1300,17 @@ async function synthesizeEvidence(): Promise<void> {
     );
     renderEvidence(body);
     milestone("summary")?.classList.add("is-complete");
-    updateState(
-      "review",
-      "Review the two grounded statements, then approve or dismiss the summary."
-    );
+    if (resultsVisible) {
+      updateState(
+        "review",
+        "Review the two grounded statements, then approve or dismiss the summary."
+      );
+    } else {
+      updateState(
+        "summary-ready",
+        "The encounter summary is ready for clinician review."
+      );
+    }
   } catch {
     emitWorkflowEvent(
       "evidence-card",
@@ -1245,6 +1320,7 @@ async function synthesizeEvidence(): Promise<void> {
       { causedByEventId: requested.eventId }
     );
     evidenceLoading.hidden = true;
+    evidenceCard.hidden = true;
     evidenceError.hidden = false;
     evidenceError.textContent = "Clinical synthesis unavailable.";
     retryEvidenceButton.hidden = false;
@@ -1255,7 +1331,10 @@ async function synthesizeEvidence(): Promise<void> {
       "The encounter summary could not be prepared.",
       "warning"
     );
+    resultsVisible = true;
+    resultsPanel.hidden = false;
     updateState("error", "Clinical synthesis unavailable. Retry when ready.");
+    resultsPanel.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 }
 
@@ -1264,7 +1343,7 @@ async function finishEncounter(): Promise<void> {
   const result = conductorSession.complete();
   latestObservation = result.observation;
   conductorSession = null;
-  renderObservation(result.observation);
+  renderObservation(result.observation, false);
   setLane(
     conductorState,
     conductorStatus,
@@ -1287,10 +1366,31 @@ async function finishEncounter(): Promise<void> {
     "complete"
   );
   latestClaimFacts = createEncounterClaimFacts(result.observation, allEvents);
+  renderPendingEvidence();
+  updateState(
+    "analyzing",
+    "Measured evidence is ready while the encounter summary is prepared."
+  );
   await synthesizeEvidence();
 }
 
-async function stopAndAnalyze(): Promise<void> {
+function revealResults(): void {
+  if (!latestObservation) return;
+  resultsVisible = true;
+  resultsPanel.hidden = false;
+  if (latestEvidence) {
+    updateState(
+      "review",
+      "Review the two grounded statements, then approve or dismiss the summary."
+    );
+  } else {
+    stopButton.disabled = true;
+    stopButton.textContent = "Summary in progress";
+  }
+  resultsPanel.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+async function finalizeCapture(): Promise<void> {
   if (state !== "capturing" || !guidedDemo.snapshot().canComplete) return;
   updateState(
     "analyzing",
@@ -1309,7 +1409,6 @@ async function stopAndAnalyze(): Promise<void> {
     "Camera and microphone released · no audio or video stored";
   try {
     await finishEncounter();
-    resultsPanel.scrollIntoView({ behavior: "smooth", block: "start" });
   } catch {
     updateState(
       "error",
@@ -1361,6 +1460,8 @@ function recordReview(decision: ReviewDecision["decision"]): void {
 async function resetCapture(): Promise<void> {
   await releaseMedia();
   conductorSession = null;
+  captureFinalizationScheduled = false;
+  resultsVisible = false;
   calibration = null;
   consentCheckbox.checked = false;
   cameraEmpty.hidden = false;
@@ -1535,7 +1636,11 @@ startButton.addEventListener("click", () => {
   if (state === "idle") void runSystemCheck();
   else if (state === "ready") startAssessment();
 });
-stopButton.addEventListener("click", () => void stopAndAnalyze());
+stopButton.addEventListener("click", () => {
+  if (state === "analyzing" || state === "summary-ready") {
+    revealResults();
+  }
+});
 resetButton.addEventListener("click", () => void resetCapture());
 retryEvidenceButton.addEventListener("click", () => void synthesizeEvidence());
 acceptButton.addEventListener("click", () => recordReview("approved"));

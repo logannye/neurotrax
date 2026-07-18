@@ -18,11 +18,22 @@ export interface EvidenceCardClaim {
   statement: string;
 }
 
+export interface EvidenceNarrativeDraft {
+  headline: string;
+  summary: string;
+}
+
 export interface EvidenceCardDraft {
   headline: string;
   summary: string;
   claims: EvidenceCardClaim[];
   boundaryStatement: string;
+}
+
+export interface EvidenceSynthesisTiming {
+  totalMs: number;
+  modelMs: number;
+  validationMs: number;
 }
 
 export interface GroundingResult {

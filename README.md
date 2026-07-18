@@ -134,8 +134,12 @@ In the live experience:
 8. Facial Analysis visibly withholds measurement while Speech Analysis
    continues.
 9. The participant returns, and Facial Analysis confirms recovery.
-10. Neurotrax prepares two grounded encounter statements.
-11. The clinician inspects the evidence and approves or dismisses the summary.
+10. Neurotrax closes capture automatically and begins preparing the summary in
+    the background.
+11. Two grounded encounter statements are available immediately while a short
+    clinician-readable narrative is synthesized.
+12. The clinician opens the prepared summary, inspects the evidence, and
+    approves or dismisses it.
 
 The guided assessment is designed to complete in approximately 20–30 seconds
 after the system check.
@@ -168,6 +172,8 @@ benefits rather than claims of demonstrated clinical performance.
   manually.
 - **Concise handoff:** the clinician receives two bounded statements rather
   than an unstructured stream of technical output.
+- **Prefetched synthesis:** summary preparation begins as soon as the required
+  measurement windows are complete, reducing the visible wait after capture.
 - **Faster verification:** selecting a statement opens its supporting evidence
   immediately.
 

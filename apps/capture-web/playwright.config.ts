@@ -16,7 +16,8 @@ export default defineConfig({
     url: "http://127.0.0.1:4173/api/model-readiness",
     env: {
       ...process.env,
-      OPENAI_API_KEY: "fixture-browser-test-key"
+      OPENAI_API_KEY: "fixture-browser-test-key",
+      NEUROTRAX_SKIP_SYNTHESIS_WARMUP: "1"
     },
     reuseExistingServer: true,
     timeout: 30_000

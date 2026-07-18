@@ -39,7 +39,9 @@ export type {
 export type {
   EvidenceClaimFact,
   EvidenceCardClaim,
+  EvidenceNarrativeDraft,
   EvidenceCardDraft,
+  EvidenceSynthesisTiming,
   GroundingResult,
   ReviewDecision
 } from "./evidence.js";

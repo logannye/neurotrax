@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
-import { EVIDENCE_BOUNDARY } from "@neurotrax/evidence-core";
-import { runEvidenceAgent } from "./evidence-agent.js";
+import {
+  EVIDENCE_MODEL,
+  runEvidenceAgent
+} from "./evidence-agent.js";
 import { hasEvidenceCredential } from "./vite-evidence-plugin.js";
 
 const facts = [
@@ -54,23 +56,18 @@ const request = {
   facts
 } as const;
 
-function validDraft() {
+function validNarrative() {
   return {
     headline: "Two encounter signals are ready for review",
     summary:
-      "Pitch variability and facial movement were measured during technically usable portions of the encounter.",
-    claims: facts.map((fact) => ({
-      claimId: fact.claimId,
-      statement: fact.statement
-    })),
-    boundaryStatement: EVIDENCE_BOUNDARY
+      "Pitch variability and facial movement were measured during technically usable portions of the encounter."
   };
 }
 
 function response(outputParsed: unknown, id: string) {
   return {
     id,
-    model: "gpt-5.6-sol",
+    model: "gpt-5.6-luna",
     output_parsed: outputParsed
   };
 }
@@ -79,7 +76,7 @@ describe("runEvidenceAgent", () => {
   it("returns a grounded structured draft", async () => {
     const parse = vi
       .fn()
-      .mockResolvedValue(response(validDraft(), "response-1"));
+      .mockResolvedValue(response(validNarrative(), "response-1"));
 
     const result = await runEvidenceAgent(request, {
       responses: { parse: parse as never }
@@ -87,6 +84,21 @@ describe("runEvidenceAgent", () => {
 
     expect(result.grounding.status).toBe("pass");
     expect(result.attemptCount).toBe(1);
+    expect(result.draft.claims).toEqual(
+      facts.map((fact) => ({
+        claimId: fact.claimId,
+        statement: fact.statement
+      }))
+    );
+    expect(result.timing.totalMs).toBeGreaterThanOrEqual(0);
+    expect(parse).toHaveBeenCalledWith(
+      expect.objectContaining({
+        model: EVIDENCE_MODEL,
+        service_tier: "priority",
+        max_output_tokens: 180,
+        reasoning: { effort: "none" }
+      })
+    );
   });
 
   it("retries once after a grounding failure", async () => {
@@ -95,19 +107,13 @@ describe("runEvidenceAgent", () => {
       .mockResolvedValueOnce(
         response(
           {
-            ...validDraft(),
-            claims: [
-              {
-                claimId: "claim-invented",
-                statement: "An invented observation."
-              },
-              validDraft().claims[1]
-            ]
+            ...validNarrative(),
+            summary: "Only pitch variability was measured."
           },
           "response-invalid"
         )
       )
-      .mockResolvedValueOnce(response(validDraft(), "response-valid"));
+      .mockResolvedValueOnce(response(validNarrative(), "response-valid"));
 
     const result = await runEvidenceAgent(request, {
       responses: { parse: parse as never }
@@ -120,7 +126,7 @@ describe("runEvidenceAgent", () => {
     const parse = vi.fn().mockResolvedValue(
       response(
         {
-          ...validDraft(),
+          ...validNarrative(),
           headline: "Disease progression detected",
           summary: "Pitch variability proves clinical decline."
         },
@@ -154,7 +160,7 @@ describe("runEvidenceAgent", () => {
       runEvidenceAgent(request, {
         responses: { parse: parse as never }
       })
-    ).rejects.toThrow(/no parsed evidence-card draft/i);
+    ).rejects.toThrow(/no parsed encounter narrative/i);
     expect(parse).toHaveBeenCalledTimes(2);
   });
 

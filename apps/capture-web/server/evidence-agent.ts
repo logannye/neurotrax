@@ -4,15 +4,16 @@ import { z } from "zod";
 import type {
   EvidenceCardDraft,
   EvidenceClaimFact,
+  EvidenceSynthesisTiming,
   GroundingResult
 } from "@neurotrax/contracts";
 import {
-  EVIDENCE_BOUNDARY,
+  assembleEvidenceCardDraft,
   validateEvidenceCardDraft
 } from "../../../packages/evidence-core/src/evidence.ts";
 
-export const EVIDENCE_MODEL = "gpt-5.6";
-export const EVIDENCE_PROMPT_VERSION = "encounter-summary-grounded.v0.2";
+export const EVIDENCE_MODEL = "gpt-5.6-luna";
+export const EVIDENCE_PROMPT_VERSION = "encounter-summary-grounded.v0.3";
 
 const ClaimFactSchema = z
   .object({
@@ -59,21 +60,10 @@ export type EvidenceAgentRequest = z.infer<
   typeof EvidenceAgentRequestSchema
 >;
 
-const EvidenceCardDraftSchema = z
+const EvidenceNarrativeDraftSchema = z
   .object({
-    headline: z.string().min(1).max(90),
-    summary: z.string().min(1).max(360),
-    claims: z
-      .array(
-        z
-          .object({
-            claimId: z.string().min(1),
-            statement: z.string().min(1)
-          })
-          .strict()
-      )
-      .length(2),
-    boundaryStatement: z.literal(EVIDENCE_BOUNDARY)
+    headline: z.string().min(1).max(72),
+    summary: z.string().min(1).max(240)
   })
   .strict();
 
@@ -84,6 +74,7 @@ export interface EvidenceAgentResult {
   promptVersion: string;
   responseId: string;
   attemptCount: number;
+  timing: EvidenceSynthesisTiming;
 }
 
 interface ResponsesClient {
@@ -92,53 +83,72 @@ interface ResponsesClient {
   };
 }
 
+let sharedClient: OpenAI | undefined;
+
+function defaultClient(): OpenAI {
+  sharedClient ??= new OpenAI({
+    apiKey: process.env.OPENAI_API_KEY,
+    timeout: 15_000,
+    maxRetries: 0
+  });
+  return sharedClient;
+}
+
 function systemPrompt(validationErrors: string[] = []): string {
   const retryInstruction =
     validationErrors.length === 0
       ? ""
       : `\nA prior draft failed validation. Correct only these errors:\n- ${validationErrors.join("\n- ")}`;
-  return `You draft one concise Neurotrax clinician encounter summary from current-encounter structured facts.
+  return `Draft one concise Neurotrax clinician encounter narrative from current-encounter structured facts.
 
 Requirements:
-- Include both supplied claim facts: one speech and one face.
-- Copy each claimId and statement exactly. Do not paraphrase claim statements.
-- Write a direct headline and a two-sentence-or-shorter summary.
+- Return only a direct headline and a one-sentence summary.
 - The summary must name both measurement labels.
 - Do not put numbers in the headline or summary.
 - Do not infer diagnosis, disease, progression, cause, treatment, medication effect, risk, normality, worsening, or improvement.
 - Describe only what was measured during the current encounter.
-- Return only the required structured output.
-- Preserve this boundary statement exactly: "${EVIDENCE_BOUNDARY}"${retryInstruction}`;
+- Do not restate or invent evidence claims; the application attaches its pre-grounded claims separately.
+- Return only the required structured output.${retryInstruction}`;
 }
 
 function userPayload(input: EvidenceAgentRequest): string {
   return JSON.stringify({
-    visitId: input.visitId,
-    qualitySummary: input.qualitySummary,
-    allowedClaimFacts: input.facts
+    quality: {
+      speechWindowCount: input.qualitySummary.speechWindowCount,
+      faceWindowCount: input.qualitySummary.faceWindowCount,
+      abstentionCount: input.qualitySummary.abstentionCount,
+      faceRecoveryObserved: input.qualitySummary.faceRecoveryObserved
+    },
+    measurements: input.facts.map((fact) => ({
+      label: fact.label,
+      modality: fact.modality,
+      groundedStatement: fact.statement
+    }))
   });
 }
 
 export async function runEvidenceAgent(
   inputValue: unknown,
-  client: ResponsesClient = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY,
-    timeout: 20_000,
-    maxRetries: 0
-  })
+  client: ResponsesClient = defaultClient()
 ): Promise<EvidenceAgentResult> {
+  const totalStartedAt = performance.now();
   const input = EvidenceAgentRequestSchema.parse(inputValue);
   let validationErrors: string[] = [];
+  let modelMs = 0;
+  let validationMs = 0;
 
   for (let attempt = 1; attempt <= 2; attempt += 1) {
+    const modelStartedAt = performance.now();
     const response = await client.responses.parse({
       model: EVIDENCE_MODEL,
-      reasoning: { effort: "low" },
+      service_tier: "priority",
+      max_output_tokens: 180,
+      reasoning: { effort: "none" },
       text: {
         verbosity: "low",
         format: zodTextFormat(
-          EvidenceCardDraftSchema,
-          "neurotrax_evidence_card"
+          EvidenceNarrativeDraftSchema,
+          "neurotrax_encounter_narrative"
         )
       },
       input: [
@@ -146,11 +156,12 @@ export async function runEvidenceAgent(
         { role: "user", content: userPayload(input) }
       ]
     });
+    modelMs += performance.now() - modelStartedAt;
 
-    const draft = response.output_parsed;
-    if (!draft) {
+    const narrative = response.output_parsed;
+    if (!narrative) {
       validationErrors = [
-        "The model returned no parsed evidence-card draft."
+        "The model returned no parsed encounter narrative."
       ];
       if (attempt === 2) {
         throw new Error(validationErrors[0]);
@@ -158,10 +169,16 @@ export async function runEvidenceAgent(
       continue;
     }
 
+    const validationStartedAt = performance.now();
+    const draft = assembleEvidenceCardDraft(
+      narrative,
+      input.facts as EvidenceClaimFact[]
+    );
     const grounding = validateEvidenceCardDraft(
       draft,
       input.facts as EvidenceClaimFact[]
     );
+    validationMs += performance.now() - validationStartedAt;
     if (grounding.status === "pass") {
       return {
         draft,
@@ -169,7 +186,12 @@ export async function runEvidenceAgent(
         model: response.model,
         promptVersion: EVIDENCE_PROMPT_VERSION,
         responseId: response.id,
-        attemptCount: attempt
+        attemptCount: attempt,
+        timing: {
+          totalMs: Math.round(performance.now() - totalStartedAt),
+          modelMs: Math.round(modelMs),
+          validationMs: Math.round(validationMs)
+        }
       };
     }
     validationErrors = grounding.errors;

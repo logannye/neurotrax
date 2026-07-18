@@ -31,7 +31,7 @@ windows, and emits append-only workflow events.
 ## Guided workflow
 
 The browser-level guided controller does not create measurements. It observes
-real capture state and enables completion only after:
+real capture state and closes capture automatically only after:
 
 1. a speech window and initial facial window;
 2. facial withholding while speech continues;
@@ -57,10 +57,14 @@ The evidence layer selects exactly one supported speech aggregate and one
 supported facial aggregate from the current encounter. It creates immutable
 claim facts with measurement, window, quality, and event references.
 
-The server-side synthesis service may draft only from those facts. A
-deterministic validator requires both statements, rejects unsupported numbers
-or clinical interpretation, and preserves the review boundary. The user may
-then approve or dismiss the summary.
+As soon as the final valid window closes, the application assembles both
+grounded statements and starts server-side synthesis in the background. The
+synthesis service returns only a short headline and one-sentence narrative.
+Application code attaches the exact claim statements and review boundary,
+then a deterministic validator rejects unsupported numbers or clinical
+interpretation. This smaller generation contract reduces latency and prevents
+claim drift. The user may inspect the measured evidence while synthesis is in
+progress, then approve or dismiss the completed summary.
 
 ## Data flow
 
@@ -74,7 +78,9 @@ flowchart TD
     AUDIO --> OBS["EncounterObservation"]
     FACE --> OBS
     OBS --> FACTS["Two current-encounter facts"]
-    FACTS --> DRAFT["Structured draft"]
-    DRAFT --> GROUND["Deterministic grounding"]
+    FACTS --> CLAIMS["Exact claims attached by code"]
+    FACTS --> NARRATIVE["Short narrative synthesis"]
+    CLAIMS --> GROUND["Deterministic grounding"]
+    NARRATIVE --> GROUND
     GROUND --> REVIEW["Human review"]
 ```
