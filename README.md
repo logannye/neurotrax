@@ -1,429 +1,330 @@
 # Neurotrax
 
-**A demo-first, three-capability agentic system for longitudinal
-tele-neurology.**
+**A demo-first agentic audiovisual sidecar for longitudinal tele-neurology.**
 
-Neurotrax is a telehealth measurement-sidecar hackathon prototype that uses a
-MacBook Pro's standard camera and microphone as a stand-in for a future
-patient's telehealth device. It turns a short, consented audiovisual check-in
-into a quality-controlled observation, compares it with compatible personal
-history, and assembles the evidence for clinician review.
+Neurotrax is a research and hackathon prototype for turning measurable moments
+inside routine telehealth encounters into structured, inspectable observations.
+The intended live system uses a MacBook Pro camera and microphone as a stand-in
+for a patient's future telehealth device.
 
 Built for a future-of-agentic-AI-in-healthcare hackathon on **July 18, 2026**.
 
 > **Research prototype only.** Not a medical device. Not for diagnosis,
 > treatment, emergency detection, or use with protected health information.
+> All current measurements are engineering placeholders with no clinical
+> validation.
 
 ## Demo thesis
 
 > **Telehealth has eyes and ears, but little longitudinal memory. Neurotrax
-> turns a brief measurement moment into evidence a clinician can inspect.**
+> turns measurable moments in an encounter into evidence a clinician can
+> inspect over time.**
 
-The hackathon experience is one continuous, camera-dominant screen. A quiet
-agent flight recorder makes real background work legible without exposing
-private chain-of-thought or staging fake agent conversation. One visible
-closed-loop intervention proves that the system can observe, decide, act, and
-verify. At the end, the live encounter becomes a one-screen evidence card whose
-claims trace back to measurements and source clips.
+The clinician should be able to focus on the patient while a small team of
+bounded processing agents works quietly in the background:
 
-The demo should take roughly three minutes and tell one coherent story:
+1. a Capture Conductor finds candidate windows that may be measurable;
+2. independent speech and facial-signal extractors measure or abstain;
+3. deterministic aggregation creates one versioned observation for the visit;
+4. later capabilities compare compatible visits and assemble the supporting
+   evidence for clinician review.
 
-```text
-live MacBook capture
-  -> agent detects unusable hand framing
-  -> participant corrects position
-  -> agent verifies recovery and resumes
-  -> compatible personal history is selected
-  -> one incompatible encounter is visibly excluded
-  -> camera transitions into the newest timeline point
-  -> grounded evidence card is assembled
-  -> clinician inspects a claim and accepts or rejects it
-```
+Raw conversation content is not interpreted. An unmeasurable interval produces
+no invented value. The language model stays outside the measurement loop.
+
+## What is implemented today
+
+The repository now contains a runnable, deterministic **headless ambient
+capture core**. It operates on a synthetic stream of already-derived audio
+features and face landmarks—never raw audio or video—and produces:
+
+- candidate speech and face measurement windows;
+- placeholder acoustic and facial measurements;
+- explicit extractor abstentions when quality gates fail;
+- robust per-visit aggregates using median and median absolute deviation;
+- a monotonic, ordered event trace tagged by processing lane; and
+- one synthetic `EncounterObservation` that preserves candidate windows,
+  confounds, per-window measurements, aggregates, and abstentions for the
+  future longitudinal layer.
+
+The headless replay is deliberately the first slice. It proves the measurement
+contracts, orchestration, deterministic replay, abstention behavior, and event
+provenance before browser and user-interface complexity are added.
+
+### Not implemented yet
+
+The current code does **not** yet:
+
+- open the MacBook camera or microphone;
+- compute voice activity, pitch, or face landmarks from live media;
+- provide a browser application or telehealth call;
+- retain or promote evidence clips;
+- store or trend observations across visits;
+- generate a clinician evidence card; or
+- diagnose, classify, predict, or recommend clinical action.
+
+Those are explicit follow-up slices, not hidden or mocked capabilities.
 
 ## The entire product
 
 Neurotrax intentionally has exactly three product capabilities.
 
-### 1. Guided Capture
+### 1. Ambient Capture
 
-The system obtains consent, checks the MacBook camera and microphone, guides one
-short audiovisual check-in, and retries only when capture quality fails.
+During a consented telehealth encounter, the system analyzes the live
+audiovisual stream ephemerally, identifies technically usable windows, and
+extracts versioned measurements from natural conversation without prompting or
+interrupting the patient.
 
-The first check-in will contain:
-
-- one brief standardized speech sample; and
-- one brief finger-tapping sample captured on video.
-
-The agent's job is not to interpret disease. Its job is to make the observation
-repeatable, correctly labeled, and technically usable.
+Most of the timeline may be `not measurable`. The system curates useful windows
+instead of coaching the participant to create them.
 
 ### 2. Personal Trajectory
 
-The system compares today's usable check-in only with the patient's own
-compatible prior check-ins:
+The system compares each visit only with the same patient's compatible prior
+visits. Compatibility will require:
 
-- same task and prompt version;
-- comparable device and capture path;
-- medication and time context surfaced, including when missing;
-- passing quality;
-- known algorithm version.
+- the same detected measurement context;
+- capture confounds within a defined tolerance;
+- compatible algorithm versions; and
+- passing quality and clinician acceptance.
 
-It produces a provisional change estimate with uncertainty. It does not declare
-progression or determine why a change occurred.
+The result is provisional longitudinal evidence with uncertainty—not a
+progression, diagnosis, or causal claim.
 
 ### 3. Clinician Evidence Card
 
-The system gives a clinician one concise card showing:
+The system assembles a concise review surface showing:
 
 - what changed and what remained stable;
-- measurement quality and uncertainty;
-- relevant context or comparability warnings;
-- the current and prior source clips;
-- an `accepted` or `rejected` decision with an optional annotation.
+- quality, uncertainty, and comparability warnings;
+- the structured measurements supporting each statement;
+- source evidence when explicitly retained; and
+- an `accepted` or `rejected` clinician decision.
 
-Only clinician-accepted observations update the longitudinal record.
+Only clinician-accepted observations may enter longitudinal history.
 
-Everything else is deferred.
+## Current ambient-core architecture
 
-## Product principle
-
-> **Agentic for capture, comparison, and evidence assembly; human-led for
-> clinical interpretation and action.**
-
-The product is not a digital neurologist. It is a carefully instrumented memory
-for a small part of the neurological encounter.
-
-## Why these three
-
-These capabilities form the smallest clinically meaningful loop:
-
-```text
-capture a trustworthy observation
-  -> compare it with the same patient over time
-  -> present inspectable evidence to a clinician
-```
-
-Removing any one breaks the loop:
-
-- Capture without quality creates unreliable measurements.
-- Measurements without history recreate a one-time screening classifier.
-- Trends without source evidence create a black box clinicians cannot inspect.
-
-## The one-screen demo
-
-The application should feel like an encounter that explains itself, not a
-dashboard of unrelated widgets or a chat between invented agent personas.
-
-```text
-┌────────────────────────────────────────────────────────────────────┐
-│ Guided Capture  →  Personal Trajectory  →  Evidence Card          │
-├────────────────────────────────────────┬───────────────────────────┤
-│                                        │ AGENT FLIGHT RECORDER     │
-│                                        │                           │
-│              LIVE CAMERA               │ Capture · observing       │
-│          camera remains primary        │ Trajectory · waiting      │
-│                                        │ Evidence · waiting        │
-│       task prompt / framing guide      │                           │
-│       waveform / tapping feedback      │ observed → acted →        │
-│                                        │ verified                  │
-├────────────────────────────────────────┴───────────────────────────┤
-│ Camera + mic active · task-scoped · retained locally for review   │
-└────────────────────────────────────────────────────────────────────┘
-```
-
-The flight recorder is a projection of structured system events. It may show
-facts such as `Checking hand position`, `Framing correction requested`, or
-`Three compatible encounters included`. It must never display hidden model
-reasoning, token streams, or fabricated work.
-
-### The truthful agentic moment
-
-Finger tapping begins with the participant's hand slightly outside the framing
-guide. Guided Capture:
-
-1. detects that the task is not measurable;
-2. pauses capture instead of processing low-quality data;
-3. requests a concrete hand-position correction;
-4. verifies that visibility recovered; and
-5. resumes the task.
-
-This real quality-control loop is the demo's central agentic action. It is
-bounded, visible, repeatable, and consequential.
-
-### The longitudinal reveal
-
-After capture, the live camera tile smoothly becomes the newest point on a
-patient timeline. The demo loads deterministic, clearly labeled synthetic
-personal history. Personal Trajectory includes three compatible prior
-encounters and visibly excludes one encounter with a mismatched prompt version.
-This guarantees a reliable demo while making the comparison logic
-inspectable.
-
-### The final deliverable
-
-The experience ends with one concise Clinician Evidence Card answering:
-
-1. Was today's capture usable?
-2. What changed relative to compatible personal history?
-3. What remained stable?
-4. What evidence supports each statement?
-5. How uncertain is the comparison?
-
-Clicking a statement traces it backward:
-
-```text
-narrative claim -> measurement -> source clip -> agent event
-```
-
-The clinician can play current and prior clips, inspect quality and provenance,
-then mark the observation `accepted` or `rejected` with an optional annotation.
-Only accepted observations enter longitudinal history.
-
-## Demo-first architecture
+The processing units below are internal lanes inside Capability #1. They are
+not additional product capabilities or autonomous clinical actors.
 
 ```mermaid
 flowchart LR
-    MAC["Live MacBook camera + mic"] --> CAPTURE["Guided Capture"]
-    CAPTURE -->|observe, intervene, verify| OBS["Usable encounter observation"]
-    OBS --> TRANSITION["Camera-to-timeline transition"]
-    TRANSITION --> TREND["Personal Trajectory"]
-    HISTORY["Seeded synthetic personal history"] --> TREND
-    TREND -->|include compatible; exclude mismatch| CARD["Grounded Evidence Card"]
-    CARD --> TRACE["Claim-to-source traceability"]
-    TRACE --> CLINICIAN["Clinician review"]
-    CLINICIAN -->|Accept| HISTORY
-    CLINICIAN -->|Reject| AUDIT["Audit record"]
+    FIXTURE["Synthetic primitive-frame stream"] --> CONDUCTOR["Capture Conductor"]
+    CONDUCTOR --> WINDOWS["Candidate-window detection"]
+    WINDOWS --> SPEECH["Speech-acoustic extractor"]
+    WINDOWS --> FACE["Facial-expressivity extractor"]
+    SPEECH --> RESULTS["Measurements or abstention"]
+    FACE --> RESULTS
+    RESULTS --> AGGREGATE["Per-visit robust aggregation"]
+    AGGREGATE --> OBSERVATION["EncounterObservation"]
 
-    CONSENT["Consent + retention policy"] -. constrains .-> CAPTURE
-    PROVENANCE["Versioning + provenance"] -. constrains .-> OBS
-    EVENTS["Append-only encounter events"] -. powers .-> CAPTURE
-    EVENTS -. powers .-> TREND
-    EVENTS -. powers .-> CARD
-    EVENTS -. projects to .-> FLIGHT["Visible agent flight recorder"]
+    CONDUCTOR -. emits .-> EVENTS["Lane-tagged event stream"]
+    SPEECH -. emits .-> EVENTS
+    FACE -. emits .-> EVENTS
 ```
 
-Consent, provenance, retention, and human sign-off are required foundations.
-The event log and flight recorder are shared interface infrastructure. None are
-additional product capabilities or autonomous agents.
-
-See [docs/architecture.md](docs/architecture.md).
-
-## Three-minute demo choreography
-
-### 0:00–0:20 — Begin
-
-Select a clearly labeled synthetic demo patient, show plain-language consent,
-request browser camera and microphone permission, and keep recording state
-visible.
-
-### 0:20–0:55 — Speech
-
-Capture the standardized speech sample while a restrained waveform and
-usable-speech indicator update. The flight recorder shows only actual quality
-events.
-
-### 0:55–1:25 — Agent intervention
-
-Begin finger tapping with intentionally poor hand framing. Guided Capture
-pauses, coaches one correction, verifies recovery, and completes the sample.
-
-### 1:25–1:50 — Personal trajectory
-
-The camera tile becomes the latest point on the timeline. Three compatible
-synthetic prior encounters are included; one incompatible encounter is excluded
-with the exact reason visible.
-
-### 1:50–2:30 — Evidence assembly
-
-The card assembles from structured observations. Each sentence gains a source
-link only after a grounding check succeeds.
-
-### 2:30–3:00 — Human review
-
-Open one claim, replay its supporting clip, inspect its provenance, and accept
-or reject the observation.
-
-The first prototype may use clearly labeled placeholder measurements while the
-capture and review loop is built. A placeholder can demonstrate infrastructure
-but cannot be presented as a validated biomarker.
-
-## MacBook as the first patient-device adapter
-
-The first adapter targets:
-
-- a modern MacBook Pro;
-- its built-in FaceTime camera;
-- its built-in microphone;
-- a current browser supporting `getUserMedia` and `MediaRecorder`;
-- local, task-bound capture;
-- local source-clip retention through longitudinal review, with explicit
-  deletion controls;
-- synthetic data or the developer's own explicitly consented recordings.
-
-The MacBook is not embedded in the core data model. Future phones, tablets, and
-telehealth devices should implement the same capture contract.
-
-### Dual-path capture
-
-The future telehealth call and the measurement sample have different needs:
-
-- **Live call:** optimized for communication and network resilience.
-- **Local check-in:** short, task-bound, higher-fidelity, and accompanied by
-  device and quality metadata.
-
-The prototype builds the local check-in path first as a sidecar to a future
-telehealth platform. It does not yet provide live calling and does not attempt
-to extract fine biomarkers from a compressed conferencing stream.
-
-The system does not continuously analyze the whole appointment. Quantitative
-capture is explicitly task-bound, visible, and consented.
-
-## The minimum data model
-
-Each observation contains:
+The future browser ingestion layer will compute shared primitives once and feed
+the same core contracts:
 
 ```text
-Encounter
-  - encounter ID and timestamps
-  - consent and retention scope
-  - device and browser metadata
-  - confirmed medication/context fields
-
-Task
-  - task ID and prompt version
-  - start/end timestamps
-  - completion and retry status
-
-Capture
-  - capture mode and fixture disclosure
-  - local media reference or hash
-  - audio/video properties
-  - quality result
-
-Measurement
-  - measurement name, value, and unit
-  - uncertainty
-  - algorithm version
-  - source task
-
-Review
-  - comparison set
-  - provisional change
-  - evidence references
-  - grounded claim-to-source links
-  - clinician decision: accepted or rejected
-  - optional clinician annotation
+consented MacBook camera + microphone
+  -> ephemeral Web Audio and face-landmark primitives
+  -> Capture Conductor
+  -> candidate measurement windows
+  -> speech-acoustic and facial-expressivity extractors
+  -> per-visit aggregate + abstentions + agent events
+  -> longitudinal compatibility and trending
+  -> grounded clinician evidence card
 ```
 
-Measurement, interpretation, and clinical action remain separate.
+### Why this is agentic
+
+The agentic behavior is bounded and externally inspectable:
+
+- **Observe:** detect when a modality has a candidate measurement window.
+- **Decide:** select the matching extractor or abstain under its quality
+  contract.
+- **Act:** emit a structured measurement or abstention event.
+- **Reconcile:** aggregate independent results onto one encounter timeline.
+- **Deliver:** create the versioned per-visit observation.
+
+Every visible activity must derive from a real structured event. Neurotrax
+never displays private chain-of-thought, invented progress, or simulated agent
+conversation.
+
+## Quick start
+
+### Prerequisites
+
+- Node.js 22 or newer
+- pnpm 9.12.3
+
+### Install and validate
+
+```bash
+git clone https://github.com/logannye/neurotrax.git
+cd neurotrax
+corepack enable
+pnpm install --frozen-lockfile
+pnpm test
+```
+
+`pnpm test` runs:
+
+1. the repository structure and safety-fixture validator;
+2. the ambient-core unit and end-to-end replay tests; and
+3. TypeScript typechecking.
+
+To run only the headless end-to-end replay tests:
+
+```bash
+pnpm --filter @neurotrax/ambient-core exec vitest run \
+  src/conductor.test.ts --reporter verbose
+```
+
+### What the first replay does
+
+The synthetic fixture contains about two seconds of audio-feature and
+face-landmark frames. `runConductor()`:
+
+1. detects candidate speech and face windows;
+2. routes each window to its deterministic extractor;
+3. records placeholder measurements or a reason-coded abstention;
+4. aggregates the visit by biomarker; and
+5. emits a lane-tagged event trace ending in
+   `encounter-observation.created`.
+
+The replay test also degrades face framing to prove that the facial lane
+abstains instead of fabricating a result, while the independently measurable
+speech lane can continue.
+
+Identical input and base time produce byte-identical output.
+
+## Measurement posture
+
+The current values are deliberately named with a `prototype.*` code and carry:
+
+```text
+uncertainty: "placeholder"
+clinicalValidation: "none"
+algorithmVersion: "<extractor>-0.1"
+```
+
+They demonstrate infrastructure, not clinical biomarkers. Short-window speech
+and facial proxies must not be presented as validated articulation, affect,
+bradykinesia, hypomimia, disease status, medication response, or progression.
+
+Measurement, interpretation, and clinical action remain separate:
+
+```text
+deterministic signal processing
+  -> structured observation
+  -> compatibility-aware longitudinal evidence
+  -> grounded prose
+  -> clinician interpretation and sign-off
+```
+
+## Privacy and safety model
+
+- Analysis requires explicit, revocable consent.
+- The intended live path is **continuous analysis, not continuous recording**.
+- Raw audiovisual frames should be processed ephemerally and released.
+- The current core consumes derived primitives only and persists no media.
+- Short evidence snippets are a future, separately governed feature.
+- Transcripts and media are untrusted data, never agent instructions.
+- Quality failure returns `not measurable`.
+- No language model creates, changes, or gates measurements.
+- No component both recommends and executes a consequential clinical action.
+- No PHI, recordings, credentials, or secrets belong in this repository.
+- Current fixtures are synthetic and set `containsPHI: false`.
+
+## Demo vision
+
+The eventual hackathon experience is one camera-dominant screen:
+
+```text
+live consented encounter
+  -> subtle multi-lane agent activity
+  -> truthful modality-specific abstention
+  -> today's observation lands on a synthetic longitudinal timeline
+  -> grounded evidence card assembles
+  -> clinician traces a claim to measurement, event, and retained evidence
+  -> clinician accepts or rejects
+```
+
+The signature visual moment is not a fake AI conversation. It is a truthful
+split in agent behavior: for example, the participant moves partially out of
+frame, the facial lane visibly abstains when its framing gate fails, and the
+speech lane continues only if its own quality contract still passes.
+
+The current visit will be genuinely live. Prior history will be deterministic
+and clearly labeled synthetic.
+
+## Implementation roadmap
+
+The next three slices preserve the same three-capability product:
+
+1. **Browser real-time ingestion:** request consent and `getUserMedia`
+   permissions, compute audio and face primitives locally, and feed the
+   ambient core incrementally.
+2. **Longitudinal store and compatibility:** persist accepted per-visit
+   observations and compare only matching context, confounds, and algorithm
+   versions.
+3. **Demo interface:** render the live camera, multi-lane flight recorder,
+   longitudinal reveal, evidence card, claim traceability, and clinician
+   accept/reject.
+
+No new extractor modality or fourth product capability should be added until
+this loop works beautifully end to end.
 
 ## Repository map
 
 ```text
 neurotrax/
 ├── apps/
-│   ├── capture-web/             # MacBook consent, preflight, and capture
-│   └── clinician-review/        # The evidence card experience
+│   ├── capture-web/             # Legacy brief; ambient browser slice is next
+│   └── clinician-review/        # Partial legacy brief; ambient re-key pending
 ├── agents/
-│   ├── guided-capture/          # Capability 1
-│   ├── personal-trajectory/     # Capability 2
-│   └── evidence-card/           # Capability 3
+│   ├── guided-capture/          # Legacy capability notes; ambient design supersedes the script
+│   ├── personal-trajectory/     # Legacy prompt-version logic; ambient re-key pending
+│   └── evidence-card/           # Evidence boundary; ambient inputs pending
 ├── packages/
-│   ├── contracts/               # Shared encounter and observation contracts
-│   └── event-log/               # Auditable agent flight-recorder events
-├── protocols/                   # One non-clinical MacBook check-in protocol
-├── examples/                    # Synthetic examples only
+│   ├── ambient-core/            # Runnable deterministic headless pipeline
+│   ├── contracts/               # Shared ambient measurement contracts
+│   └── event-log/               # Legacy/demo event-log documentation
 ├── docs/
-│   ├── architecture.md
-│   ├── demo-experience.md
+│   ├── superpowers/specs/       # Current ambient Capability #1 design
+│   ├── superpowers/plans/       # Executed core implementation plan
+│   ├── architecture.md          # Earlier scripted demo-spine architecture
+│   ├── demo-experience.md       # Earlier scripted demo choreography
 │   ├── safety.md
 │   └── validation.md
-└── scripts/
+├── examples/                    # Synthetic legacy/demo examples
+├── protocols/                   # Earlier task-bound protocol
+└── scripts/                     # Structure and safety validation
 ```
 
-## Quick start
-
-There is no runnable application yet. The repository currently defines the
-system boundary, demo choreography, contracts, and implementation skeleton.
-
-```bash
-git clone https://github.com/logannye/neurotrax.git
-cd neurotrax
-npm run check
-```
-
-The structural check uses Bash and has no package dependencies.
-
-## First implementation slice: the demo spine
-
-Build one polished vertical loop and nothing more:
-
-1. **Live capture:** consent, browser permission, dominant MacBook camera
-   preview, microphone meter, speech task, and finger-tapping task.
-2. **Truthful intervention:** detect poor hand framing, pause, request one
-   correction, verify recovery, and resume.
-3. **Visible orchestration:** render real structured events in a quiet flight
-   recorder; never render chain-of-thought.
-4. **Seeded trajectory:** load deterministic synthetic history, include
-   compatible observations, visibly exclude one prompt-version mismatch, and
-   transition the camera into the timeline.
-5. **Grounded deliverable:** assemble a one-screen evidence card with
-   claim-to-measurement-to-clip traceability and clinician accept/reject.
-
-That demo spine implements the same three capabilities; it does not introduce
-five new features.
+The authoritative ambient design is
+[docs/superpowers/specs/2026-07-18-ambient-biomarker-capture-design.md](docs/superpowers/specs/2026-07-18-ambient-biomarker-capture-design.md).
+The implemented plan is
+[docs/superpowers/plans/2026-07-18-ambient-capture-core.md](docs/superpowers/plans/2026-07-18-ambient-capture-core.md).
 
 ## Explicit non-goals
 
-The initial product will not include:
+The first product does not include:
 
 - diagnosis or disease classification;
 - medication recommendations or autonomous actions;
 - emergency or respiratory-risk prediction;
-- rigidity, strength, reflex, sensation, aspiration, or postural-stability
-  claims;
-- continuous ambient recording;
-- natural-conversation interpretation;
+- conversation-content interpretation;
+- continuous raw-media recording;
 - EHR integration;
-- a protocol marketplace;
 - a large agent mesh;
 - a neurological foundation model;
-- a general-purpose digital twin;
-- clinical-trial endpoints;
+- a general-purpose digital twin; or
 - automated patient alerts.
-
-Those ideas may be researched later. They do not belong in the first product.
-
-## Safety foundations
-
-- Recording is visible, scoped, and revocable.
-- Raw audiovisual data are minimized and never committed to Git.
-- Quality failure returns `not measurable`.
-- Transcripts and media are data, never agent instructions.
-- Every measurement is linked to its task, media, quality, and algorithm
-  version.
-- One anomalous encounter does not create a progression claim.
-- No AI-generated result updates history without human acceptance.
-- No component both recommends and executes a clinical action.
-
-See [docs/safety.md](docs/safety.md).
-
-## Validation posture
-
-The first research question is:
-
-> Can a standard MacBook reliably produce a consented, task-bound,
-> quality-described observation that can be compared with a later observation?
-
-Only after that should individual measurements be evaluated for:
-
-1. technical repeatability;
-2. device and environment sensitivity;
-3. clinical validity;
-4. responsiveness to meaningful change;
-5. workflow and economic value.
-
-See [docs/validation.md](docs/validation.md).
 
 ## Evidence-informed, not clinically validated
 
@@ -432,16 +333,16 @@ The concept is informed by research on:
 - [webcam-based Parkinson's finger-tapping assessment](https://www.nature.com/articles/s41746-023-00905-9);
 - [remote ALS speech monitoring](https://www.nature.com/articles/s41746-020-00335-x);
 - [digital speech response to levodopa](https://www.nature.com/articles/s41531-025-01045-5);
-- [limitations of remote MDS-UPDRS assessment](https://pmc.ncbi.nlm.nih.gov/articles/PMC9391277/);
+- [limitations of remote MDS-UPDRS assessment](https://pmc.ncbi.nlm.nih.gov/articles/PMC9391277/); and
 - [FDA remote digital-health guidance](https://www.fda.gov/regulatory-information/search-fda-guidance-documents/digital-health-technologies-remote-data-acquisition-clinical-investigations).
 
-These studies do not validate this prototype or authorize clinical use.
+These sources do not validate Neurotrax or authorize clinical use.
 
 ## Contributing
 
-Read [CONTRIBUTING.md](CONTRIBUTING.md) and [AGENTS.md](AGENTS.md). A proposed
-change should strengthen one of the three capabilities or a required safety
-foundation. Otherwise, defer it.
+Read [CONTRIBUTING.md](CONTRIBUTING.md) and [AGENTS.md](AGENTS.md). Changes
+should strengthen one of the three product capabilities or a required safety
+foundation. Otherwise, defer them.
 
 ## License
 

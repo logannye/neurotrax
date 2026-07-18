@@ -1,5 +1,12 @@
 # Neurotrax demo-first architecture
 
+> **Superseded Capability #1 reference.** This document preserves the earlier
+> scripted speech-and-finger-tapping demo spine. The accepted Capability #1
+> direction is now ambient, non-interrupting capture as defined in
+> [the ambient biomarker capture design](superpowers/specs/2026-07-18-ambient-biomarker-capture-design.md).
+> Personal Trajectory, the Clinician Evidence Card, and the one-screen
+> traceability principles remain relevant.
+
 ## Scope
 
 Neurotrax has exactly three capabilities:

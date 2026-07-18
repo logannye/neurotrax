@@ -1,5 +1,9 @@
 # Clinician Evidence Card Agent
 
+> **Ambient input update pending.** The evidence-card boundary remains current,
+> but its source model must be re-keyed from scripted tasks to ambient windows,
+> measurements, confounds, abstentions, and any governed evidence snippets.
+
 ## Goal
 
 Turn one encounter and its personal comparison into an inspectable review card.

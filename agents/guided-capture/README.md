@@ -1,5 +1,8 @@
 # Guided Capture Agent
 
+> **Superseded agent brief.** Capability #1 is now Ambient Capture. Preserve
+> this document only as history for the earlier prompted demo.
+
 ## Goal
 
 Produce one consented, correctly labeled, technically usable audiovisual

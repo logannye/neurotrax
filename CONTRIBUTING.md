@@ -6,7 +6,7 @@ Thank you for contributing to Neurotrax.
 
 1. Read the [architecture](docs/architecture.md) and
    [safety requirements](docs/safety.md), then review the
-   [demo experience](docs/demo-experience.md).
+   [current ambient-capture design](docs/superpowers/specs/2026-07-18-ambient-biomarker-capture-design.md).
 2. State the intended use of the change.
 3. Identify which of the three product capabilities it strengthens.
 4. Document expected failures, quality requirements, and validation status.
@@ -27,7 +27,7 @@ Any agent activity shown in the interface must correspond to a real event,
 decision, action, or verified outcome. Do not add simulated chain-of-thought or
 decorative activity that cannot be audited.
 
-If a change does not improve Guided Capture, Personal Trajectory, Clinician
+If a change does not improve Ambient Capture, Personal Trajectory, Clinician
 Evidence Card, or a required safety foundation, leave it out of the MVP.
 
 Changes introducing a consequential clinical decision must include a human
@@ -36,8 +36,8 @@ review gate and may not execute the decision automatically.
 ## Checks
 
 ```bash
-npm run check
+pnpm test
 ```
 
-Implementation-specific test and lint commands will be added with each runnable
-workspace.
+This runs the structure validator, unit and replay tests, and TypeScript
+typechecking.

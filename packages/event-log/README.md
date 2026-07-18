@@ -1,5 +1,10 @@
 # Append-only encounter event log
 
+> **Legacy demo-spine taxonomy.** This package documents the earlier scripted
+> `neurotrax.event-envelope.v0.1` lifecycle. The implemented ambient core uses
+> the separate `neurotrax.ambient-event.v0.1` contract in
+> `@neurotrax/contracts`.
+
 This package will hold the small event-store abstraction behind Neurotrax's
 agent flight recorder. The first implementation can persist newline-delimited
 JSON locally in the browser or demo server; the contract is intentionally

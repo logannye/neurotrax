@@ -1,5 +1,15 @@
 # Ambient Capture Core Implementation Plan
 
+**Implementation status:** Complete through Task 11 on 2026-07-18. The
+checkboxes below preserve the original executable recipe; repository tests are
+the source of truth for the implemented state.
+
+**Release hardening after the recipe:** `FrameStream` now requires and
+runtime-checks `containsPHI: false`; speech candidates retain bounded
+intra-speech pauses; aggregates are keyed by biomarker plus context; and the
+visit observation preserves candidate windows, confounds, and per-window
+measurements.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Build the deterministic, headless core of the redesigned Capability #1 — a TypeScript library that replays a synthetic primitive-frame stream through a team of extractor agents and a Capture Conductor to produce one trendable per-visit `EncounterObservation` plus an agent-lane event stream.

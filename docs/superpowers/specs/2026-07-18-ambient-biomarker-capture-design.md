@@ -1,6 +1,7 @@
 # Ambient Biomarker Capture — Capability #1 redesign
 
-**Status:** Proposed
+**Status:** Accepted; deterministic headless core implemented, live ingestion
+and interface planned
 **Date:** 2026-07-18
 **Supersedes:** the scripted "Guided Capture" definition of Capability #1 in
 `docs/architecture.md` and `README.md`.
@@ -72,8 +73,8 @@ Chosen approach: **shared-primitive bus + orchestrator + deterministic
 extractors.** Expensive primitives are computed once by a single ingestion layer
 and published on an in-process event bus. Each extractor subagent subscribes only
 to the primitives it needs. The language model stays entirely out of the
-measurement loop; it only drafts the evidence card in Capability #3, exactly as
-today.
+measurement loop; in the planned Capability #3, it may draft only grounded
+evidence-card prose from structured facts.
 
 Rejected alternatives:
 
@@ -94,8 +95,8 @@ Rejected alternatives:
 | **Facial-Expressivity extractor** | agent | Over well-framed windows: facial expressivity/hypomimia, blink rate, brow/smile amplitude. Emit `Measurement`s or abstain. | Measure only; never interpret disease. |
 
 The two extractors are independent and communicate only through the bus. A future
-modality (gaze, head/limb motor) is added as another subscriber without touching
-the existing units. Adding one is a scope decision, not a default.
+modality (gaze, head/limb motor) would be added as another subscriber without
+touching the existing units. Adding one is a scope decision, not a default.
 
 ## Contract changes
 
@@ -197,7 +198,8 @@ reversing a non-goal.
 
 - Deterministic measurement is separate from interpretation.
 - Abstention over fabrication; quality failure returns `not measurable`.
-- The language model only drafts grounded prose from structured facts.
+- The planned language-model role is limited to drafting grounded prose from
+  structured facts.
 - Human sign-off gates the longitudinal record; only clinician-accepted visits
   enter history.
 - No component both recommends and executes a consequential clinical action.
