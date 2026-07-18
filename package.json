@@ -4,9 +4,11 @@
   "private": true,
   "description": "A demo-first agentic audiovisual sidecar for longitudinal tele-neurology.",
   "license": "MIT",
+  "packageManager": "pnpm@9.12.3",
   "scripts": {
     "check": "bash scripts/validate-structure.sh",
-    "test": "npm run check"
+    "test:unit": "pnpm -r --filter @neurotrax/ambient-core test:unit",
+    "test": "npm run check && npm run test:unit"
   },
   "engines": {
     "node": ">=22"
