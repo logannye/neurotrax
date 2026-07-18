@@ -1,5 +1,8 @@
 # Prototype protocol
 
+> **Legacy scripted protocol.** Ambient Capture does not prompt the patient to
+> perform this task. It is retained only as a historical demo fixture.
+
 The MVP contains one non-clinical protocol:
 
 `macbook-check-in.v0.1`

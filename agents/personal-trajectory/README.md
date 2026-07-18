@@ -1,5 +1,9 @@
 # Personal Trajectory Agent
 
+> **Ambient re-key pending.** The capability boundary remains current, but
+> prompt/task compatibility below must be replaced by detected measurement
+> context, confound tolerance, and algorithm-version compatibility.
+
 ## Goal
 
 Compare the current usable observation with compatible observations from the

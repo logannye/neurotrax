@@ -1,5 +1,10 @@
 # Neurotrax clinician review
 
+> **Partial legacy brief.** The evidence-card principles remain relevant, but
+> task, prompt-version, and source-clip assumptions below predate the ambient
+> capture redesign. The future review surface will consume context-aware
+> per-visit ambient observations.
+
 The review surface for Neurotrax's **Clinician Evidence Card** capability. It is
 the final reveal of the demo: one compact, inspectable artifact assembled from
 Guided Capture and Personal Trajectory outputs.

@@ -1,60 +1,93 @@
-# Shared contracts
+# Ambient core contracts
 
-The minimum contract set:
+`@neurotrax/contracts` contains the deterministic data boundaries implemented
+by the headless Ambient Capture core. These are research-prototype contracts,
+not clinical schemas.
 
-- `EncounterManifest`
-- `TaskInstance`
-- `CaptureQuality`
-- `EncounterObservation`
-- `TrajectoryComparison`
-- `EvidenceCard`
-- `ReviewDecision`
-- `EventEnvelope`
+## Exported contracts
 
-Contracts must preserve:
+### Capture provenance
 
-- consent and retention scope;
-- live, cached-processor, fixture-playback, or recorded-demo source mode;
-- task and prompt version;
-- device and media properties;
-- quality result;
-- measurement and algorithm version;
-- evidence provenance;
-- review status.
+`CaptureMode` distinguishes:
 
-`ReviewDecision.decision` is either `accepted` or `rejected`. An annotation is
-optional and does not constitute a third decision state.
+- `live`
+- `cached-processor`
+- `fixture-playback`
+- `recorded-demo`
 
-## Event envelope
+The current runnable path uses only `fixture-playback`.
 
-`EventEnvelope` is the append-only audit contract that powers the visible agent
-flight recorder. It records what was observed, decided, requested, produced, or
-verified without exposing private chain-of-thought.
+### Measurement context
 
-Every envelope contains:
+`MeasurableWindow` identifies a candidate speech or face interval and carries a
+detected `MeasurementContext`:
 
-- a unique `eventId`, encounter-local integer `sequence`, and `occurredAt`;
-- the pseudonymous `encounterId` and `participantId`;
-- a versioned, registered `actor`;
-- a stable `type` and a registered product or review `stage`;
-- concise `summary` text suitable for the demo interface;
-- structured `payload` facts;
-- optional causal links and evidence references.
+- context kind, such as `spontaneous-speech` or `listening-expressive`;
+- audio signal-to-noise ratio;
+- face-framing fraction;
+- observed frame rate; and
+- relative illumination.
 
-The encounter's first event declares `captureMode`. `EncounterObservation`,
-`TrajectoryComparison`, and `EvidenceCard` repeat the current-capture mode;
-trajectory and card artifacts separately mark seeded history as
-`synthetic-fixture`. A UI label must be generated from these fields rather than
-from presentation state alone.
+The name is a versioned contract term. Detection creates a candidate window;
+the matching extractor still applies its quality gates and may return an
+`Abstention`.
 
-Events are immutable. Corrections and later outcomes are appended as new events
-that point back to the earlier event or action. A projection may be rebuilt
-from the ordered stream, but must never silently rewrite it.
+### Measurements and abstentions
 
-The actor registry and lifecycle conventions live in
-[the event-log package](../event-log/). The synthetic
-[encounter event stream](../../examples/encounter-events.example.jsonl) shows
-the full three-agent handoff.
+Every `Measurement` includes:
 
-The JSON files in [examples](../../examples/) illustrate the concepts and are
-not final schemas.
+- a stable prototype code, label, value, and unit;
+- confidence and placeholder uncertainty;
+- algorithm version and `clinicalValidation: "none"`;
+- its source window and time range; and
+- an optional future evidence-snippet reference.
+
+An `Abstention` records the modality, window, reason code, and human-readable
+detail. A failed quality contract never produces a substitute value.
+
+### Per-visit observation
+
+`EncounterObservation` is the output of the Capture Conductor. It preserves:
+
+- synthetic/PHI status and capture mode;
+- visit and participant identifiers;
+- candidate windows and their confound envelopes;
+- raw per-window measurements;
+- robust biomarker-and-context aggregates;
+- abstentions; and
+- the total measurement count.
+
+The current `FrameStream` contract accepts only `containsPHI: false`, making the
+implemented core explicitly synthetic-only. Live patient or PHI-bearing input
+requires a future, separately reviewed contract.
+
+### Ambient event envelope
+
+`EventEnvelope` is the ordered trace consumed by the future multi-lane flight
+recorder. Each event has:
+
+- deterministic encounter-local sequence and event ID;
+- visit, participant, and actor-lane identity;
+- a stable ambient event type and stage;
+- a concise summary plus structured payload; and
+- optional evidence references.
+
+The current headless core returns an in-memory ordered event trace. A durable,
+append-only event store is future work.
+
+## Deliberate boundaries
+
+- Measurement code is deterministic; a language model never creates or gates a
+  value.
+- All measurement uncertainty is explicitly a placeholder.
+- No contract represents diagnosis, progression, treatment, or emergency
+  action.
+- Context and algorithm version are preserved so future longitudinal logic can
+  reject incompatible comparisons.
+- Media and transcripts remain untrusted inputs and are not embedded in these
+  contracts.
+
+The earlier task-bound JSON examples and event-log documentation remain as
+legacy demo-spine references. They use a separate
+`neurotrax.event-envelope.v0.1` taxonomy and are not the ambient core's
+`neurotrax.ambient-event.v0.1` schema.

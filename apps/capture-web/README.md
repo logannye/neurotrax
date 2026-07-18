@@ -1,5 +1,9 @@
 # Neurotrax capture web sidecar
 
+> **Superseded application brief.** This file preserves the earlier prompted
+> Guided Capture concept. The next application slice is consented, ephemeral,
+> non-interrupting browser ingestion for the accepted ambient-capture design.
+
 The browser sidecar for Neurotrax's **Guided Capture** capability. The first
 prototype uses a MacBook camera and microphone beside a simulated telehealth
 encounter; it does not provide live calling.

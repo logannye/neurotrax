@@ -1,5 +1,11 @@
 # Neurotrax demo experience
 
+> **Superseded choreography.** This file records the earlier prompted
+> speech-and-finger-tapping demo. The current product direction is the
+> non-interrupting ambient flow in
+> [the ambient biomarker capture design](superpowers/specs/2026-07-18-ambient-biomarker-capture-design.md).
+> Do not implement this scripted sequence as the active Capability #1.
+
 ## Demo thesis
 
 Neurotrax should feel like an encounter that explains itself:

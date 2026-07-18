@@ -1,5 +1,11 @@
 # Validation plan
 
+> **Superseded validation plan.** The checks below describe the earlier
+> prompted speech-and-finger-tapping demo. The accepted ambient design requires
+> candidate-window, abstention, context/confound, and longitudinal-comparability
+> validation. Treat this file as historical until the live-ingestion plan
+> replaces it.
+
 The first validation target is the infrastructure, not a disease biomarker.
 
 ## Question 1: Can Guided Capture create a repeatable observation?
