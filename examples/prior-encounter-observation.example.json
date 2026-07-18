@@ -3,6 +3,7 @@
   "containsPHI": false,
   "encounterId": "demo-encounter-001",
   "participantId": "synthetic-participant-001",
+  "captureMode": "synthetic-fixture",
   "protocolId": "macbook-check-in.v0.1",
   "captureAdapter": {
     "id": "macbook-browser",

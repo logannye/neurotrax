@@ -25,3 +25,5 @@ Explain why this strengthens one of the three capabilities.
 - [ ] `npm test`
 - [ ] Synthetic data only
 - [ ] No captured media or secrets
+- [ ] Visible agent activity is backed by a real event
+- [ ] Generated claims resolve to evidence references

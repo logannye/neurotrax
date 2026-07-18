@@ -3,14 +3,58 @@
   "containsPHI": false,
   "cardId": "demo-card-002",
   "encounterId": "demo-encounter-002",
+  "currentCaptureMode": "live",
+  "historyMode": "synthetic-fixture",
   "comparisonEncounterIds": [
+    "demo-encounter-history-003",
+    "demo-encounter-history-002",
     "demo-encounter-001"
   ],
   "trajectoryComparisonId": "demo-comparison-002",
-  "status": "provisional",
-  "summary": "Both prototype tasks passed quality. One engineering measurement changed relative to the prior compatible demo encounter.",
+  "status": "reviewed",
+  "observationStatus": "provisional",
+  "headline": "One provisional technical change; one stable observation",
+  "headlineClaimIds": [
+    "claim-tap-higher",
+    "claim-speech-stable"
+  ],
+  "summary": "Both prototype tasks passed after one bounded hand-framing correction. Tapping count was higher than the three-encounter synthetic personal reference; speech duration remained stable.",
+  "summarySupport": {
+    "claimIds": [
+      "claim-tap-higher",
+      "claim-speech-stable"
+    ],
+    "eventIds": [
+      "evt-006-hand-framing-failed",
+      "evt-008-recovery-verified",
+      "evt-012-compatibility-assessed"
+    ]
+  },
+  "captureQuality": {
+    "status": "pass",
+    "correctionCount": 1,
+    "correction": "hand-framing-recovered",
+    "sourceEventIds": [
+      "evt-006-hand-framing-failed",
+      "evt-007-action-requested",
+      "evt-008-recovery-verified"
+    ]
+  },
+  "compatibility": {
+    "includedEncounterCount": 3,
+    "excludedEncounterCount": 1,
+    "sourceEventId": "evt-012-compatibility-assessed",
+    "exclusions": [
+      {
+        "encounterId": "demo-encounter-history-004",
+        "reasonCode": "prompt-version-mismatch"
+      }
+    ]
+  },
   "items": [
     {
+      "claimId": "claim-speech-stable",
+      "statement": "Speech duration remained stable relative to compatible synthetic personal history.",
       "measurementCode": "prototype.speech.duration",
       "direction": "stable",
       "uncertainty": "placeholder",
@@ -18,9 +62,18 @@
         "current-standard-speech-clip",
         "prior-standard-speech-clip"
       ],
+      "referenceMeasurementRefs": [
+        "demo-encounter-history-003:prototype.speech.duration",
+        "demo-encounter-history-002:prototype.speech.duration",
+        "demo-encounter-001:prototype.speech.duration"
+      ],
+      "groundingStatus": "pass",
+      "groundingEventId": "evt-015-speech-claim-grounded",
       "clinicalInterpretation": null
     },
     {
+      "claimId": "claim-tap-higher",
+      "statement": "Tapping count was higher than the compatible synthetic personal reference.",
       "measurementCode": "prototype.tap.count",
       "direction": "higher",
       "uncertainty": "placeholder",
@@ -29,12 +82,23 @@
         "current-finger-tap-clip",
         "prior-finger-tap-clip"
       ],
+      "referenceMeasurementRefs": [
+        "demo-encounter-history-003:prototype.tap.count",
+        "demo-encounter-history-002:prototype.tap.count",
+        "demo-encounter-001:prototype.tap.count"
+      ],
+      "groundingStatus": "pass",
+      "groundingEventId": "evt-016-tap-claim-grounded",
       "clinicalInterpretation": null
     }
   ],
+  "claimBoundary": "No disease progression, diagnosis, cause, or treatment inference was made.",
   "review": {
-    "decision": null,
-    "annotation": null,
-    "reviewer": null
+    "decision": "accepted",
+    "annotation": "Demo review complete.",
+    "reviewer": "synthetic-clinician-001",
+    "reviewedAt": "2026-07-18T16:00:48Z",
+    "acceptedIntoHistory": true,
+    "sourceEventId": "evt-019-human-review-accepted"
   }
 }
