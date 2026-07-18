@@ -1,0 +1,36 @@
+{
+  "id": "macbook-check-in.v0.1",
+  "status": "non-clinical-prototype",
+  "captureAdapter": "macbook-browser",
+  "description": "A seated audiovisual check-in used to test capture, quality, comparison, and review infrastructure.",
+  "consentRequired": true,
+  "maxRetriesPerTask": 1,
+  "tasks": [
+    {
+      "id": "standard-speech.v0.1",
+      "modality": "audio-video",
+      "durationSeconds": 15,
+      "instruction": "Read the displayed prototype sentence at a comfortable pace.",
+      "qualityChecks": [
+        "microphone-not-clipped",
+        "background-noise-acceptable",
+        "face-visible",
+        "duration-complete"
+      ]
+    },
+    {
+      "id": "seated-finger-tap.v0.1",
+      "modality": "video",
+      "durationSeconds": 10,
+      "instruction": "With the selected hand visible, tap the index finger and thumb as comfortably and consistently as possible.",
+      "qualityChecks": [
+        "camera-stable",
+        "hand-visible",
+        "fingers-not-occluded",
+        "observed-frame-rate-acceptable",
+        "duration-complete"
+      ]
+    }
+  ],
+  "clinicalClaims": []
+}

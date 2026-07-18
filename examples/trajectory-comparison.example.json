@@ -1,0 +1,57 @@
+{
+  "exampleOnly": true,
+  "containsPHI": false,
+  "comparisonId": "demo-comparison-002",
+  "participantId": "synthetic-participant-001",
+  "currentEncounterId": "demo-encounter-002",
+  "includedEncounterIds": [
+    "demo-encounter-001"
+  ],
+  "excludedEncounters": [],
+  "compatibility": {
+    "protocolId": "macbook-check-in.v0.1",
+    "captureAdapter": {
+      "id": "macbook-browser",
+      "version": "0.1.0"
+    },
+    "rules": [
+      "exact-protocol-task-and-prompt-versions",
+      "compatible-capture-adapter",
+      "passing-quality",
+      "known-measurement-version"
+    ],
+    "contextWarnings": [
+      "Medication phase was not collected in either synthetic encounter."
+    ]
+  },
+  "measurements": [
+    {
+      "code": "prototype.speech.duration",
+      "algorithmVersion": "placeholder-0.1",
+      "currentValue": 14.8,
+      "priorValue": 14.7,
+      "unit": "seconds",
+      "delta": 0.1,
+      "direction": "stable",
+      "uncertainty": "placeholder",
+      "currentEvidence": "current-standard-speech-clip",
+      "priorEvidence": "prior-standard-speech-clip",
+      "clinicalInterpretation": null
+    },
+    {
+      "code": "prototype.tap.count",
+      "algorithmVersion": "placeholder-0.1",
+      "currentValue": 31,
+      "priorValue": 27,
+      "unit": "count",
+      "delta": 4,
+      "direction": "higher",
+      "uncertainty": "placeholder",
+      "currentEvidence": "current-finger-tap-clip",
+      "priorEvidence": "prior-finger-tap-clip",
+      "clinicalInterpretation": null
+    }
+  ],
+  "status": "provisional",
+  "claimBoundary": "No disease progression, cause, or treatment inference."
+}

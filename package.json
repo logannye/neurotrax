@@ -1,0 +1,14 @@
+{
+  "name": "neuro-encounter",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Agentic audiovisual infrastructure for longitudinal tele-neurology.",
+  "license": "MIT",
+  "scripts": {
+    "check": "bash scripts/validate-structure.sh",
+    "test": "npm run check"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

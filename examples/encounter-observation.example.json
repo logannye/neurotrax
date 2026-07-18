@@ -1,0 +1,93 @@
+{
+  "exampleOnly": true,
+  "containsPHI": false,
+  "encounterId": "demo-encounter-002",
+  "participantId": "synthetic-participant-001",
+  "protocolId": "macbook-check-in.v0.1",
+  "captureAdapter": {
+    "id": "macbook-browser",
+    "version": "0.1.0",
+    "browser": "synthetic-browser",
+    "deviceLabel": "built-in-camera-and-microphone"
+  },
+  "consent": {
+    "capture": true,
+    "derivedMeasurements": true,
+    "retention": "local-review-history",
+    "researchUse": false
+  },
+  "context": {
+    "medicationPhase": "not-collected",
+    "notes": "Synthetic example"
+  },
+  "tasks": [
+    {
+      "taskId": "standard-speech.v0.1",
+      "promptVersion": "prototype-sentence.v0.1",
+      "startedAt": "2026-07-18T16:00:00Z",
+      "endedAt": "2026-07-18T16:00:15Z",
+      "retryCount": 0,
+      "quality": {
+        "status": "pass",
+        "checks": {
+          "microphone-not-clipped": true,
+          "background-noise-acceptable": true,
+          "face-visible": true,
+          "duration-complete": true
+        }
+      },
+      "asset": {
+        "assetId": "current-standard-speech-clip",
+        "retained": true,
+        "localReference": ".local/evidence/demo-encounter-002/standard-speech.webm",
+        "sha256": "synthetic-hash-not-a-real-asset"
+      },
+      "measurements": [
+        {
+          "code": "prototype.speech.duration",
+          "label": "Captured speech duration",
+          "value": 14.8,
+          "unit": "seconds",
+          "uncertainty": "placeholder",
+          "algorithmVersion": "placeholder-0.1",
+          "clinicalValidation": "none"
+        }
+      ]
+    },
+    {
+      "taskId": "seated-finger-tap.v0.1",
+      "promptVersion": "finger-tap-instruction.v0.1",
+      "startedAt": "2026-07-18T16:00:20Z",
+      "endedAt": "2026-07-18T16:00:30Z",
+      "retryCount": 0,
+      "quality": {
+        "status": "pass",
+        "checks": {
+          "camera-stable": true,
+          "hand-visible": true,
+          "fingers-not-occluded": true,
+          "observed-frame-rate-acceptable": true,
+          "duration-complete": true
+        }
+      },
+      "asset": {
+        "assetId": "current-finger-tap-clip",
+        "retained": true,
+        "localReference": ".local/evidence/demo-encounter-002/finger-tap.webm",
+        "sha256": "synthetic-hash-not-a-real-asset"
+      },
+      "measurements": [
+        {
+          "code": "prototype.tap.count",
+          "label": "Observed prototype tap count",
+          "value": 31,
+          "unit": "count",
+          "uncertainty": "placeholder",
+          "algorithmVersion": "placeholder-0.1",
+          "clinicalValidation": "none"
+        }
+      ]
+    }
+  ],
+  "reviewStatus": "pending"
+}

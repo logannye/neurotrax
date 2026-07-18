@@ -1,0 +1,40 @@
+{
+  "exampleOnly": true,
+  "containsPHI": false,
+  "cardId": "demo-card-002",
+  "encounterId": "demo-encounter-002",
+  "comparisonEncounterIds": [
+    "demo-encounter-001"
+  ],
+  "trajectoryComparisonId": "demo-comparison-002",
+  "status": "provisional",
+  "summary": "Both prototype tasks passed quality. One engineering measurement changed relative to the prior compatible demo encounter.",
+  "items": [
+    {
+      "measurementCode": "prototype.speech.duration",
+      "direction": "stable",
+      "uncertainty": "placeholder",
+      "evidence": [
+        "current-standard-speech-clip",
+        "prior-standard-speech-clip"
+      ],
+      "clinicalInterpretation": null
+    },
+    {
+      "measurementCode": "prototype.tap.count",
+      "direction": "higher",
+      "uncertainty": "placeholder",
+      "warning": "Engineering demonstration only; not a clinical change.",
+      "evidence": [
+        "current-finger-tap-clip",
+        "prior-finger-tap-clip"
+      ],
+      "clinicalInterpretation": null
+    }
+  ],
+  "review": {
+    "decision": null,
+    "annotation": null,
+    "reviewer": null
+  }
+}
