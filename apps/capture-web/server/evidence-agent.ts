@@ -12,19 +12,14 @@ import {
 } from "../../../packages/evidence-core/src/evidence.ts";
 
 export const EVIDENCE_MODEL = "gpt-5.6";
-export const EVIDENCE_PROMPT_VERSION = "evidence-card-grounded.v0.1";
+export const EVIDENCE_PROMPT_VERSION = "encounter-summary-grounded.v0.2";
 
 const ClaimFactSchema = z
   .object({
     claimId: z.string().min(1),
     measurementCode: z.string().min(1),
     label: z.string().min(1),
-    direction: z.enum([
-      "within-reference",
-      "above-reference",
-      "below-reference",
-      "not-comparable"
-    ]),
+    modality: z.enum(["speech", "face"]),
     statement: z.string().min(1),
     currentValue: z.number(),
     unit: z.string().min(1),
@@ -38,26 +33,25 @@ export const EvidenceAgentRequestSchema = z
   .object({
     containsPHI: z.literal(false),
     visitId: z.string().min(1),
-    comparisonId: z.string().min(1),
-    syntheticHistory: z.literal(true),
-    includesAcceptedSessionHistory: z.boolean(),
     qualitySummary: z
       .object({
         speechWindowCount: z.number().int().nonnegative(),
         faceWindowCount: z.number().int().nonnegative(),
         abstentionCount: z.number().int().nonnegative(),
-        qualityTransitionCount: z.number().int().nonnegative()
+        qualityTransitionCount: z.number().int().nonnegative(),
+        audioFrameCount: z.number().int().nonnegative(),
+        speechActiveFrameCount: z.number().int().nonnegative(),
+        pitchedFrameCount: z.number().int().nonnegative(),
+        pitchCoverage: z.number().min(0).max(1),
+        faceFrameCount: z.number().int().nonnegative(),
+        usableFaceFrameCount: z.number().int().nonnegative(),
+        usableFaceFraction: z.number().min(0).max(1),
+        faceWithholdingDurationMs: z.number().nonnegative(),
+        faceRecoveryObserved: z.boolean(),
+        postRecoveryFaceWindowCount: z.number().int().nonnegative()
       })
       .strict(),
-    excludedEncounters: z.array(
-      z
-        .object({
-          encounterId: z.string().min(1),
-          reasonCodes: z.array(z.string().min(1))
-        })
-        .strict()
-    ),
-    facts: z.array(ClaimFactSchema).min(1).max(2)
+    facts: z.array(ClaimFactSchema).length(2)
   })
   .strict();
 
@@ -78,8 +72,7 @@ const EvidenceCardDraftSchema = z
           })
           .strict()
       )
-      .min(1)
-      .max(2),
+      .length(2),
     boundaryStatement: z.literal(EVIDENCE_BOUNDARY)
   })
   .strict();
@@ -104,16 +97,16 @@ function systemPrompt(validationErrors: string[] = []): string {
     validationErrors.length === 0
       ? ""
       : `\nA prior draft failed validation. Correct only these errors:\n- ${validationErrors.join("\n- ")}`;
-  return `You draft one concise Neurotrax research-prototype evidence card from structured facts.
+  return `You draft one concise Neurotrax clinician encounter summary from current-encounter structured facts.
 
 Requirements:
-- Select one or two supplied claim facts.
-- Copy each selected claimId and statement exactly. Do not paraphrase claim statements.
+- Include both supplied claim facts: one speech and one face.
+- Copy each claimId and statement exactly. Do not paraphrase claim statements.
 - Write a direct headline and a two-sentence-or-shorter summary.
-- The summary must name the measurement label for every selected claim.
+- The summary must name both measurement labels.
 - Do not put numbers in the headline or summary.
 - Do not infer diagnosis, disease, progression, cause, treatment, medication effect, risk, normality, worsening, or improvement.
-- Treat checked-in history as synthetic, any disclosed accepted-session history as a non-patient self-demo, and every comparison as a provisional engineering observation.
+- Describe only what was measured during the current encounter.
 - Return only the required structured output.
 - Preserve this boundary statement exactly: "${EVIDENCE_BOUNDARY}"${retryInstruction}`;
 }
@@ -121,12 +114,7 @@ Requirements:
 function userPayload(input: EvidenceAgentRequest): string {
   return JSON.stringify({
     visitId: input.visitId,
-    comparisonId: input.comparisonId,
-    historyDisclosure: input.includesAcceptedSessionHistory
-      ? "SYNTHETIC FIXTURE + ACCEPTED NON-PATIENT SESSION HISTORY"
-      : "SYNTHETIC FIXTURE ONLY",
     qualitySummary: input.qualitySummary,
-    excludedEncounters: input.excludedEncounters,
     allowedClaimFacts: input.facts
   });
 }

@@ -18,6 +18,7 @@ export type AmbientEventType =
   | "consent.recorded"
   | "analysis.started"
   | "analysis.stopped"
+  | "device.preflight.passed"
   | "capture.quality.changed"
   | "capture.window.opened"
   | "capture.window.closed"

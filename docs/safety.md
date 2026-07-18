@@ -1,6 +1,6 @@
 # Safety foundations
 
-## Prototype boundary
+## Demonstration boundary
 
 Neurotrax is an engineering and hackathon demonstration, not a medical device.
 Use only the presenter's explicitly consented self-demo data. Do not use PHI or
@@ -9,17 +9,17 @@ make clinical decisions from its output.
 ## Required behavior
 
 - Consent is required before device access or analysis.
-- Live device and fixture modes remain visibly distinguishable.
+- A test capture can never silently replace a live-device encounter.
 - Camera and microphone tracks stop when the encounter ends or the page exits.
 - Raw frames and samples are processed ephemerally; no recording path exists.
 - Each modality applies its own quality contract and can abstain independently.
 - An unusable interval yields no measurement value.
-- Measurements, comparison, narrative generation, and human disposition remain
+- Measurements, summary generation, grounding, and human disposition remain
   separate steps.
-- Only accepted observations enter in-memory page-session history.
 - Every visible agent action derives from a versioned workflow event.
-- Every narrative claim resolves to a precomputed fact, aggregate, measurement
-  window, quality/confound envelope, and originating events.
+- Every narrative claim resolves to a precomputed current-encounter fact,
+  aggregate, measurement window, quality/confound envelope, and originating
+  events.
 
 ## Model boundary
 
@@ -27,10 +27,10 @@ The Evidence Agent receives bounded structured non-PHI facts only. It never
 receives microphone samples, camera frames, landmarks, screenshots,
 transcripts, or conversation content.
 
-The model cannot create measurements or choose compatible history. A
-deterministic validator blocks unsupported or clinical language. Failure is
-shown openly and must be retried; the application does not replace it with
-apparently successful canned prose.
+The model cannot create measurements or select evidence facts. A deterministic
+validator blocks unsupported or clinical language. Failure is shown openly and
+must be retried; the application does not replace it with apparently
+successful canned prose.
 
 `OPENAI_API_KEY` is server-side only. It must never use a `VITE_` prefix or be
 committed.

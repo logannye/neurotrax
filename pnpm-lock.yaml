@@ -22,9 +22,6 @@ importers:
       '@neurotrax/evidence-core':
         specifier: workspace:*
         version: link:../../packages/evidence-core
-      '@neurotrax/trajectory-core':
-        specifier: workspace:*
-        version: link:../../packages/trajectory-core
       openai:
         specifier: 6.48.0
         version: 6.48.0(zod@4.4.3)

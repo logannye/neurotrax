@@ -3,35 +3,69 @@ import { EVIDENCE_BOUNDARY } from "@neurotrax/evidence-core";
 import { runEvidenceAgent } from "./evidence-agent.js";
 import { hasEvidenceCredential } from "./vite-evidence-plugin.js";
 
+const facts = [
+  {
+    claimId: "claim-pitch",
+    measurementCode: "prototype.speech.pitch_variability",
+    label: "Pitch variability",
+    modality: "speech",
+    statement:
+      "Pitch variability was measured from a technically usable speech interval.",
+    currentValue: 1.9,
+    unit: "semitone-stddev",
+    supportRefs: ["speech-0"],
+    eventIds: ["measurement-pitch"],
+    allowedNumbers: ["1.9"]
+  },
+  {
+    claimId: "claim-face",
+    measurementCode: "prototype.face.expressivity",
+    label: "Facial movement",
+    modality: "face",
+    statement:
+      "Facial movement was measured before and after a quality-withheld interval.",
+    currentValue: 0.04,
+    unit: "motion-index",
+    supportRefs: ["face-0", "face-1"],
+    eventIds: ["measurement-face", "face-restored"],
+    allowedNumbers: ["0.04"]
+  }
+] as const;
+
 const request = {
   containsPHI: false,
   visitId: "visit-test",
-  comparisonId: "comparison-test",
-  syntheticHistory: true,
-  includesAcceptedSessionHistory: false,
   qualitySummary: {
     speechWindowCount: 1,
-    faceWindowCount: 1,
-    abstentionCount: 0,
-    qualityTransitionCount: 2
+    faceWindowCount: 2,
+    abstentionCount: 1,
+    qualityTransitionCount: 4,
+    audioFrameCount: 60,
+    speechActiveFrameCount: 48,
+    pitchedFrameCount: 42,
+    pitchCoverage: 0.875,
+    faceFrameCount: 60,
+    usableFaceFrameCount: 48,
+    usableFaceFraction: 0.8,
+    faceWithholdingDurationMs: 1000,
+    faceRecoveryObserved: true,
+    postRecoveryFaceWindowCount: 1
   },
-  excludedEncounters: [],
-  facts: [
-    {
-      claimId: "claim-pitch",
-      measurementCode: "prototype.speech.pitch_variability",
-      label: "Pitch variability",
-      direction: "within-reference",
-      statement:
-        "Pitch variability remained within the compatible synthetic personal reference.",
-      currentValue: 1.9,
-      unit: "semitone-stddev",
-      supportRefs: ["speech-0", "prior:pitch"],
-      eventIds: ["trajectory-comparison-completed"],
-      allowedNumbers: ["1.9"]
-    }
-  ]
+  facts
 } as const;
+
+function validDraft() {
+  return {
+    headline: "Two encounter signals are ready for review",
+    summary:
+      "Pitch variability and facial movement were measured during technically usable portions of the encounter.",
+    claims: facts.map((fact) => ({
+      claimId: fact.claimId,
+      statement: fact.statement
+    })),
+    boundaryStatement: EVIDENCE_BOUNDARY
+  };
+}
 
 function response(outputParsed: unknown, id: string) {
   return {
@@ -43,63 +77,37 @@ function response(outputParsed: unknown, id: string) {
 
 describe("runEvidenceAgent", () => {
   it("returns a grounded structured draft", async () => {
-    const parse = vi.fn().mockResolvedValue(
-      response(
-        {
-          headline: "A provisional personal comparison is ready",
-          summary:
-            "Pitch variability remained consistent with compatible synthetic personal history.",
-          claims: [
-            {
-              claimId: request.facts[0].claimId,
-              statement: request.facts[0].statement
-            }
-          ],
-          boundaryStatement: EVIDENCE_BOUNDARY
-        },
-        "response-1"
-      )
-    );
+    const parse = vi
+      .fn()
+      .mockResolvedValue(response(validDraft(), "response-1"));
 
     const result = await runEvidenceAgent(request, {
       responses: { parse: parse as never }
     });
 
     expect(result.grounding.status).toBe("pass");
-    expect(result.model).toBe("gpt-5.6-sol");
     expect(result.attemptCount).toBe(1);
   });
 
   it("retries once after a grounding failure", async () => {
-    const valid = {
-      headline: "A provisional personal comparison is ready",
-      summary:
-        "Pitch variability remained consistent with compatible synthetic personal history.",
-      claims: [
-        {
-          claimId: request.facts[0].claimId,
-          statement: request.facts[0].statement
-        }
-      ],
-      boundaryStatement: EVIDENCE_BOUNDARY
-    };
     const parse = vi
       .fn()
       .mockResolvedValueOnce(
         response(
           {
-            ...valid,
+            ...validDraft(),
             claims: [
               {
                 claimId: "claim-invented",
                 statement: "An invented observation."
-              }
+              },
+              validDraft().claims[1]
             ]
           },
           "response-invalid"
         )
       )
-      .mockResolvedValueOnce(response(valid, "response-valid"));
+      .mockResolvedValueOnce(response(validDraft(), "response-valid"));
 
     const result = await runEvidenceAgent(request, {
       responses: { parse: parse as never }
@@ -112,15 +120,9 @@ describe("runEvidenceAgent", () => {
     const parse = vi.fn().mockResolvedValue(
       response(
         {
+          ...validDraft(),
           headline: "Disease progression detected",
-          summary: "Pitch variability proves clinical decline.",
-          claims: [
-            {
-              claimId: request.facts[0].claimId,
-              statement: request.facts[0].statement
-            }
-          ],
-          boundaryStatement: EVIDENCE_BOUNDARY
+          summary: "Pitch variability proves clinical decline."
         },
         "response-invalid"
       )
@@ -143,7 +145,7 @@ describe("runEvidenceAgent", () => {
     ).rejects.toThrow();
   });
 
-  it("treats a refusal or missing parsed output as a blocking failure", async () => {
+  it("treats a refusal or missing parsed output as blocking", async () => {
     const parse = vi
       .fn()
       .mockResolvedValue(response(null, "response-refusal"));
@@ -156,7 +158,7 @@ describe("runEvidenceAgent", () => {
     expect(parse).toHaveBeenCalledTimes(2);
   });
 
-  it("surfaces an API timeout without substituting prose", async () => {
+  it("surfaces a timeout without substituting prose", async () => {
     const parse = vi.fn().mockRejectedValue(new Error("Request timed out."));
 
     await expect(

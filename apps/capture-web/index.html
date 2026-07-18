@@ -5,9 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta
       name="description"
-      content="Neurotrax live ambient capture prototype for a consented MacBook self-demo."
+      content="Neurotrax ambient audiovisual assessment for telehealth encounters."
     />
-    <title>Neurotrax · Live Capture</title>
+    <title>Neurotrax · Ambient Neuro Assessment</title>
   </head>
   <body>
     <div id="app">
@@ -16,39 +16,32 @@
           <span class="brand-mark" aria-hidden="true">N</span>
           <span>
             <strong>Neurotrax</strong>
-            <small>Ambient encounter prototype</small>
+            <small>Ambient neuro assessment</small>
           </span>
         </a>
-        <div class="header-badges">
-          <span class="badge badge-outline" id="capture-mode-badge"
-            >Research prototype</span
-          >
-          <span class="badge badge-live" id="header-mode">Ready</span>
+        <div class="header-status">
+          <span class="privacy-pill">
+            <span aria-hidden="true">●</span>
+            In-session processing
+          </span>
+          <span class="encounter-status" id="header-mode">Ready</span>
         </div>
       </header>
 
       <main>
         <section class="intro-row" aria-labelledby="page-title">
           <div>
-            <p class="eyebrow">Live MacBook adapter · v0.2</p>
-            <h1 id="page-title">Ambient telehealth neuro eval</h1>
+            <p class="eyebrow">Live telehealth encounter</p>
+            <h1 id="page-title">Ambient telehealth neuro assessment</h1>
           </div>
           <p class="intro-copy">
-            Raw camera and microphone data remain ephemeral. Only bounded,
-            non-PHI measurements can reach the Evidence Agent.
+            Audio and video are processed during the encounter and are not
+            stored.
           </p>
         </section>
 
-        <section class="readiness-bar" id="readiness-bar" aria-live="polite">
-          <span class="readiness-dot" id="readiness-dot"></span>
-          <strong id="readiness-title">Checking demo readiness</strong>
-          <span id="readiness-detail"
-            >Loading the facial model and checking the Evidence Agent.</span
-          >
-        </section>
-
-        <section class="demo-shell" aria-label="Live ambient capture">
-          <article class="camera-panel">
+        <section class="assessment-shell" aria-label="Ambient assessment">
+          <article class="capture-panel">
             <div class="camera-stage" id="camera-stage">
               <video
                 id="camera-preview"
@@ -62,152 +55,163 @@
                 class="face-overlay"
                 aria-hidden="true"
               ></canvas>
-
               <div class="camera-empty" id="camera-empty">
                 <span class="camera-aperture" aria-hidden="true"></span>
-                <strong>Camera preview is off</strong>
-                <span>Consent and begin when you are ready.</span>
+                <strong>Ready for system check</strong>
+                <span>Confirm consent to begin.</span>
               </div>
-
               <div class="live-strip" id="live-strip" hidden>
                 <span class="live-dot" aria-hidden="true"></span>
-                Live analysis · not recording
+                Ambient assessment active
               </div>
-
               <div class="session-clock" id="session-clock">00:00</div>
-            </div>
-
-            <div class="telemetry" aria-label="Live capture telemetry">
-              <div class="telemetry-label">
-                <span>Microphone</span>
-                <strong id="voice-state">Waiting</strong>
-              </div>
-              <div
-                class="meter-track"
-                role="meter"
-                aria-label="Microphone level"
-                aria-valuemin="0"
-                aria-valuemax="100"
-                aria-valuenow="0"
-                id="mic-meter"
-              >
-                <span id="mic-meter-fill"></span>
-              </div>
-              <div class="telemetry-stats">
-                <span><strong id="frame-count">0</strong> audio frames</span>
-                <span><strong id="voiced-count">0</strong> voiced</span>
-                <span><strong id="pitch-value">—</strong> pitch</span>
+              <div class="guidance-card" id="guidance-card" hidden>
+                <span id="guidance-step">System check</span>
+                <strong id="guidance-title">Calibrating environment</strong>
+                <p id="guidance-detail">Remain centered and follow the prompts.</p>
               </div>
             </div>
 
-            <div class="telemetry telemetry-face" aria-label="Live facial telemetry">
-              <div class="telemetry-label">
-                <span>Camera signal</span>
-                <strong id="face-state">Waiting</strong>
-              </div>
-              <div class="face-quality-track">
-                <span id="face-quality-fill"></span>
-              </div>
-              <div class="telemetry-stats">
-                <span><strong id="face-frame-count">0</strong> frames</span>
-                <span><strong id="face-yaw-value">—</strong> yaw</span>
-                <span><strong id="face-fps-value">—</strong> FPS</span>
-              </div>
+            <div class="signal-grid">
+              <section class="signal-card" aria-label="Speech signal">
+                <div class="signal-heading">
+                  <span>Speech</span>
+                  <strong id="voice-state">Waiting</strong>
+                </div>
+                <div
+                  class="meter-track"
+                  role="meter"
+                  aria-label="Microphone level"
+                  aria-valuemin="0"
+                  aria-valuemax="100"
+                  aria-valuenow="0"
+                  id="mic-meter"
+                >
+                  <span id="mic-meter-fill"></span>
+                </div>
+                <div class="signal-meta">
+                  <span><strong id="frame-count">0</strong> frames</span>
+                  <span><strong id="voiced-count">0</strong> active</span>
+                  <span><strong id="pitch-value">—</strong> pitch</span>
+                </div>
+              </section>
+
+              <section class="signal-card" aria-label="Facial signal">
+                <div class="signal-heading">
+                  <span>Facial</span>
+                  <strong id="face-state">Waiting</strong>
+                </div>
+                <div class="meter-track face-quality-track">
+                  <span id="face-quality-fill"></span>
+                </div>
+                <div class="signal-meta">
+                  <span><strong id="face-frame-count">0</strong> frames</span>
+                  <span><strong id="face-yaw-value">—</strong> yaw</span>
+                  <span><strong id="face-fps-value">—</strong> FPS</span>
+                </div>
+              </section>
             </div>
 
             <div class="capture-controls">
               <label class="consent-control">
                 <input id="consent-checkbox" type="checkbox" />
                 <span>
-                  <strong>I consent to this self-demo</strong>
-                  <small>
-                    I am using my own non-patient data and will not mention PHI.
-                  </small>
+                  <strong>I consent to in-session audiovisual analysis</strong>
+                  <small>I am using my own non-patient data.</small>
                 </span>
               </label>
               <div class="button-row">
                 <button class="button button-primary" id="start-button" disabled>
-                  Begin live encounter
+                  Run system check
                 </button>
-                <button class="button button-stop" id="stop-button" disabled>
-                  End &amp; analyze
+                <button class="button button-primary" id="stop-button" disabled>
+                  Complete assessment
                 </button>
                 <button class="button button-quiet" id="reset-button" hidden>
-                  New encounter
+                  New assessment
                 </button>
               </div>
               <p class="capture-hint" id="capture-hint">
-                Once live, speak naturally for 8–12 seconds before ending the
-                encounter.
+                The system check verifies framing, room conditions, and speech.
               </p>
             </div>
           </article>
 
-          <aside class="agent-panel" aria-labelledby="agent-heading">
+          <aside class="activity-panel" aria-labelledby="activity-heading">
             <div class="panel-heading">
               <div>
-                <p class="eyebrow">System activity</p>
-                <h2 id="agent-heading">Agent lanes</h2>
+                <p class="eyebrow">Live orchestration</p>
+                <h2 id="activity-heading">Assessment activity</h2>
               </div>
-              <span class="event-count" id="event-count">0 events</span>
+              <span class="event-count" id="event-count">Standby</span>
+            </div>
+
+            <div class="milestone-rail" id="milestone-rail">
+              <div class="milestone" data-milestone="speech">
+                <span>01</span><strong>Signals established</strong>
+              </div>
+              <div class="milestone" data-milestone="withheld">
+                <span>02</span><strong>Quality withheld</strong>
+              </div>
+              <div class="milestone" data-milestone="recovered">
+                <span>03</span><strong>Signal restored</strong>
+              </div>
+              <div class="milestone" data-milestone="summary">
+                <span>04</span><strong>Summary prepared</strong>
+              </div>
             </div>
 
             <div class="lane-stack">
               <article class="lane-card" data-lane="capture-conductor">
                 <span class="lane-index">01</span>
                 <div>
-                  <strong>Capture Conductor</strong>
-                  <p id="conductor-status">Waiting for a consented stream.</p>
+                  <strong>Encounter Coordinator</strong>
+                  <p id="conductor-status">Ready for a consented system check.</p>
                 </div>
-                <span class="lane-state" id="conductor-state">Waiting</span>
+                <span class="lane-state" id="conductor-state">Ready</span>
               </article>
-
               <article class="lane-card" data-lane="speech-acoustic">
                 <span class="lane-index">02</span>
                 <div>
-                  <strong>Speech Acoustic</strong>
-                  <p id="speech-status">No audio features received.</p>
+                  <strong>Speech Analysis</strong>
+                  <p id="speech-status">Waiting for room calibration.</p>
                 </div>
                 <span class="lane-state" id="speech-state">Waiting</span>
               </article>
-
-              <article class="lane-card lane-muted" data-lane="facial-expressivity">
+              <article class="lane-card" data-lane="facial-expressivity">
                 <span class="lane-index">03</span>
                 <div>
-                  <strong>Facial Expressivity</strong>
-                  <p id="face-status">Loading the local landmark adapter.</p>
+                  <strong>Facial Analysis</strong>
+                  <p id="face-status">Preparing local facial analysis.</p>
                 </div>
-                <span class="lane-state" id="face-lane-state">Loading</span>
+                <span class="lane-state" id="face-lane-state">Preparing</span>
               </article>
-
-              <article class="lane-card" data-lane="personal-trajectory">
+              <article class="lane-card" data-lane="evidence-card">
                 <span class="lane-index">04</span>
                 <div>
-                  <strong>Personal Trajectory</strong>
-                  <p id="trajectory-status">Waiting for a completed observation.</p>
+                  <strong>Clinical Synthesis</strong>
+                  <p id="evidence-status">Waiting for a completed assessment.</p>
                 </div>
-                <span class="lane-state" id="trajectory-state">Waiting</span>
+                <span class="lane-state" id="evidence-state">Waiting</span>
               </article>
-
-              <article class="lane-card" data-lane="evidence-card">
+              <article class="lane-card" data-lane="clinician-review">
                 <span class="lane-index">05</span>
                 <div>
-                  <strong>Evidence Agent</strong>
-                  <p id="evidence-status">Checking GPT-5.6 readiness.</p>
+                  <strong>Clinician Review</strong>
+                  <p id="review-status">No summary awaiting review.</p>
                 </div>
-                <span class="lane-state" id="evidence-state">Checking</span>
+                <span class="lane-state" id="review-state">Waiting</span>
               </article>
             </div>
 
-            <div class="trace-block">
-              <div class="trace-heading">
-                <h3>Structured event trace</h3>
-                <span>Live · versioned · no chain-of-thought</span>
+            <div class="activity-stream">
+              <div class="activity-heading">
+                <h3>Recent activity</h3>
+                <span>Derived from live workflow events</span>
               </div>
               <ol class="event-list" id="event-list">
                 <li class="event-placeholder">
-                  The Conductor will publish real, versioned workflow events
-                  here while the encounter runs.
+                  Activity will appear when the assessment begins.
                 </li>
               </ol>
             </div>
@@ -218,49 +222,29 @@
           <div class="results-heading">
             <div>
               <p class="eyebrow">Encounter deliverable</p>
-              <h2>Structured observation</h2>
+              <h2>Current encounter</h2>
             </div>
             <div class="result-summary" id="result-summary"></div>
           </div>
 
           <div class="result-section">
             <div class="section-heading">
-              <div>
-                <span class="section-number">01</span>
-                <h3>Current encounter measurements</h3>
-              </div>
-              <span class="disclosure-chip">LIVE SELF-DEMO</span>
+              <span class="section-number">01</span>
+              <h3>Measured signals</h3>
             </div>
             <div class="aggregate-grid" id="aggregate-grid"></div>
           </div>
 
-          <div class="result-section trajectory-section" id="trajectory-panel">
-            <div class="section-heading">
-              <div>
-                <span class="section-number">02</span>
-                <h3>Personal trajectory</h3>
-              </div>
-              <span class="disclosure-chip disclosure-synthetic"
-                >SYNTHETIC HISTORY</span
-              >
-            </div>
-            <div class="trajectory-summary" id="trajectory-summary"></div>
-            <div class="trajectory-grid" id="trajectory-grid"></div>
-            <div class="exclusion-list" id="exclusion-list"></div>
-          </div>
-
           <div class="result-section evidence-section" id="evidence-panel">
             <div class="section-heading">
-              <div>
-                <span class="section-number">03</span>
-                <h3>Clinician Evidence Card</h3>
-              </div>
-              <span class="disclosure-chip" id="evidence-model-chip"
-                >GPT-5.6 REQUIRED</span
+              <span class="section-number">02</span>
+              <h3>Clinician Encounter Summary</h3>
+              <span class="summary-status" id="evidence-status-chip"
+                >Preparing</span
               >
             </div>
             <div class="evidence-loading" id="evidence-loading">
-              The Evidence Agent will synthesize only grounded structured facts.
+              Preparing a grounded summary from the measured signals.
             </div>
             <div class="evidence-error" id="evidence-error" hidden></div>
             <button
@@ -268,20 +252,20 @@
               id="retry-evidence-button"
               hidden
             >
-              Retry evidence synthesis
+              Retry
             </button>
             <article class="evidence-card" id="evidence-card" hidden>
-              <p class="eyebrow">Provisional engineering observation</p>
+              <p class="eyebrow">For clinician review</p>
               <h3 id="evidence-headline"></h3>
               <p id="evidence-summary"></p>
               <div class="evidence-claims" id="evidence-claims"></div>
               <p class="boundary-statement" id="boundary-statement"></p>
               <div class="review-controls" id="review-controls">
                 <button class="button button-primary" id="accept-button">
-                  Accept for this session
+                  Approve summary
                 </button>
                 <button class="button button-quiet" id="reject-button">
-                  Reject
+                  Dismiss
                 </button>
               </div>
               <p class="review-outcome" id="review-outcome"></p>
@@ -289,34 +273,23 @@
           </div>
 
           <aside class="trace-drawer" id="trace-drawer" hidden>
-            <button class="trace-close" id="trace-close-button" aria-label="Close evidence trace">
+            <button
+              class="trace-close"
+              id="trace-close-button"
+              aria-label="Close evidence trace"
+            >
               ×
             </button>
-            <p class="eyebrow">Why this appeared</p>
+            <p class="eyebrow">Grounding trace</p>
             <h3 id="trace-title">Evidence trace</h3>
             <div id="trace-content"></div>
           </aside>
-
-          <details class="technical-details">
-            <summary>Inspect the complete observation JSON</summary>
-            <pre id="observation-json"></pre>
-          </details>
-        </section>
-
-        <section class="prototype-note">
-          <strong>What this build proves</strong>
-          <p>
-            Live permissioning, ephemeral microphone feature extraction,
-            independent audiovisual agents, honest abstention, synthetic
-            personal comparison, and a model-drafted but deterministically
-            grounded clinician artifact.
-          </p>
         </section>
       </main>
 
       <footer class="app-footer">
         <span id="privacy-status">Camera and microphone are off.</span>
-        <span>Prototype measurements · no clinical validation</span>
+        <span>Demonstration use only · Not for clinical decisions</span>
       </footer>
     </div>
     <script type="module" src="/src/main.ts"></script>

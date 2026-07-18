@@ -75,7 +75,17 @@ describe("observation and event contracts", () => {
         speechWindowCount: 1,
         faceWindowCount: 0,
         abstentionCount: 0,
-        qualityTransitionCount: 1
+        qualityTransitionCount: 1,
+        audioFrameCount: 20,
+        speechActiveFrameCount: 16,
+        pitchedFrameCount: 14,
+        pitchCoverage: 0.875,
+        faceFrameCount: 0,
+        usableFaceFrameCount: 0,
+        usableFaceFraction: 0,
+        faceWithholdingDurationMs: 0,
+        faceRecoveryObserved: false,
+        postRecoveryFaceWindowCount: 0
       }
     };
     expect(observation.containsPHI).toBe(false);

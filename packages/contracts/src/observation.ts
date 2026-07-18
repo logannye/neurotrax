@@ -17,6 +17,16 @@ export interface EncounterQualitySummary {
   faceWindowCount: number;
   abstentionCount: number;
   qualityTransitionCount: number;
+  audioFrameCount: number;
+  speechActiveFrameCount: number;
+  pitchedFrameCount: number;
+  pitchCoverage: number;
+  faceFrameCount: number;
+  usableFaceFrameCount: number;
+  usableFaceFraction: number;
+  faceWithholdingDurationMs: number;
+  faceRecoveryObserved: boolean;
+  postRecoveryFaceWindowCount: number;
 }
 
 export interface BiomarkerAggregate {

@@ -13,38 +13,49 @@ const facts: EvidenceClaimFact[] = [
     claimId: "claim-pitch",
     measurementCode: "prototype.speech.pitch_variability",
     label: "Pitch variability",
-    direction: "within-reference",
+    modality: "speech",
     statement:
-      "Pitch variability remained within the compatible synthetic personal reference.",
+      "Pitch variability was measured from a technically usable speech interval.",
     currentValue: 1.9,
     unit: "semitone-stddev",
-    supportRefs: ["speech-0", "prior:pitch"],
-    eventIds: ["12-trajectory.comparison.completed"],
+    supportRefs: ["speech-0"],
+    eventIds: ["measurement-pitch"],
     allowedNumbers: ["1.9"]
+  },
+  {
+    claimId: "claim-face",
+    measurementCode: "prototype.face.expressivity",
+    label: "Facial movement",
+    modality: "face",
+    statement:
+      "Facial movement was measured before and after a quality-withheld interval.",
+    currentValue: 0.04,
+    unit: "motion-index",
+    supportRefs: ["face-0", "face-1"],
+    eventIds: ["measurement-face", "face-recovered"],
+    allowedNumbers: ["0.04"]
   }
 ];
 
 function validDraft(): EvidenceCardDraft {
   return {
-    headline: "A provisional personal comparison is ready",
+    headline: "Two encounter signals are ready for review",
     summary:
-      "Pitch variability remained consistent with the compatible synthetic personal history.",
-    claims: [
-      {
-        claimId: facts[0].claimId,
-        statement: facts[0].statement
-      }
-    ],
+      "Pitch variability and facial movement were measured during technically usable portions of the encounter.",
+    claims: facts.map((fact) => ({
+      claimId: fact.claimId,
+      statement: fact.statement
+    })),
     boundaryStatement: EVIDENCE_BOUNDARY
   };
 }
 
 describe("validateEvidenceCardDraft", () => {
-  it("passes a bounded card whose claim resolves to structured evidence", () => {
+  it("passes one speech claim and one face claim", () => {
     expect(validateEvidenceCardDraft(validDraft(), facts)).toEqual({
       status: "pass",
       errors: [],
-      groundedClaimIds: ["claim-pitch"]
+      groundedClaimIds: ["claim-pitch", "claim-face"]
     });
   });
 
@@ -66,6 +77,12 @@ describe("validateEvidenceCardDraft", () => {
   it("rejects a paraphrased claim that could drift from its support", () => {
     const draft = validDraft();
     draft.claims[0].statement = "Pitch was normal.";
+    expect(validateEvidenceCardDraft(draft, facts).status).toBe("fail");
+  });
+
+  it("requires both modalities", () => {
+    const draft = validDraft();
+    draft.claims[1] = { ...draft.claims[0] };
     expect(validateEvidenceCardDraft(draft, facts).status).toBe("fail");
   });
 });

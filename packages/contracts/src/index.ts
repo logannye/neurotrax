@@ -1,5 +1,11 @@
 export type { CaptureMode } from "./capture-mode.js";
 export type {
+  AudioCalibration,
+  FaceCalibration,
+  CaptureCalibration,
+  CaptureQualityPolicy
+} from "./calibration.js";
+export type {
   Modality,
   MeasurementContextKind,
   ConfoundEnvelope,

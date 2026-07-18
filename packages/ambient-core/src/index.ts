@@ -21,6 +21,7 @@ export { createEventFactory } from "./events.js";
 export type { EventFactory } from "./events.js";
 export {
   createConductorSession,
+  DEFAULT_CAPTURE_QUALITY_POLICY,
   MAX_FACE_YAW_DEGREES,
   runConductor
 } from "./conductor.js";

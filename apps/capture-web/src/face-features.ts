@@ -70,9 +70,16 @@ function framingScore(box: {
     1 - (box.x + box.width),
     1 - (box.y + box.height)
   );
-  const marginScore = clamp(margin / 0.04, 0, 1);
-  const sizeScore = clamp(1 - Math.abs(box.width - 0.34) / 0.28, 0, 1);
-  return Math.min(marginScore, sizeScore);
+  const marginScore = clamp(margin / 0.015, 0, 1);
+  const minimumSizeScore = Math.min(
+    clamp(box.width / 0.14, 0, 1),
+    clamp(box.height / 0.2, 0, 1)
+  );
+  const maximumSizeScore = Math.min(
+    clamp(0.6 / Math.max(box.width, 0.001), 0, 1),
+    clamp(0.85 / Math.max(box.height, 0.001), 0, 1)
+  );
+  return Math.min(marginScore, minimumSizeScore, maximumSizeScore);
 }
 
 function yawDegrees(landmarks: NormalizedLandmark[]): number {
@@ -142,7 +149,10 @@ export function deriveFaceFeature(
         browRaise: 0,
         mouthOpen: 0,
         landmarkMotion: 0,
-        observedFrameRate: input.observedFrameRate
+        observedFrameRate: input.observedFrameRate,
+        faceBoxWidth: 0,
+        faceBoxHeight: 0,
+        edgeMargin: 0
       },
       nextState: { normalizedMotionPoints: null },
       overlayPoints: [],
@@ -157,6 +167,12 @@ export function deriveFaceFeature(
       categoryScore(categories, "eyeBlinkRight")) /
     2;
   const points = normalizedMotionPoints(landmarks);
+  const edgeMargin = Math.min(
+    box.x,
+    box.y,
+    1 - (box.x + box.width),
+    1 - (box.y + box.height)
+  );
 
   return {
     frame: {
@@ -172,7 +188,10 @@ export function deriveFaceFeature(
         points,
         input.state?.normalizedMotionPoints ?? null
       ),
-      observedFrameRate: input.observedFrameRate
+      observedFrameRate: input.observedFrameRate,
+      faceBoxWidth: box.width,
+      faceBoxHeight: box.height,
+      edgeMargin
     },
     nextState: { normalizedMotionPoints: points },
     overlayPoints: SELECTED_MOTION_LANDMARKS.map((index) => ({

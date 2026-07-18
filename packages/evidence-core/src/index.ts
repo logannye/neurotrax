@@ -1,5 +1,5 @@
 export {
-  createEvidenceClaimFacts,
+  createEncounterClaimFacts,
   EVIDENCE_BOUNDARY,
   validateEvidenceCardDraft
 } from "./evidence.js";
