@@ -1,4 +1,5 @@
 export {
+  assembleEvidenceCardDraft,
   createEncounterClaimFacts,
   EVIDENCE_BOUNDARY,
   validateEvidenceCardDraft

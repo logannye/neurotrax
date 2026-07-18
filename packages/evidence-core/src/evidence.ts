@@ -2,6 +2,7 @@ import type {
   EncounterObservation,
   EvidenceCardDraft,
   EvidenceClaimFact,
+  EvidenceNarrativeDraft,
   EventEnvelope,
   GroundingResult,
   Modality
@@ -129,6 +130,21 @@ function containsEveryClaimLabel(
       .filter((word) => word.length >= 4);
     return meaningfulWords.some((word) => normalized.includes(word));
   });
+}
+
+export function assembleEvidenceCardDraft(
+  narrative: EvidenceNarrativeDraft,
+  facts: EvidenceClaimFact[]
+): EvidenceCardDraft {
+  return {
+    headline: narrative.headline,
+    summary: narrative.summary,
+    claims: facts.map((fact) => ({
+      claimId: fact.claimId,
+      statement: fact.statement
+    })),
+    boundaryStatement: EVIDENCE_BOUNDARY
+  };
 }
 
 export function validateEvidenceCardDraft(

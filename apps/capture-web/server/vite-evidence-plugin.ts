@@ -1,11 +1,12 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { Connect, Plugin } from "vite";
 import {
-  EVIDENCE_MODEL,
   runEvidenceAgent
 } from "./evidence-agent.js";
+import { EVIDENCE_SMOKE_REQUEST } from "./evidence-fixture.js";
 
 const MAX_REQUEST_BYTES = 256_000;
+let warmupPromise: ReturnType<typeof runEvidenceAgent> | undefined;
 
 export function hasEvidenceCredential(
   environment: NodeJS.ProcessEnv = process.env
@@ -44,18 +45,38 @@ export function evidenceAgentPlugin(): Plugin {
   const install = (middlewares: Connect.Server): void => {
     middlewares.use(
       "/api/model-readiness",
-      (request, response) => {
+      async (request, response) => {
         if (request.method !== "GET") {
           json(response, 405, { error: "Method not allowed." });
           return;
         }
-        json(response, 200, {
-          ready: hasEvidenceCredential(),
-          model: EVIDENCE_MODEL,
-          credentialSource: hasEvidenceCredential()
-            ? "server-environment"
-            : "missing"
-        });
+        if (!hasEvidenceCredential()) {
+          json(response, 200, { ready: false });
+          return;
+        }
+        if (process.env.NEUROTRAX_SKIP_SYNTHESIS_WARMUP === "1") {
+          json(response, 200, { ready: true, warmupSkipped: true });
+          return;
+        }
+
+        try {
+          warmupPromise ??= runEvidenceAgent(EVIDENCE_SMOKE_REQUEST);
+          const result = await warmupPromise;
+          response.setHeader(
+            "Server-Timing",
+            `synthesis-warmup;dur=${result.timing.totalMs}`
+          );
+          json(response, 200, {
+            ready: true,
+            warmupMs: result.timing.totalMs
+          });
+        } catch {
+          warmupPromise = undefined;
+          json(response, 503, {
+            ready: false,
+            error: "Clinical synthesis unavailable."
+          });
+        }
       }
     );
 
@@ -77,6 +98,10 @@ export function evidenceAgentPlugin(): Plugin {
         try {
           const payload = await readJson(request);
           const result = await runEvidenceAgent(payload);
+          response.setHeader(
+            "Server-Timing",
+            `clinical-synthesis;dur=${result.timing.totalMs}`
+          );
           json(response, 200, result);
         } catch (error) {
           const message =

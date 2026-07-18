@@ -4,6 +4,7 @@ import type {
   EvidenceClaimFact
 } from "@neurotrax/contracts";
 import {
+  assembleEvidenceCardDraft,
   EVIDENCE_BOUNDARY,
   validateEvidenceCardDraft
 } from "./evidence.js";
@@ -51,6 +52,25 @@ function validDraft(): EvidenceCardDraft {
 }
 
 describe("validateEvidenceCardDraft", () => {
+  it("attaches exact grounded claims and the review boundary in code", () => {
+    const draft = assembleEvidenceCardDraft(
+      {
+        headline: "Two encounter signals are ready for review",
+        summary:
+          "Pitch variability and facial movement were measured during technically usable portions of the encounter."
+      },
+      facts
+    );
+
+    expect(draft.claims).toEqual(
+      facts.map((fact) => ({
+        claimId: fact.claimId,
+        statement: fact.statement
+      }))
+    );
+    expect(draft.boundaryStatement).toBe(EVIDENCE_BOUNDARY);
+  });
+
   it("passes one speech claim and one face claim", () => {
     expect(validateEvidenceCardDraft(validDraft(), facts)).toEqual({
       status: "pass",
