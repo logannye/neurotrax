@@ -45,6 +45,7 @@ packages/
     │   └── synthetic-visit.frames.json   # replayable primitive-frame stream (synthetic)
     └── src/
         ├── primitives.ts           # AudioFeatureFrame, FaceLandmarkFrame, FrameStream
+        ├── stats.ts                # mean, stdDev, median, medianAbsoluteDeviation
         ├── speech-acoustic.ts      # extractSpeechAcoustic()
         ├── facial-expressivity.ts  # extractFacialExpressivity()
         ├── windowing.ts            # detectMeasurableWindows()
@@ -765,14 +766,99 @@ git commit -m "feat: add primitive frame input types"
 
 ---
 
-## Task 5: Speech-acoustic extractor agent
+## Task 5: Shared statistics utilities
+
+**Files:**
+- Create: `packages/ambient-core/src/stats.ts`
+- Test: `packages/ambient-core/src/stats.test.ts`
+
+**Interfaces:**
+- Consumes: nothing.
+- Produces: `mean(values: number[]): number`, `stdDev(values: number[]): number` (population standard deviation, `0` for fewer than 2 values), `median(values: number[]): number`, `medianAbsoluteDeviation(values: number[]): number`. These are shared by the extractors, windowing, and aggregation so the same math is defined once.
+
+- [ ] **Step 1: Write the failing test**
+
+Create `packages/ambient-core/src/stats.test.ts`:
+
+```ts
+import { describe, expect, it } from "vitest";
+import { mean, stdDev, median, medianAbsoluteDeviation } from "./stats.js";
+
+describe("stats utilities", () => {
+  it("computes the mean", () => {
+    expect(mean([2, 4, 6])).toBe(4);
+  });
+
+  it("computes population standard deviation, 0 for fewer than 2 values", () => {
+    expect(stdDev([120, 130, 110, 140])).toBeCloseTo(11.1803, 3);
+    expect(stdDev([5])).toBe(0);
+  });
+
+  it("computes the median for odd and even counts", () => {
+    expect(median([2, 6, 4])).toBe(4);
+    expect(median([1, 2, 3, 4])).toBe(2.5);
+  });
+
+  it("computes the median absolute deviation", () => {
+    expect(medianAbsoluteDeviation([2, 4, 6])).toBe(2);
+  });
+});
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `pnpm -w test:unit`
+Expected: FAIL — cannot find `./stats.js`.
+
+- [ ] **Step 3: Write the statistics utilities**
+
+Create `packages/ambient-core/src/stats.ts`:
+
+```ts
+export function mean(values: number[]): number {
+  return values.reduce((sum, v) => sum + v, 0) / values.length;
+}
+
+export function stdDev(values: number[]): number {
+  if (values.length < 2) return 0;
+  const m = mean(values);
+  return Math.sqrt(mean(values.map((v) => (v - m) ** 2)));
+}
+
+export function median(values: number[]): number {
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid];
+}
+
+export function medianAbsoluteDeviation(values: number[]): number {
+  const center = median(values);
+  return median(values.map((v) => Math.abs(v - center)));
+}
+```
+
+- [ ] **Step 4: Run test to verify it passes**
+
+Run: `pnpm -w test:unit`
+Expected: PASS.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add packages/ambient-core/src/stats.ts packages/ambient-core/src/stats.test.ts
+git commit -m "feat: add shared statistics utilities"
+```
+
+---
+
+## Task 6: Speech-acoustic extractor agent
 
 **Files:**
 - Create: `packages/ambient-core/src/speech-acoustic.ts`
 - Test: `packages/ambient-core/src/speech-acoustic.test.ts`
 
 **Interfaces:**
-- Consumes: `AudioFeatureFrame` (Task 4); `Measurement`, `Abstention`, `MeasurableWindow` (Task 2).
+- Consumes: `AudioFeatureFrame` (Task 4); `Measurement`, `Abstention`, `MeasurableWindow` (Task 2); `mean`, `stdDev` (Task 5).
 - Produces:
   - `SPEECH_ACOUSTIC_VERSION = "speech-acoustic-0.1"`
   - `SPEECH_SNR_FLOOR_DB = 12`
@@ -853,20 +939,11 @@ Create `packages/ambient-core/src/speech-acoustic.ts`:
 ```ts
 import type { AudioFeatureFrame } from "./primitives.js";
 import type { Abstention, MeasurableWindow, Measurement } from "@neurotrax/contracts";
+import { mean, stdDev } from "./stats.js";
 
 export const SPEECH_ACOUSTIC_VERSION = "speech-acoustic-0.1";
 export const SPEECH_SNR_FLOOR_DB = 12;
 const MIN_VOICED_FRAMES = 3;
-
-function mean(values: number[]): number {
-  return values.reduce((sum, v) => sum + v, 0) / values.length;
-}
-
-function stdDev(values: number[]): number {
-  if (values.length < 2) return 0;
-  const m = mean(values);
-  return Math.sqrt(mean(values.map((v) => (v - m) ** 2)));
-}
 
 function countPauses(frames: AudioFeatureFrame[]): number {
   let pauses = 0;
@@ -962,14 +1039,14 @@ git commit -m "feat: add speech-acoustic extractor agent"
 
 ---
 
-## Task 6: Facial-expressivity extractor agent
+## Task 7: Facial-expressivity extractor agent
 
 **Files:**
 - Create: `packages/ambient-core/src/facial-expressivity.ts`
 - Test: `packages/ambient-core/src/facial-expressivity.test.ts`
 
 **Interfaces:**
-- Consumes: `FaceLandmarkFrame` (Task 4); `Measurement`, `Abstention`, `MeasurableWindow` (Task 2).
+- Consumes: `FaceLandmarkFrame` (Task 4); `Measurement`, `Abstention`, `MeasurableWindow` (Task 2); `mean` (Task 5).
 - Produces:
   - `FACIAL_EXPRESSIVITY_VERSION = "facial-expressivity-0.1"`
   - `FACE_FRAMING_FLOOR = 0.6`
@@ -1046,15 +1123,12 @@ Create `packages/ambient-core/src/facial-expressivity.ts`:
 ```ts
 import type { FaceLandmarkFrame } from "./primitives.js";
 import type { Abstention, MeasurableWindow, Measurement } from "@neurotrax/contracts";
+import { mean } from "./stats.js";
 
 export const FACIAL_EXPRESSIVITY_VERSION = "facial-expressivity-0.1";
 export const FACE_FRAMING_FLOOR = 0.6;
 export const BLINK_EAR_THRESHOLD = 0.2;
 const MIN_VISIBLE_FRAMES = 3;
-
-function mean(values: number[]): number {
-  return values.reduce((sum, v) => sum + v, 0) / values.length;
-}
 
 function countBlinks(frames: FaceLandmarkFrame[]): number {
   let blinks = 0;
@@ -1150,14 +1224,14 @@ git commit -m "feat: add facial-expressivity extractor agent"
 
 ---
 
-## Task 7: Measurable-window detection
+## Task 8: Measurable-window detection
 
 **Files:**
 - Create: `packages/ambient-core/src/windowing.ts`
 - Test: `packages/ambient-core/src/windowing.test.ts`
 
 **Interfaces:**
-- Consumes: `FrameStream`, `AudioFeatureFrame`, `FaceLandmarkFrame` (Task 4); `MeasurableWindow`, `ConfoundEnvelope` (Task 2).
+- Consumes: `FrameStream`, `AudioFeatureFrame`, `FaceLandmarkFrame` (Task 4); `MeasurableWindow`, `ConfoundEnvelope`, `Modality` (Task 2); `mean` (Task 5).
 - Produces:
   - `MIN_WINDOW_MS = 1500`
   - `detectMeasurableWindows(stream: FrameStream): MeasurableWindow[]`
@@ -1228,6 +1302,7 @@ Create `packages/ambient-core/src/windowing.ts`:
 ```ts
 import type { AudioFeatureFrame, FaceLandmarkFrame, FrameStream } from "./primitives.js";
 import type { ConfoundEnvelope, MeasurableWindow, Modality } from "@neurotrax/contracts";
+import { mean } from "./stats.js";
 
 export const MIN_WINDOW_MS = 1500;
 
@@ -1259,10 +1334,6 @@ function contiguousRuns<T extends { tMs: number }>(
   }
   flush();
   return runs.filter((run) => run.endMs - run.startMs >= MIN_WINDOW_MS);
-}
-
-function mean(values: number[]): number {
-  return values.reduce((sum, v) => sum + v, 0) / values.length;
 }
 
 function speechConfounds(frames: AudioFeatureFrame[]): ConfoundEnvelope {
@@ -1327,14 +1398,14 @@ git commit -m "feat: add measurable-window detection"
 
 ---
 
-## Task 8: Per-biomarker robust aggregation
+## Task 9: Per-biomarker robust aggregation
 
 **Files:**
 - Create: `packages/ambient-core/src/aggregate.ts`
 - Test: `packages/ambient-core/src/aggregate.test.ts`
 
 **Interfaces:**
-- Consumes: `Measurement`, `MeasurementContextKind`, `BiomarkerAggregate` (Tasks 2–3).
+- Consumes: `Measurement`, `MeasurementContextKind`, `BiomarkerAggregate` (Tasks 2–3); `median`, `medianAbsoluteDeviation` (Task 5).
 - Produces:
   - `aggregateMeasurements(measurements: Measurement[], contextByWindowId: Map<string, MeasurementContextKind>, labelByCode: Map<string, { label: string; unit: string }>): BiomarkerAggregate[]`
   - Groups measurements by `code`, computes the median as `value` and the median absolute deviation as `spread`, sets `windowCount` to the number of contributing measurements, and carries the single shared `algorithmVersion` (throws if a code mixes versions). Aggregates are returned sorted by `code`.
@@ -1398,17 +1469,7 @@ import type {
   Measurement,
   MeasurementContextKind
 } from "@neurotrax/contracts";
-
-function median(values: number[]): number {
-  const sorted = [...values].sort((a, b) => a - b);
-  const mid = Math.floor(sorted.length / 2);
-  return sorted.length % 2 === 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid];
-}
-
-function medianAbsoluteDeviation(values: number[]): number {
-  const center = median(values);
-  return median(values.map((v) => Math.abs(v - center)));
-}
+import { median, medianAbsoluteDeviation } from "./stats.js";
 
 export function aggregateMeasurements(
   measurements: Measurement[],
@@ -1464,7 +1525,7 @@ git commit -m "feat: add per-biomarker robust aggregation"
 
 ---
 
-## Task 9: Event factory
+## Task 10: Event factory
 
 **Files:**
 - Create: `packages/ambient-core/src/events.ts`
@@ -1573,7 +1634,7 @@ git commit -m "feat: add ambient event factory"
 
 ---
 
-## Task 10: Capture Conductor and headless end-to-end replay
+## Task 11: Capture Conductor and headless end-to-end replay
 
 **Files:**
 - Create: `packages/ambient-core/src/conductor.ts`
@@ -1582,7 +1643,7 @@ git commit -m "feat: add ambient event factory"
 - Test: `packages/ambient-core/src/conductor.test.ts`
 
 **Interfaces:**
-- Consumes: everything from Tasks 4–9.
+- Consumes: everything from Tasks 4–10.
 - Produces:
   - `runConductor(stream: FrameStream, options?: { baseTimeMs?: number }): { observation: EncounterObservation; events: EventEnvelope[] }`
   - The Conductor: detects windows; slices each window's frames by `[startMs, endMs]`; runs the matching extractor; emits `capture.window.detected` per window; emits `measurement.recorded` per measurement and `measurement.abstained` per abstention; aggregates all measurements into the per-visit `EncounterObservation`; emits a final `encounter-observation.created`. It is deterministic: identical input yields byte-identical output.
@@ -1881,15 +1942,16 @@ These are deliberately out of scope for this plan. Each becomes its own spec →
 ## Self-Review
 
 **Spec coverage:**
-- Subagent team (Ingestion primitives, Conductor, 2 extractors) → Tasks 4, 5, 6, 7, 10. (Live ingestion itself is a follow-up plan; its input contract is Task 4.)
+- Subagent team (Ingestion primitives, Conductor, 2 extractors, windowing) → Tasks 4, 6, 7, 8, 11. (Live ingestion itself is a follow-up plan; its input contract is Task 4.)
+- Shared stats util (mean/stdDev/median/MAD, defined once) → Task 5, consumed by Tasks 6, 7, 8, 9.
 - `Task`→`MeasurementContext` + confound envelope → Task 2.
-- Per-window `CaptureQuality`/abstention → Tasks 5, 6 (abstention), events in Task 10.
-- `EncounterObservation` as per-visit robust aggregate → Tasks 3, 8, 10.
-- Agent-lane event stream → Tasks 3, 9, 10.
+- Per-window `CaptureQuality`/abstention → Tasks 6, 7 (abstention), abstention events in Task 11.
+- `EncounterObservation` as per-visit robust aggregate → Tasks 3, 9, 11.
+- Agent-lane event stream → Tasks 3, 10, 11.
 - Ephemeral (no raw media) → enforced by design (primitives only) + Global Constraints.
-- Determinism / fixture replay testing → Task 10; abstention, aggregate-stability, comparability-gating tests → Tasks 5/6/8/10 (comparability gating deferred with its subsystem to follow-up plan 2, noted).
+- Determinism / fixture replay testing → Task 11; abstention and aggregate-stability tests → Tasks 6/7/9/11 (comparability gating deferred with its subsystem to follow-up plan 2, noted).
 - Comparability/trending, browser pipeline, UI, grounding → explicitly deferred to follow-up plans.
 
 **Placeholder scan:** No `TBD`/`TODO`/"add error handling"/"similar to Task N". Every code step shows complete code.
 
-**Type consistency:** `Measurement`, `Abstention`, `MeasurableWindow`, `EncounterObservation`, `EventEnvelope`, `AmbientActorId` names match across contracts (Tasks 2–3) and consumers (Tasks 5–10). Extractor return type `Measurement[] | Abstention` is consistent in Tasks 5, 6, and 10's `isAbstention` guard. `aggregateMeasurements` signature in Task 8 matches its call in Task 10. `createEventFactory`/`EventFactory.next` signature in Task 9 matches its calls in Task 10.
+**Type consistency:** `Measurement`, `Abstention`, `MeasurableWindow`, `EncounterObservation`, `EventEnvelope`, `AmbientActorId` names match across contracts (Tasks 2–3) and consumers (Tasks 6–11). Shared stats helpers are defined in Task 5 and imported by Tasks 6, 7, 8, 9 (no local redefinition). Extractor return type `Measurement[] | Abstention` is consistent in Tasks 6, 7, and 11's `isAbstention` guard. `aggregateMeasurements` signature in Task 9 matches its call in Task 11. `createEventFactory`/`EventFactory.next` signature in Task 10 matches its calls in Task 11.
