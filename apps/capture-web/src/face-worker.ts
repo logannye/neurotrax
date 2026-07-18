@@ -44,7 +44,10 @@ function illuminationFor(bitmap: ImageBitmap): number {
 }
 
 async function initialize(): Promise<void> {
-  const vision = await FilesetResolver.forVisionTasks(WASM_ROOT);
+  const vision = await FilesetResolver.forVisionTasks(
+    WASM_ROOT,
+    true
+  );
   const options = {
     runningMode: "VIDEO",
     numFaces: 1,

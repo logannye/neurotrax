@@ -199,6 +199,12 @@ h1 {
   line-height: 0.98;
 }
 
+#page-title {
+  max-width: none;
+  font-size: clamp(19px, 4vw, 56px);
+  white-space: nowrap;
+}
+
 .intro-copy {
   max-width: 510px;
   margin: 0 0 5px auto;
