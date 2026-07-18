@@ -2,11 +2,11 @@ import { describe, expect, it } from "vitest";
 import { aggregateMeasurements } from "./aggregate.js";
 import type { Measurement, MeasurementContextKind } from "@neurotrax/contracts";
 
-function m(code: string, value: number): Measurement {
+function m(code: string, value: number, contextRef = "speech-0"): Measurement {
   return {
     code, label: code, value, unit: "u", confidence: 0.9,
     uncertainty: "placeholder", algorithmVersion: "speech-acoustic-0.1",
-    clinicalValidation: "none", contextRef: "speech-0", windowStartMs: 0,
+    clinicalValidation: "none", contextRef, windowStartMs: 0,
     windowEndMs: 2000, evidenceSnippetRef: null
   };
 }
@@ -33,5 +33,35 @@ describe("aggregateMeasurements", () => {
     const a = m("c", 1);
     const b = { ...m("c", 2), algorithmVersion: "speech-acoustic-0.2" };
     expect(() => aggregateMeasurements([a, b], context, labels)).toThrow(/mixes algorithm versions/);
+  });
+
+  it("keeps the same biomarker separate across measurement contexts", () => {
+    const context = new Map<string, MeasurementContextKind>([
+      ["speech-0", "spontaneous-speech"],
+      ["reading-0", "reading-aloud"]
+    ]);
+    const labels = new Map([["c", { label: "c", unit: "u" }]]);
+
+    const result = aggregateMeasurements(
+      [m("c", 1, "speech-0"), m("c", 2, "reading-0")],
+      context,
+      labels
+    );
+
+    expect(result).toHaveLength(2);
+    expect(result.map((aggregate) => aggregate.contextKind)).toEqual([
+      "reading-aloud",
+      "spontaneous-speech"
+    ]);
+  });
+
+  it("rejects a measurement whose context cannot be resolved", () => {
+    expect(() =>
+      aggregateMeasurements(
+        [m("c", 1, "missing-window")],
+        new Map(),
+        new Map()
+      )
+    ).toThrow(/unknown context missing-window/);
   });
 });

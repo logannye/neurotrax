@@ -22,6 +22,7 @@ export interface FaceLandmarkFrame {
 }
 
 export interface FrameStream {
+  containsPHI: false;
   visitId: string;
   participantId: string;
   captureMode: CaptureMode;

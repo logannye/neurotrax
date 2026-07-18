@@ -4,6 +4,7 @@ import type { FrameStream } from "./primitives.js";
 
 function stream(partial: Partial<FrameStream>): FrameStream {
   return {
+    containsPHI: false,
     visitId: "visit-001",
     participantId: "synthetic-participant-001",
     captureMode: "fixture-playback",
@@ -31,6 +32,26 @@ describe("detectMeasurableWindows", () => {
       tMs: i * 100, voiced: true, rms: 0.4, pitchHz: 120, clipped: false, snrDb: 20
     }));
     expect(detectMeasurableWindows(stream({ audio }))).toHaveLength(0);
+  });
+
+  it("retains bounded intra-speech silence inside one candidate window", () => {
+    const audio = Array.from({ length: 20 }, (_, i) => ({
+      tMs: i * 100,
+      voiced: i !== 3,
+      rms: i === 3 ? 0.03 : 0.4,
+      pitchHz: i === 3 ? null : 120,
+      clipped: false,
+      snrDb: 20
+    }));
+
+    const windows = detectMeasurableWindows(stream({ audio }));
+
+    expect(windows).toHaveLength(1);
+    expect(windows[0]).toMatchObject({
+      modality: "speech",
+      startMs: 0,
+      endMs: 1900
+    });
   });
 
   it("finds a face window from a contiguous visible run", () => {

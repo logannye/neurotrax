@@ -1,5 +1,10 @@
 import type { CaptureMode } from "./capture-mode.js";
-import type { Abstention, MeasurementContextKind } from "./measurement.js";
+import type {
+  Abstention,
+  Measurement,
+  MeasurementContextKind,
+  MeasurableWindow
+} from "./measurement.js";
 
 export interface BiomarkerAggregate {
   code: string;
@@ -19,6 +24,8 @@ export interface EncounterObservation {
   captureMode: CaptureMode;
   visitId: string;
   participantId: string;
+  windows: MeasurableWindow[];
+  measurements: Measurement[];
   aggregates: BiomarkerAggregate[];
   abstentions: Abstention[];
   measurementCount: number;

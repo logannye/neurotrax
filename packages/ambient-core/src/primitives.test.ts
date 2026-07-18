@@ -4,6 +4,7 @@ import type { FrameStream } from "./primitives.js";
 describe("primitive frame types", () => {
   it("models a frame stream with synchronized audio and face frames", () => {
     const stream: FrameStream = {
+      containsPHI: false,
       visitId: "visit-001",
       participantId: "synthetic-participant-001",
       captureMode: "fixture-playback",
@@ -24,6 +25,7 @@ describe("primitive frame types", () => {
         }
       ]
     };
+    expect(stream.containsPHI).toBe(false);
     expect(stream.audio[0].voiced).toBe(true);
     expect(stream.face[0].framingFraction).toBeGreaterThan(0.9);
   });

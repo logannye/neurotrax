@@ -3,6 +3,7 @@ import type { ConfoundEnvelope, MeasurableWindow, Modality } from "@neurotrax/co
 import { mean } from "./stats.js";
 
 export const MIN_WINDOW_MS = 1500;
+export const MAX_SPEECH_PAUSE_MS = 500;
 
 interface Run<T> {
   frames: T[];
@@ -34,6 +35,48 @@ function contiguousRuns<T extends { tMs: number }>(
   return runs.filter((run) => run.endMs - run.startMs >= MIN_WINDOW_MS);
 }
 
+function speechRuns(frames: AudioFeatureFrame[]): Run<AudioFeatureFrame>[] {
+  const runs: Run<AudioFeatureFrame>[] = [];
+  let current: AudioFeatureFrame[] = [];
+  let lastVoicedAtMs: number | null = null;
+  let lastVoicedIndex = -1;
+
+  const flush = () => {
+    if (lastVoicedIndex >= 0) {
+      const trimmed = current.slice(0, lastVoicedIndex + 1);
+      const startMs = trimmed[0].tMs;
+      const endMs = trimmed[trimmed.length - 1].tMs;
+      if (endMs - startMs >= MIN_WINDOW_MS) {
+        runs.push({ frames: trimmed, startMs, endMs });
+      }
+    }
+    current = [];
+    lastVoicedAtMs = null;
+    lastVoicedIndex = -1;
+  };
+
+  for (const frame of frames) {
+    if (!frame.voiced && current.length === 0) continue;
+
+    if (
+      lastVoicedAtMs !== null &&
+      frame.tMs - lastVoicedAtMs > MAX_SPEECH_PAUSE_MS
+    ) {
+      flush();
+      if (!frame.voiced) continue;
+    }
+
+    current.push(frame);
+    if (frame.voiced) {
+      lastVoicedAtMs = frame.tMs;
+      lastVoicedIndex = current.length - 1;
+    }
+  }
+
+  flush();
+  return runs;
+}
+
 function speechConfounds(frames: AudioFeatureFrame[]): ConfoundEnvelope {
   return {
     snrDb: mean(frames.map((f) => f.snrDb)),
@@ -55,7 +98,7 @@ function faceConfounds(frames: FaceLandmarkFrame[]): ConfoundEnvelope {
 export function detectMeasurableWindows(stream: FrameStream): MeasurableWindow[] {
   const windows: MeasurableWindow[] = [];
 
-  contiguousRuns(stream.audio, (f) => f.voiced).forEach((run, i) => {
+  speechRuns(stream.audio).forEach((run, i) => {
     windows.push({
       windowId: `speech-${i}`,
       modality: "speech",

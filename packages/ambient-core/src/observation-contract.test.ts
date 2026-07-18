@@ -11,6 +11,39 @@ describe("observation and event contracts", () => {
       captureMode: "fixture-playback",
       visitId: "visit-001",
       participantId: "synthetic-participant-001",
+      windows: [
+        {
+          windowId: "speech-0",
+          modality: "speech",
+          startMs: 0,
+          endMs: 1900,
+          context: {
+            kind: "spontaneous-speech",
+            confounds: {
+              snrDb: 20,
+              faceFramingFraction: 0,
+              observedFrameRate: 0,
+              illuminationRelative: 0
+            }
+          }
+        }
+      ],
+      measurements: [
+        {
+          code: "prototype.speech.articulation_rate",
+          label: "Articulation rate",
+          value: 0.95,
+          unit: "voiced-fraction",
+          confidence: 0.67,
+          uncertainty: "placeholder",
+          algorithmVersion: "speech-acoustic-0.1",
+          clinicalValidation: "none",
+          contextRef: "speech-0",
+          windowStartMs: 0,
+          windowEndMs: 1900,
+          evidenceSnippetRef: null
+        }
+      ],
       aggregates: [
         {
           code: "prototype.speech.articulation_rate",
@@ -26,9 +59,11 @@ describe("observation and event contracts", () => {
         }
       ],
       abstentions: [],
-      measurementCount: 4
+      measurementCount: 1
     };
     expect(observation.containsPHI).toBe(false);
+    expect(observation.windows[0].context.confounds.snrDb).toBe(20);
+    expect(observation.measurements[0].contextRef).toBe("speech-0");
     expect(observation.aggregates[0].windowCount).toBe(4);
   });
 
@@ -48,7 +83,7 @@ describe("observation and event contracts", () => {
       },
       type: "capture.window.detected",
       stage: "ambient-capture",
-      summary: "Detected a measurable speech window.",
+      summary: "Detected a candidate speech window.",
       payload: {},
       evidenceRefs: []
     };

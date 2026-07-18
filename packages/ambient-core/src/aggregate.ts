@@ -10,22 +10,40 @@ export function aggregateMeasurements(
   contextByWindowId: Map<string, MeasurementContextKind>,
   labelByCode: Map<string, { label: string; unit: string }>
 ): BiomarkerAggregate[] {
-  const byCode = new Map<string, Measurement[]>();
+  const groups = new Map<
+    string,
+    {
+      code: string;
+      contextKind: MeasurementContextKind;
+      measurements: Measurement[];
+    }
+  >();
+
   for (const measurement of measurements) {
-    const bucket = byCode.get(measurement.code) ?? [];
-    bucket.push(measurement);
-    byCode.set(measurement.code, bucket);
+    const contextKind = contextByWindowId.get(measurement.contextRef);
+    if (!contextKind) {
+      throw new Error(
+        `Measurement ${measurement.code} references unknown context ${measurement.contextRef}`
+      );
+    }
+
+    const key = `${measurement.code}\u0000${contextKind}`;
+    const group = groups.get(key) ?? {
+      code: measurement.code,
+      contextKind,
+      measurements: []
+    };
+    group.measurements.push(measurement);
+    groups.set(key, group);
   }
 
   const aggregates: BiomarkerAggregate[] = [];
-  for (const [code, bucket] of byCode) {
+  for (const { code, contextKind, measurements: bucket } of groups.values()) {
     const versions = new Set(bucket.map((m) => m.algorithmVersion));
     if (versions.size > 1) {
       throw new Error(`Biomarker ${code} mixes algorithm versions: ${[...versions].join(", ")}`);
     }
     const values = bucket.map((m) => m.value);
-    const contextKind =
-      contextByWindowId.get(bucket[0].contextRef) ?? "spontaneous-speech";
     const label = labelByCode.get(code) ?? { label: code, unit: bucket[0].unit };
     aggregates.push({
       code,
@@ -41,5 +59,8 @@ export function aggregateMeasurements(
     });
   }
 
-  return aggregates.sort((a, b) => a.code.localeCompare(b.code));
+  return aggregates.sort(
+    (a, b) =>
+      a.code.localeCompare(b.code) || a.contextKind.localeCompare(b.contextKind)
+  );
 }
