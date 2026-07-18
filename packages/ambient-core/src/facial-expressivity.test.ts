@@ -10,7 +10,13 @@ const window: MeasurableWindow = {
   endMs: 60000,
   context: {
     kind: "listening-expressive",
-    confounds: { snrDb: 20, faceFramingFraction: 0.95, observedFrameRate: 30, illuminationRelative: 0.8 }
+    confounds: {
+      snrDb: 20,
+      faceFramingFraction: 0.95,
+      observedFrameRate: 30,
+      illuminationRelative: 0.8,
+      yawDegrees: 0
+    }
   }
 };
 

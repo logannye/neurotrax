@@ -1,6 +1,19 @@
 import { describe, expect, it } from "vitest";
 import { aggregateMeasurements } from "./aggregate.js";
-import type { Measurement, MeasurementContextKind } from "@neurotrax/contracts";
+import type { Measurement, MeasurementContext } from "@neurotrax/contracts";
+
+function measurementContext(kind: MeasurementContext["kind"]): MeasurementContext {
+  return {
+    kind,
+    confounds: {
+      snrDb: 20,
+      faceFramingFraction: 0,
+      observedFrameRate: 0,
+      illuminationRelative: 0,
+      yawDegrees: 0
+    }
+  };
+}
 
 function m(code: string, value: number, contextRef = "speech-0"): Measurement {
   return {
@@ -13,7 +26,9 @@ function m(code: string, value: number, contextRef = "speech-0"): Measurement {
 
 describe("aggregateMeasurements", () => {
   it("computes median and MAD per code with a stable window count", () => {
-    const context = new Map<string, MeasurementContextKind>([["speech-0", "spontaneous-speech"]]);
+    const context = new Map<string, MeasurementContext>([
+      ["speech-0", measurementContext("spontaneous-speech")]
+    ]);
     const labels = new Map([["prototype.speech.pause_count", { label: "Pause count", unit: "count" }]]);
     const result = aggregateMeasurements(
       [m("prototype.speech.pause_count", 2), m("prototype.speech.pause_count", 4), m("prototype.speech.pause_count", 6)],
@@ -28,7 +43,9 @@ describe("aggregateMeasurements", () => {
   });
 
   it("throws when a code mixes algorithm versions", () => {
-    const context = new Map<string, MeasurementContextKind>([["speech-0", "spontaneous-speech"]]);
+    const context = new Map<string, MeasurementContext>([
+      ["speech-0", measurementContext("spontaneous-speech")]
+    ]);
     const labels = new Map([["c", { label: "c", unit: "u" }]]);
     const a = m("c", 1);
     const b = { ...m("c", 2), algorithmVersion: "speech-acoustic-0.2" };
@@ -36,9 +53,9 @@ describe("aggregateMeasurements", () => {
   });
 
   it("keeps the same biomarker separate across measurement contexts", () => {
-    const context = new Map<string, MeasurementContextKind>([
-      ["speech-0", "spontaneous-speech"],
-      ["reading-0", "reading-aloud"]
+    const context = new Map<string, MeasurementContext>([
+      ["speech-0", measurementContext("spontaneous-speech")],
+      ["reading-0", measurementContext("reading-aloud")]
     ]);
     const labels = new Map([["c", { label: "c", unit: "u" }]]);
 

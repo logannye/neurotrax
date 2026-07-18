@@ -1,23 +1,57 @@
 import type { AudioFeatureFrame } from "./primitives.js";
 import type { Abstention, MeasurableWindow, Measurement } from "@neurotrax/contracts";
-import { mean, stdDev } from "./stats.js";
+import { mean, median, stdDev } from "./stats.js";
 
-export const SPEECH_ACOUSTIC_VERSION = "speech-acoustic-0.1";
+export const SPEECH_ACOUSTIC_VERSION = "speech-acoustic-0.2";
 export const SPEECH_SNR_FLOOR_DB = 12;
 const MIN_VOICED_FRAMES = 3;
+export const MIN_PAUSE_MS = 300;
+export const MAX_PAUSE_MS = 2000;
 
-function countPauses(frames: AudioFeatureFrame[]): number {
+function estimatedFrameStepMs(frames: AudioFeatureFrame[]): number {
+  if (frames.length < 2) return 100;
+  return median(
+    frames
+      .slice(1)
+      .map((frame, index) => Math.max(1, frame.tMs - frames[index].tMs))
+  );
+}
+
+export function countBoundedPauses(frames: AudioFeatureFrame[]): number {
   let pauses = 0;
-  let inPause = false;
+  let pauseStartMs: number | null = null;
+  let pauseEndMs: number | null = null;
+  const frameStepMs = estimatedFrameStepMs(frames);
+
   for (const f of frames) {
-    if (!f.voiced && !inPause) {
-      pauses += 1;
-      inPause = true;
-    } else if (f.voiced) {
-      inPause = false;
+    if (!f.voiced) {
+      pauseStartMs ??= f.tMs;
+      pauseEndMs = f.tMs;
+    } else if (pauseStartMs !== null && pauseEndMs !== null) {
+      const durationMs = pauseEndMs - pauseStartMs + frameStepMs;
+      if (durationMs >= MIN_PAUSE_MS && durationMs <= MAX_PAUSE_MS) {
+        pauses += 1;
+      }
+      pauseStartMs = null;
+      pauseEndMs = null;
     }
   }
+
+  if (pauseStartMs !== null && pauseEndMs !== null) {
+    const durationMs = pauseEndMs - pauseStartMs + frameStepMs;
+    if (durationMs >= MIN_PAUSE_MS && durationMs <= MAX_PAUSE_MS) pauses += 1;
+  }
+
   return pauses;
+}
+
+export function pitchVariabilitySemitones(
+  pitchesHz: number[]
+): number {
+  if (pitchesHz.length < 2) return 0;
+  const centerHz = median(pitchesHz);
+  if (centerHz <= 0) return 0;
+  return stdDev(pitchesHz.map((pitchHz) => 12 * Math.log2(pitchHz / centerHz)));
 }
 
 function measurement(
@@ -72,15 +106,18 @@ export function extractSpeechAcoustic(
   }
 
   const confidence = Math.min(1, meanSnr / 30);
-  const articulationRate = voiced.length / frames.length;
-  const pauseCount = countPauses(frames);
-  const pitchVariability = stdDev(
+  const voicedTimeFraction = voiced.length / frames.length;
+  const pauseCount = countBoundedPauses(frames);
+  const durationMinutes =
+    Math.max(1, window.endMs - window.startMs) / 60000;
+  const pauseRate = pauseCount / durationMinutes;
+  const pitchVariability = pitchVariabilitySemitones(
     voiced.map((f) => f.pitchHz).filter((p): p is number => p !== null)
   );
 
   return [
-    measurement(window, "prototype.speech.articulation_rate", "Articulation rate", articulationRate, "voiced-fraction", confidence),
-    measurement(window, "prototype.speech.pause_count", "Pause count", pauseCount, "count", confidence),
-    measurement(window, "prototype.speech.pitch_variability", "Pitch variability", pitchVariability, "hz-stddev", confidence)
+    measurement(window, "prototype.speech.voiced_time_fraction", "Voiced-time fraction", voicedTimeFraction, "ratio", confidence),
+    measurement(window, "prototype.speech.pause_rate", "Pause rate", pauseRate, "pauses-per-minute", confidence),
+    measurement(window, "prototype.speech.pitch_variability", "Pitch variability", pitchVariability, "semitone-stddev", confidence)
   ];
 }

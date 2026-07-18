@@ -2,373 +2,292 @@
 
 **A demo-first agentic audiovisual sidecar for longitudinal tele-neurology.**
 
-Neurotrax is a research and hackathon prototype for turning measurable moments
-inside routine telehealth encounters into structured, inspectable observations.
-The intended live system uses a MacBook Pro camera and microphone as a stand-in
-for a patient's future telehealth device.
+Neurotrax turns technically measurable moments in a routine audiovisual
+encounter into a structured visit observation, compares that observation only
+with compatible personal history, and asks GPT-5.6 to draft a tightly grounded
+Evidence Card for human review.
 
 Built for a future-of-agentic-AI-in-healthcare hackathon on **July 18, 2026**.
 
-> **Research prototype only.** Not a medical device. Not for diagnosis,
-> treatment, emergency detection, or use with protected health information.
-> All current measurements are engineering placeholders with no clinical
-> validation.
+> **Research prototype only.** Neurotrax is not a medical device and is not for
+> diagnosis, treatment, emergency detection, or protected health information.
+> Every measurement is an unvalidated `prototype.*` engineering signal.
 
-## Demo thesis
+## The three-capability product
 
-> **Telehealth has eyes and ears, but little longitudinal memory. Neurotrax
-> turns measurable moments in an encounter into evidence a clinician can
-> inspect over time.**
-
-The clinician should be able to focus on the patient while a small team of
-bounded processing agents works quietly in the background:
-
-1. a Capture Conductor finds candidate windows that may be measurable;
-2. independent speech and facial-signal extractors measure or abstain;
-3. deterministic aggregation creates one versioned observation for the visit;
-4. later capabilities compare compatible visits and assemble the supporting
-   evidence for clinician review.
-
-Raw conversation content is not interpreted. An unmeasurable interval produces
-no invented value. The language model stays outside the measurement loop.
-
-## What is implemented today
-
-The repository contains two runnable layers:
-
-1. a deterministic **headless ambient capture core** that replays synthetic
-   derived audio and face primitives; and
-2. a minimal **live MacBook browser adapter** that requests explicit consent,
-   opens the self-facing camera and microphone, displays the live preview,
-   computes ephemeral audio features in the browser, and hands them to the
-   Capture Conductor when the encounter ends.
-
-The current system produces:
-
-- candidate speech measurement windows from live or fixture audio features;
-- placeholder acoustic measurements and honest no-value outcomes;
-- synthetic facial measurements and facial-quality abstentions in fixture
-  replay only;
-- robust per-visit aggregates using median and median absolute deviation;
-- a monotonic, ordered event trace tagged by processing lane; and
-- an `EncounterObservation` preserving windows, confounds, per-window
-  measurements, aggregates, and abstentions.
-
-No raw microphone or camera media is recorded, uploaded, or persisted by the
-live adapter.
-
-### Not implemented yet
-
-The current code does **not** yet:
-
-- compute face landmarks or facial measurements from the live camera;
-- stream Conductor events incrementally during an encounter;
-- provide a telehealth call;
-- retain or promote evidence clips;
-- store or trend observations across visits;
-- generate a clinician evidence card; or
-- diagnose, classify, predict, or recommend clinical action.
-
-Those are explicit follow-up slices, not hidden or mocked capabilities.
-
-## The entire product
-
-Neurotrax intentionally has exactly three product capabilities.
+Neurotrax intentionally has only three product capabilities.
 
 ### 1. Ambient Capture
 
-During a consented telehealth encounter, the system analyzes the live
-audiovisual stream ephemerally, identifies technically usable windows, and
-extracts versioned measurements from natural conversation without prompting or
-interrupting the patient.
+The MacBook camera and microphone are analyzed ephemerally during a consented
+self-demo. Independent speech and face lanes curate measurable windows without
+interrupting or coaching the participant.
 
-Most of the timeline may be `not measurable`. The system curates useful windows
-instead of coaching the participant to create them.
+- Audio: calibrated voice activity, voiced-time fraction, bounded pause rate,
+  and pitch variability in semitones.
+- Face: visibility, framing, yaw, blink proxy, brow movement, mouth movement,
+  normalized landmark motion, illumination, and observed frame rate.
+- Quality: a lane withholds its own value when its quality contract fails.
+  Other lanes continue independently.
+
+Raw audio and video are never recorded, transcribed, screenshotted, persisted,
+or sent to OpenAI.
 
 ### 2. Personal Trajectory
 
-The system compares each visit only with the same patient's compatible prior
-visits. Compatibility will require:
+A deterministic policy compares the current observation with four checked-in
+prior visits for the same synthetic identity. Three are compatible. One is
+visibly excluded because its algorithm version differs.
 
-- the same detected measurement context;
-- capture confounds within a defined tolerance;
-- compatible algorithm versions; and
-- passing quality and clinician acceptance.
+Compatibility is evaluated per biomarker using accepted review state,
+participant, measurement code, detected context, algorithm version, speech
+SNR, face framing, observed frame rate, and illumination. The output includes a
+prior median, range, median absolute deviation, current delta, and one
+nonclinical direction.
 
-The result is provisional longitudinal evidence with uncertainty—not a
-progression, diagnosis, or causal claim.
+All seeded points are labeled `SYNTHETIC`. Accepting a live result adds it only
+to in-memory history for the page session; rejecting it does not. Reloading
+restores the original fixture.
 
 ### 3. Clinician Evidence Card
 
-The system assembles a concise review surface showing:
+The server sends only bounded structured non-PHI facts to the OpenAI Responses
+API. The required `gpt-5.6` model drafts a headline, short summary, and at most
+two claims using Structured Outputs.
 
-- what changed and what remained stable;
-- quality, uncertainty, and comparability warnings;
-- the structured measurements supporting each statement;
-- source evidence when explicitly retained; and
-- an `accepted` or `rejected` clinician decision.
+Every model claim must copy one precomputed claim ID and statement exactly. A
+deterministic validator rejects unknown IDs, missing provenance, unsupported
+numbers, altered boundary language, or diagnostic, treatment, causal, and
+progression language. One grounding retry is allowed. There is deliberately no
+deterministic prose fallback.
 
-Only clinician-accepted observations may enter longitudinal history.
+## The demo moment
 
-## Current ambient-core architecture
+Start a live encounter and speak continuously. After a few seconds, briefly
+turn your face away while continuing to speak, then return:
 
-The processing units below are internal lanes inside Capability #1. They are
-not additional product capabilities or autonomous clinical actors.
+1. the facial lane changes to amber `Withheld` after 750 ms;
+2. the speech lane remains teal and continues measuring;
+3. the facial lane recovers after 750 ms of acceptable framing;
+4. the unusable interval becomes a reason-coded abstention;
+5. no facial measurement overlaps that interval.
+
+After the encounter, the camera area contracts, compatible synthetic history
+appears, GPT-5.6 assembles the grounded Evidence Card, and each claim opens a
+trace from claim to aggregate, measurement window, quality/confounds, and
+originating events.
+
+## Architecture
 
 ```mermaid
 flowchart LR
-    LIVE["Live MacBook mic"] --> AUDIO["Ephemeral browser audio features"]
-    CAMERA["Live MacBook camera"] --> PREVIEW["Local preview"]
-    FIXTURE["Synthetic audio + face primitives"] --> CONDUCTOR["Capture Conductor"]
-    AUDIO --> CONDUCTOR
-    CONDUCTOR --> WINDOWS["Candidate-window detection"]
-    WINDOWS --> SPEECH["Speech-acoustic extractor"]
-    WINDOWS --> FACE["Facial-expressivity extractor"]
-    SPEECH --> RESULTS["Measurements or abstention"]
-    FACE --> RESULTS
-    RESULTS --> AGGREGATE["Per-visit robust aggregation"]
-    AGGREGATE --> OBSERVATION["EncounterObservation"]
+    MEDIA["MacBook camera + mic"] --> FEATURES["Ephemeral derived primitives"]
+    FEATURES --> CONDUCTOR["Incremental Capture Conductor"]
+    CONDUCTOR --> SPEECH["Speech Acoustic lane"]
+    CONDUCTOR --> FACE["Facial Expressivity lane"]
+    SPEECH --> OBS["EncounterObservation"]
+    FACE --> OBS
 
-    CONDUCTOR -. emits .-> EVENTS["Lane-tagged event stream"]
-    SPEECH -. emits .-> EVENTS
-    FACE -. emits .-> EVENTS
+    OBS --> TRAJECTORY["Deterministic Personal Trajectory"]
+    HISTORY["4 synthetic prior visits"] --> TRAJECTORY
+    TRAJECTORY --> FACTS["Pre-grounded claim facts"]
+    FACTS --> MODEL["Server-side GPT-5.6 Structured Output"]
+    MODEL --> GROUNDING["Deterministic grounding validator"]
+    GROUNDING --> CARD["Clinician Evidence Card"]
+    CARD --> REVIEW["Human accept / reject"]
+    REVIEW -->|"Accept, page session only"| HISTORY
 
-    PREVIEW -. "landmark adapter next" .-> FACE
+    CONDUCTOR -.-> EVENTS["Append-only workflow events"]
+    TRAJECTORY -.-> EVENTS
+    MODEL -.-> EVENTS
+    REVIEW -.-> EVENTS
 ```
 
-The live browser path currently operates as:
-
-```text
-consented MacBook camera + microphone
-  -> live local camera preview
-  -> ephemeral Web Audio RMS, voice activity, SNR, clipping, and pitch features
-  -> Capture Conductor after the encounter ends
-  -> candidate measurement windows
-  -> speech-acoustic extractor
-  -> per-visit aggregate + abstentions + agent events
-  -> structured observation displayed in the browser
-```
-
-### Why this is agentic
-
-The agentic behavior is bounded and externally inspectable:
-
-- **Observe:** detect when a modality has a candidate measurement window.
-- **Decide:** select the matching extractor or abstain under its quality
-  contract.
-- **Act:** emit a structured measurement or abstention event.
-- **Reconcile:** aggregate independent results onto one encounter timeline.
-- **Deliver:** create the versioned per-visit observation.
-
-Every visible activity must derive from a real structured event. Neurotrax
-never displays private chain-of-thought, invented progress, or simulated agent
-conversation.
+The language model is outside the measurement and comparison loops. It cannot
+create a measurement, change compatible-history membership, or execute a
+clinical action.
 
 ## Quick start
 
 ### Prerequisites
 
+- macOS with Chrome and a MacBook camera/microphone
 - Node.js 22 or newer
 - pnpm 9.12.3
+- an OpenAI API key with access to `gpt-5.6`
+- internet access for the Evidence Agent
 
-### Install and validate
+### Install
 
 ```bash
 git clone https://github.com/logannye/neurotrax.git
 cd neurotrax
 corepack enable
 pnpm install --frozen-lockfile
+cp .env.example .env.local
+```
+
+Set the server-only key in `.env.local`:
+
+```dotenv
+OPENAI_API_KEY=your_key_here
+```
+
+Never use a `VITE_` prefix. The browser can only call the local endpoint; it
+cannot read the key.
+
+### Pre-demo checks
+
+Run the deterministic repository suite:
+
+```bash
 pnpm test
 ```
 
-`pnpm test` runs:
+Run the disclosed full browser state-machine test:
 
-1. the repository structure and safety-fixture validator;
-2. the browser audio-feature and ambient-core replay tests;
-3. TypeScript typechecking; and
-4. the production browser build.
+```bash
+pnpm test:browser
+```
 
-### Launch the live MacBook demo
+Verify the real model, credential, Structured Output schema, and grounding:
+
+```bash
+pnpm demo:smoke
+```
+
+The smoke command makes a real API request. If the key is absent or the model
+cannot return a grounded result, it fails loudly.
+
+### Launch
 
 ```bash
 pnpm dev
 ```
 
-Open `http://127.0.0.1:4173`, check the self-demo consent box, and choose
-**Begin live encounter**. Allow camera and microphone access when the browser
-asks. Speak naturally for 8–12 seconds, then choose **End & analyze**.
+Open [http://127.0.0.1:4173](http://127.0.0.1:4173). The startup bar must read
+`Demo systems ready`. Then:
 
-The app releases the camera and microphone before rendering the structured
-observation. If the browser or macOS blocks access, enable camera and
-microphone permission for the browser and reload the page.
+1. check **I consent to this self-demo**;
+2. choose **Begin live encounter**;
+3. approve Chrome camera and microphone access;
+4. speak naturally for 20–30 seconds;
+5. briefly turn away while continuing to speak, then face the camera again;
+6. choose **End & analyze**;
+7. select a grounded claim to inspect its evidence trace;
+8. choose **Accept for this session** or **Reject**.
 
-To run only the headless end-to-end replay tests:
+The app refuses to begin when `OPENAI_API_KEY` is missing. It releases the media
+tracks before trajectory selection and evidence synthesis.
+
+## Disclosed fixture mode
+
+The genuine hardware path is the default. A deterministic fixture exists for
+browser testing and emergency rehearsal:
+
+```text
+http://127.0.0.1:4173/?fixture=1
+```
+
+It is persistently labeled `FIXTURE PLAYBACK · NOT LIVE`, uses only synthetic
+derived frames, and never requests camera or microphone access. Add `&fast=1`
+only for automated testing. It still requires the Evidence Agent unless a
+browser test explicitly intercepts the endpoint.
+
+## What the agents actually do
+
+The right-side rail is a filtered view of real versioned workflow events—not
+private chain-of-thought or decorative agent dialogue.
+
+- **Capture Conductor:** ingests frames incrementally, opens and closes
+  candidate windows, routes eligible windows, and creates the observation.
+- **Speech Acoustic:** calibrates its noise floor, applies VAD hysteresis,
+  measures usable speech windows, and withholds unusable intervals.
+- **Facial Expressivity:** receives only derived primitives from a Web Worker,
+  applies framing/yaw quality gates, measures usable windows, and abstains.
+- **Personal Trajectory:** includes or excludes prior encounters by explicit
+  compatibility policy and computes robust personal-reference statistics.
+- **Evidence Agent:** requests a structured GPT-5.6 draft, validates every
+  claim, exposes grounding failure, and waits for human review.
+
+## Privacy and data flow
+
+### Remains in the browser and is discarded
+
+- microphone samples;
+- camera frames and `ImageBitmap` objects;
+- local MediaPipe landmark inference input;
+- per-frame derived audio and face primitives after page unload.
+
+### Sent to the local server and OpenAI
+
+- synthetic identifiers;
+- quality counts;
+- excluded synthetic encounter IDs and reason codes;
+- at most two structured claim facts;
+- measurement codes, numeric values, units, directions, and evidence
+  references.
+
+No conversation content, transcript, image, audio sample, or camera frame is
+included in the model request.
+
+## Measurement and quality contracts
+
+The current extractor versions are:
+
+```text
+speech-acoustic-0.2
+facial-expressivity-0.1
+```
+
+The face lane withholds after 750 ms without a usable face or when absolute yaw
+exceeds 30 degrees. It recovers after 750 ms of acceptable framing. Speech uses
+entry/exit hysteresis and treats only 300–2,000 ms gaps as bounded pauses for
+the pause-rate metric.
+
+Every aggregate preserves its detected context, algorithm version, median
+quality confounds, confidence, placeholder uncertainty, and
+`clinicalValidation: "none"`.
+
+## Commands
 
 ```bash
-pnpm --filter @neurotrax/ambient-core exec vitest run \
-  src/conductor.test.ts --reporter verbose
+pnpm dev                 # local live demo on 127.0.0.1:4173
+pnpm demo:smoke          # real GPT-5.6 readiness/grounding request
+pnpm test                # structure, unit tests, types, production build
+pnpm test:browser        # disclosed full UI state-machine test in Chrome
+pnpm typecheck           # all workspace TypeScript checks
+pnpm build               # production browser asset build
 ```
-
-### What the first replay does
-
-The synthetic fixture contains about two seconds of audio-feature and
-face-landmark frames. `runConductor()`:
-
-1. detects candidate speech and face windows;
-2. routes each window to its deterministic extractor;
-3. records placeholder measurements or a reason-coded abstention;
-4. aggregates the visit by biomarker; and
-5. emits a lane-tagged event trace ending in
-   `encounter-observation.created`.
-
-The replay test also degrades face framing to prove that the facial lane
-abstains instead of fabricating a result, while the independently measurable
-speech lane can continue.
-
-Identical input and base time produce byte-identical output.
-
-## Measurement posture
-
-The current values are deliberately named with a `prototype.*` code and carry:
-
-```text
-uncertainty: "placeholder"
-clinicalValidation: "none"
-algorithmVersion: "<extractor>-0.1"
-```
-
-They demonstrate infrastructure, not clinical biomarkers. Short-window speech
-and facial proxies must not be presented as validated articulation, affect,
-bradykinesia, hypomimia, disease status, medication response, or progression.
-
-Measurement, interpretation, and clinical action remain separate:
-
-```text
-deterministic signal processing
-  -> structured observation
-  -> compatibility-aware longitudinal evidence
-  -> grounded prose
-  -> clinician interpretation and sign-off
-```
-
-## Privacy and safety model
-
-- Analysis requires explicit, revocable consent.
-- The intended live path is **continuous analysis, not continuous recording**.
-- Raw audiovisual frames should be processed ephemerally and released.
-- The live adapter releases its media tracks at the end of the encounter and
-  persists no raw media.
-- The core consumes derived primitives only.
-- Short evidence snippets are a future, separately governed feature.
-- Transcripts and media are untrusted data, never agent instructions.
-- Quality failure returns `not measurable`.
-- No language model creates, changes, or gates measurements.
-- No component both recommends and executes a consequential clinical action.
-- No PHI, recordings, credentials, or secrets belong in this repository.
-- Current fixtures are synthetic and set `containsPHI: false`.
-
-## Demo vision
-
-The eventual hackathon experience is one camera-dominant screen:
-
-```text
-live consented encounter
-  -> subtle multi-lane agent activity
-  -> truthful modality-specific abstention
-  -> today's observation lands on a synthetic longitudinal timeline
-  -> grounded evidence card assembles
-  -> clinician traces a claim to measurement, event, and retained evidence
-  -> clinician accepts or rejects
-```
-
-The signature visual moment is not a fake AI conversation. It is a truthful
-split in agent behavior: for example, the participant moves partially out of
-frame, the facial lane visibly abstains when its framing gate fails, and the
-speech lane continues only if its own quality contract still passes.
-
-The current camera and microphone session can now be genuinely live. Prior
-history and the live facial lane remain future work.
-
-## Implementation roadmap
-
-The next three slices preserve the same three-capability product:
-
-1. **Complete live ambient capture:** add local face landmarks, facial
-   primitives, and incremental Conductor event emission.
-2. **Longitudinal store and compatibility:** persist accepted per-visit
-   observations and compare only matching context, confounds, and algorithm
-   versions.
-3. **Demo interface:** render the live camera, multi-lane flight recorder,
-   longitudinal reveal, evidence card, claim traceability, and clinician
-   accept/reject.
-
-No new extractor modality or fourth product capability should be added until
-this loop works beautifully end to end.
 
 ## Repository map
 
 ```text
 neurotrax/
-├── apps/
-│   ├── capture-web/             # Runnable MacBook camera/mic demo
-│   └── clinician-review/        # Partial legacy brief; ambient re-key pending
-├── agents/
-│   ├── guided-capture/          # Legacy capability notes; ambient design supersedes the script
-│   ├── personal-trajectory/     # Legacy prompt-version logic; ambient re-key pending
-│   └── evidence-card/           # Evidence boundary; ambient inputs pending
+├── apps/capture-web/
+│   ├── src/                 # live UI, audio features, face worker
+│   ├── server/              # server-only OpenAI endpoint and smoke check
+│   ├── e2e/                 # disclosed fixture browser tests
+│   └── public/              # pinned local MediaPipe model and WASM
 ├── packages/
-│   ├── ambient-core/            # Deterministic measurement pipeline
-│   ├── contracts/               # Shared ambient measurement contracts
-│   └── event-log/               # Legacy/demo event-log documentation
+│   ├── ambient-core/        # incremental conductor and extractors
+│   ├── contracts/           # shared observation/event/trajectory/card types
+│   ├── trajectory-core/     # compatibility policy and synthetic history
+│   └── evidence-core/       # claim facts and deterministic grounding
 ├── docs/
-│   ├── superpowers/specs/       # Current ambient Capability #1 design
-│   ├── superpowers/plans/       # Executed core implementation plan
-│   ├── architecture.md          # Earlier scripted demo-spine architecture
-│   ├── demo-experience.md       # Earlier scripted demo choreography
+│   ├── architecture.md
+│   ├── demo-experience.md
 │   ├── safety.md
 │   └── validation.md
-├── examples/                    # Synthetic legacy/demo examples
-├── protocols/                   # Earlier task-bound protocol
-└── scripts/                     # Structure and safety validation
+└── scripts/validate-structure.sh
 ```
 
-The authoritative ambient design is
-[docs/superpowers/specs/2026-07-18-ambient-biomarker-capture-design.md](docs/superpowers/specs/2026-07-18-ambient-biomarker-capture-design.md).
-The implemented plan is
-[docs/superpowers/plans/2026-07-18-ambient-capture-core.md](docs/superpowers/plans/2026-07-18-ambient-capture-core.md).
+## Explicit deferrals
 
-## Explicit non-goals
-
-The first product does not include:
-
-- diagnosis or disease classification;
-- medication recommendations or autonomous actions;
-- emergency or respiratory-risk prediction;
-- conversation-content interpretation;
-- continuous raw-media recording;
-- EHR integration;
-- a large agent mesh;
-- a neurological foundation model;
-- a general-purpose digital twin; or
-- automated patient alerts.
-
-## Evidence-informed, not clinically validated
-
-The concept is informed by research on:
-
-- [webcam-based Parkinson's finger-tapping assessment](https://www.nature.com/articles/s41746-023-00905-9);
-- [remote ALS speech monitoring](https://www.nature.com/articles/s41746-020-00335-x);
-- [digital speech response to levodopa](https://www.nature.com/articles/s41531-025-01045-5);
-- [limitations of remote MDS-UPDRS assessment](https://pmc.ncbi.nlm.nih.gov/articles/PMC9391277/); and
-- [FDA remote digital-health guidance](https://www.fda.gov/regulatory-information/search-fda-guidance-documents/digital-health-technologies-remote-data-acquisition-clinical-investigations).
-
-These sources do not validate Neurotrax or authorize clinical use.
-
-## Contributing
-
-Read [CONTRIBUTING.md](CONTRIBUTING.md) and [AGENTS.md](AGENTS.md). Changes
-should strengthen one of the three product capabilities or a required safety
-foundation. Otherwise, defer them.
+This MVP does not provide telehealth calling, PHI handling, transcripts,
+retained evidence clips, EHR integration, population comparison, alerts,
+diagnosis, treatment recommendations, medication-effect inference, clinical
+progression claims, or validated neurological biomarkers.
 
 ## License
 

@@ -1,35 +1,22 @@
-# Personal Trajectory Agent
-
-> **Ambient re-key pending.** The capability boundary remains current, but
-> prompt/task compatibility below must be replaced by detected measurement
-> context, confound tolerance, and algorithm-version compatibility.
+# Personal Trajectory
 
 ## Goal
 
-Compare the current usable observation with compatible observations from the
-same person.
+Compare each current biomarker only with accepted, compatible observations from
+the same synthetic person.
 
 ## Agentic behavior
 
-- choose the comparison set using explicit compatibility rules;
-- exclude failed or incompatible observations;
-- estimate provisional change and uncertainty;
-- surface context differences and modality disagreement.
+- match participant, measurement code, detected context, and algorithm version;
+- enforce SNR, face-framing, frame-rate, and illumination tolerances;
+- include or exclude prior data with exact reason codes;
+- compute median, range, median absolute deviation, and current delta; and
+- emit a nonclinical direction.
 
-## Demo-visible receipt
-
-The demo uses clearly labeled synthetic history so selection is deterministic.
-The agent should visibly report:
-
-```text
-4 prior encounters found
-  → 3 compatible encounters included
-  → 1 excluded because its prompt version differs
-```
-
-The current encounter remains genuinely live. The agent reports compatibility,
-not diagnosis or population-normal status.
+The checked-in fixture contains three compatible accepted visits and one
+algorithm-version exclusion. Every seeded point remains visibly `SYNTHETIC`.
 
 ## Hard boundary
 
-This agent does not diagnose progression or infer why a change occurred.
+Personal Trajectory does not use population norms, diagnose progression, infer
+cause, or recommend treatment.

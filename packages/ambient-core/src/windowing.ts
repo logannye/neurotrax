@@ -3,7 +3,8 @@ import type { ConfoundEnvelope, MeasurableWindow, Modality } from "@neurotrax/co
 import { mean } from "./stats.js";
 
 export const MIN_WINDOW_MS = 1500;
-export const MAX_SPEECH_PAUSE_MS = 500;
+export const MAX_SPEECH_PAUSE_MS = 2000;
+export const MAX_FACE_WINDOW_YAW_DEGREES = 30;
 
 interface Run<T> {
   frames: T[];
@@ -82,7 +83,8 @@ function speechConfounds(frames: AudioFeatureFrame[]): ConfoundEnvelope {
     snrDb: mean(frames.map((f) => f.snrDb)),
     faceFramingFraction: 0,
     observedFrameRate: 0,
-    illuminationRelative: 0
+    illuminationRelative: 0,
+    yawDegrees: 0
   };
 }
 
@@ -91,7 +93,8 @@ function faceConfounds(frames: FaceLandmarkFrame[]): ConfoundEnvelope {
     snrDb: 0,
     faceFramingFraction: mean(frames.map((f) => f.framingFraction)),
     observedFrameRate: mean(frames.map((f) => f.observedFrameRate)),
-    illuminationRelative: mean(frames.map((f) => f.illumination))
+    illuminationRelative: mean(frames.map((f) => f.illumination)),
+    yawDegrees: mean(frames.map((f) => Math.abs(f.yawDegrees ?? 0)))
   };
 }
 
@@ -108,7 +111,13 @@ export function detectMeasurableWindows(stream: FrameStream): MeasurableWindow[]
     });
   });
 
-  contiguousRuns(stream.face, (f) => f.faceVisible).forEach((run, i) => {
+  contiguousRuns(
+    stream.face,
+    (frame) =>
+      frame.faceVisible &&
+      frame.framingFraction >= 0.6 &&
+      Math.abs(frame.yawDegrees ?? 0) <= MAX_FACE_WINDOW_YAW_DEGREES
+  ).forEach((run, i) => {
     windows.push({
       windowId: `face-${i}`,
       modality: "face",

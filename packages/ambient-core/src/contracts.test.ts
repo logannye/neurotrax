@@ -18,7 +18,8 @@ describe("measurement contracts", () => {
           snrDb: 22,
           faceFramingFraction: 1,
           observedFrameRate: 30,
-          illuminationRelative: 0.8
+          illuminationRelative: 0.8,
+          yawDegrees: 0
         }
       }
     };

@@ -7,9 +7,11 @@
   "packageManager": "pnpm@9.12.3",
   "scripts": {
     "dev": "pnpm --filter @neurotrax/capture-web dev",
+    "demo:smoke": "pnpm --filter @neurotrax/capture-web demo:smoke",
     "build": "pnpm -r --if-present run build",
     "check": "bash scripts/validate-structure.sh",
     "test:unit": "pnpm -r --if-present run test:unit",
+    "test:browser": "pnpm --filter @neurotrax/capture-web test:browser",
     "typecheck": "pnpm -r --if-present run typecheck",
     "test": "npm run check && npm run test:unit && npm run typecheck && npm run build"
   },

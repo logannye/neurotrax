@@ -1,78 +1,54 @@
-# Neurotrax live capture
+# Neurotrax capture web
 
-The first runnable browser adapter for Neurotrax Ambient Capture. It uses the
-MacBook's self-facing camera and microphone for a consented developer self-demo.
+The runnable MacBook demo for all three Neurotrax capabilities: incremental
+ambient capture, deterministic personal trajectory, and a required
+model-backed Clinician Evidence Card.
 
-> Research prototype only. Use your own non-patient data, do not mention PHI,
-> and do not use the output for a clinical decision.
+Use only the presenter's own non-patient data. Do not mention PHI.
 
-## What it does
+## Runtime responsibilities
 
-1. requires an explicit self-demo consent acknowledgement;
-2. requests browser camera and microphone permission;
-3. shows a genuinely live, mirrored camera preview;
-4. derives audio RMS, voice activity, clipping, estimated SNR, and pitch in the
-   browser every 100 milliseconds;
-5. retains those derived feature frames only in memory during the encounter;
-6. releases the camera and microphone when the user ends the encounter;
-7. runs the deterministic Capture Conductor over the collected features; and
-8. renders the versioned event trace and final `EncounterObservation`.
+- `src/main.ts` owns the one-screen state machine, ephemeral device session,
+  workflow-event rail, trajectory reveal, evidence trace, and human review.
+- `src/audio-features.ts` performs browser-local RMS, noise-floor calibration,
+  VAD hysteresis, clipping, SNR, and pitch derivation.
+- `src/face-worker.ts` runs MediaPipe Face Landmarker in a Web Worker at about
+  10 FPS and returns only derived face primitives.
+- `server/vite-evidence-plugin.ts` exposes server-local readiness and
+  evidence-card endpoints without exposing the API key.
+- `server/evidence-agent.ts` calls `gpt-5.6` with Structured Outputs, low
+  reasoning effort, and low verbosity, then applies deterministic grounding.
+- `e2e/fixture-demo.spec.ts` tests the complete disclosed fixture flow,
+  including different Accept and Reject outcomes.
 
-It does not use `MediaRecorder`, persist raw media, upload media, transcribe the
-conversation, or call a language model.
+The app never uses `MediaRecorder`, never transcribes, and never persists raw
+media.
 
-## Run locally
+## Run
 
 From the repository root:
 
 ```bash
+cp .env.example .env.local
+# Set OPENAI_API_KEY in .env.local
 pnpm install
+pnpm demo:smoke
 pnpm dev
 ```
 
-Open `http://127.0.0.1:4173`.
+Open `http://127.0.0.1:4173`. A missing key is a startup blocker by design.
 
-Use flow:
+For Chrome permission problems, enable Camera and Microphone for Chrome in
+macOS System Settings, allow both devices for `127.0.0.1`, and reload.
 
-1. Check **I consent to this self-demo**.
-2. Choose **Begin live encounter**.
-3. Allow camera and microphone access.
-4. Speak naturally for 8–12 seconds.
-5. Choose **End & analyze**.
-6. Inspect the structured event trace, placeholder aggregates, and observation
-   JSON.
-
-If no value is produced, repeat the encounter and speak continuously for at
-least two seconds. The core deliberately returns no value when it cannot find a
-candidate window that passes its current quality contract.
-
-## Current truth boundary
-
-- The camera is live but is used for local preview only.
-- Live facial landmarks and facial measurements are not connected.
-- The Speech Acoustic and Capture Conductor lanes are real deterministic code.
-- Events appear only after `runConductor()` emits them at encounter end.
-- All visible live telemetry comes directly from current browser audio frames.
-- All measurements remain `prototype.*` engineering placeholders with
-  `clinicalValidation: "none"`.
-
-## Browser permissions
-
-Localhost is a permitted secure context for `getUserMedia`. If access fails:
-
-- confirm the browser has camera and microphone permission in macOS System
-  Settings;
-- confirm the browser site permission for `127.0.0.1`;
-- close other applications holding the camera if necessary; and
-- reload the page after changing permission.
-
-## Checks
+## Test
 
 ```bash
 pnpm --filter @neurotrax/capture-web test:unit
 pnpm --filter @neurotrax/capture-web typecheck
 pnpm --filter @neurotrax/capture-web build
+pnpm --filter @neurotrax/capture-web test:browser
 ```
 
-The next capture slice adds a local face-landmark adapter and incremental
-Conductor events while preserving the no-recording boundary.
+The browser test uses `/?fixture=1&fast=1`, which is visibly and persistently
+labeled as fixture playback. Normal navigation remains live hardware capture.

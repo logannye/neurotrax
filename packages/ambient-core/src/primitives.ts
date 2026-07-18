@@ -1,4 +1,4 @@
-import type { CaptureMode } from "@neurotrax/contracts";
+import type { CaptureAdapter, CaptureMode } from "@neurotrax/contracts";
 
 export interface AudioFeatureFrame {
   tMs: number;
@@ -14,6 +14,7 @@ export interface FaceLandmarkFrame {
   faceVisible: boolean;
   framingFraction: number;
   illumination: number;
+  yawDegrees?: number;
   eyeAspectRatio: number;
   browRaise: number;
   mouthOpen: number;
@@ -26,6 +27,8 @@ export interface FrameStream {
   visitId: string;
   participantId: string;
   captureMode: CaptureMode;
+  occurredAt?: string;
+  captureAdapter?: CaptureAdapter;
   audio: AudioFeatureFrame[];
   face: FaceLandmarkFrame[];
 }

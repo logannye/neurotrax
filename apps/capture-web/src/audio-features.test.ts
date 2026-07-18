@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   calculateRms,
+  createVoiceActivityTracker,
   deriveAudioFeature,
   estimatePitchHz
 } from "./audio-features.js";
@@ -50,5 +51,19 @@ describe("browser audio feature derivation", () => {
       0.005
     );
     expect(clipped.clipped).toBe(true);
+  });
+
+  it("uses hysteresis so a borderline voice frame does not chatter", () => {
+    const tracker = createVoiceActivityTracker(0.005);
+    const clearVoice = tracker.derive(
+      sineWave(140, 48_000, 4096, 0.04),
+      48_000
+    );
+    const softerContinuation = tracker.derive(
+      sineWave(140, 48_000, 4096, 0.014),
+      48_000
+    );
+    expect(clearVoice.voiced).toBe(true);
+    expect(softerContinuation.voiced).toBe(true);
   });
 });

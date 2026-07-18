@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { runConductor } from "./conductor.js";
+import { createConductorSession, runConductor } from "./conductor.js";
 import type { FrameStream } from "./primitives.js";
 
 function loadFixture(): FrameStream {
@@ -25,24 +25,28 @@ describe("runConductor", () => {
       "prototype.face.blink_rate",
       "prototype.face.brow_amplitude",
       "prototype.face.expressivity",
-      "prototype.speech.articulation_rate",
-      "prototype.speech.pause_count",
-      "prototype.speech.pitch_variability"
+      "prototype.speech.pause_rate",
+      "prototype.speech.pitch_variability",
+      "prototype.speech.voiced_time_fraction"
     ]);
     const aggregateByCode = new Map(
       observation.aggregates.map((aggregate) => [aggregate.code, aggregate])
     );
     expect(
-      aggregateByCode.get("prototype.speech.articulation_rate")!.value
+      aggregateByCode.get("prototype.speech.voiced_time_fraction")!.value
     ).toBeCloseTo(0.95, 5);
     expect(
-      aggregateByCode.get("prototype.speech.pause_count")!.value
-    ).toBe(1);
+      aggregateByCode.get("prototype.speech.pause_rate")!.value
+    ).toBe(0);
     expect(observation.windows[0].context.confounds.snrDb).toBeGreaterThan(0);
 
-    expect(events[0].type).toBe("capture.window.detected");
+    expect(events[0].type).toBe("consent.recorded");
+    expect(events[1].type).toBe("analysis.started");
+    expect(
+      events.some((event) => event.type === "capture.window.detected")
+    ).toBe(true);
     expect(events.at(-1)!.type).toBe("encounter-observation.created");
-    expect(events).toHaveLength(9);
+    expect(events.length).toBeGreaterThan(9);
     const lanes = new Set(events.map((e) => e.actor.lane));
     expect(lanes.has("capture-conductor")).toBe(true);
     expect(lanes.has("speech-acoustic")).toBe(true);
@@ -94,7 +98,96 @@ describe("runConductor", () => {
     } as unknown as FrameStream;
 
     expect(() => runConductor(unsafe)).toThrow(
-      /only explicitly non-PHI synthetic streams/
+      /explicitly marked containsPHI: false/
+    );
+  });
+
+  it("withholds the facial lane during a turn-away while speech continues, then recovers", () => {
+    const emitted: ReturnType<ReturnType<typeof createConductorSession>["getEvents"]> = [];
+    const session = createConductorSession(
+      {
+        containsPHI: false,
+        visitId: "visit-turn-away",
+        participantId: "developer-self-demo",
+        captureMode: "fixture-playback",
+        occurredAt: "2026-07-18T16:00:00.000Z",
+        captureAdapter: { id: "turn-away-fixture", version: "0.2.0" }
+      },
+      {
+        baseTimeMs: Date.parse("2026-07-18T16:00:00.000Z"),
+        onEvent: (event) => emitted.push(event)
+      }
+    );
+
+    for (let tMs = 0; tMs <= 5200; tMs += 100) {
+      session.ingestAudio({
+        tMs,
+        voiced: true,
+        rms: 0.08,
+        pitchHz: 125 + (tMs % 400) / 20,
+        clipped: false,
+        snrDb: 21
+      });
+      const turnedAway = tMs >= 1800 && tMs <= 2800;
+      session.ingestFace({
+        tMs,
+        faceVisible: !turnedAway,
+        framingFraction: turnedAway ? 0 : 0.88,
+        illumination: 0.58,
+        yawDegrees: turnedAway ? 48 : 4,
+        eyeAspectRatio: 0.3,
+        browRaise: 0.15 + (tMs % 300) / 3000,
+        mouthOpen: 0.1,
+        landmarkMotion: 0.03,
+        observedFrameRate: 10
+      });
+    }
+
+    const { observation } = session.complete();
+    const faceQuality = emitted.filter(
+      (event) =>
+        event.type === "capture.quality.changed" &&
+        event.actor.id === "facial-expressivity"
+    );
+    const withheldIndex = faceQuality.findIndex(
+      (event) => event.payload.quality === "withheld"
+    );
+    const recoveredIndex = faceQuality.findIndex(
+      (event, index) =>
+        index > withheldIndex && event.payload.quality === "measurable"
+    );
+
+    expect(withheldIndex).toBeGreaterThanOrEqual(0);
+    expect(recoveredIndex).toBeGreaterThan(withheldIndex);
+    expect(
+      emitted.some(
+        (event) =>
+          event.type === "measurement.recorded" &&
+          event.actor.id === "speech-acoustic"
+      )
+    ).toBe(true);
+    expect(
+      observation.abstentions.some(
+        (abstention) =>
+          abstention.modality === "face" &&
+          abstention.windowStartMs <= 1800 &&
+          abstention.windowEndMs >= 2800
+      )
+    ).toBe(true);
+    expect(
+      observation.measurements.some(
+        (measurement) =>
+          measurement.code.startsWith("prototype.face.") &&
+          measurement.windowStartMs < 2800 &&
+          measurement.windowEndMs > 1800
+      )
+    ).toBe(false);
+    expect(observation.windows.filter((window) => window.modality === "face")).toHaveLength(2);
+    expect(new Set(emitted.map((event) => event.eventId)).size).toBe(
+      emitted.length
+    );
+    emitted.forEach((event, index) =>
+      expect(event.sequence).toBe(index + 1)
     );
   });
 });

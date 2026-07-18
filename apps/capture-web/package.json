@@ -7,12 +7,23 @@
     "dev": "vite --host 127.0.0.1 --port 4173 --strictPort",
     "build": "vite build",
     "test:unit": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "test:browser": "playwright test",
+    "typecheck": "tsc --noEmit",
+    "demo:smoke": "tsx server/model-smoke.ts"
   },
   "dependencies": {
-    "@neurotrax/ambient-core": "workspace:*"
+    "@mediapipe/tasks-vision": "0.10.35",
+    "@neurotrax/ambient-core": "workspace:*",
+    "@neurotrax/contracts": "workspace:*",
+    "@neurotrax/evidence-core": "workspace:*",
+    "@neurotrax/trajectory-core": "workspace:*",
+    "openai": "6.48.0",
+    "zod": "4.4.3"
   },
   "devDependencies": {
+    "@playwright/test": "1.61.1",
+    "@types/node": "22.20.0",
+    "tsx": "4.20.6",
     "typescript": "5.6.3",
     "vite": "8.1.5",
     "vitest": "2.1.4"

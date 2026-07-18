@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { extractSpeechAcoustic, SPEECH_ACOUSTIC_VERSION } from "./speech-acoustic.js";
+import {
+  countBoundedPauses,
+  extractSpeechAcoustic,
+  SPEECH_ACOUSTIC_VERSION
+} from "./speech-acoustic.js";
 import type { AudioFeatureFrame } from "./primitives.js";
 import type { Abstention, MeasurableWindow, Measurement } from "@neurotrax/contracts";
 
@@ -10,7 +14,13 @@ const window: MeasurableWindow = {
   endMs: 500,
   context: {
     kind: "spontaneous-speech",
-    confounds: { snrDb: 20, faceFramingFraction: 1, observedFrameRate: 30, illuminationRelative: 0.8 }
+    confounds: {
+      snrDb: 20,
+      faceFramingFraction: 1,
+      observedFrameRate: 30,
+      illuminationRelative: 0.8,
+      yawDegrees: 0
+    }
   }
 };
 
@@ -27,8 +37,8 @@ describe("extractSpeechAcoustic", () => {
     const result = extractSpeechAcoustic(window, frames) as Measurement[];
     expect(Array.isArray(result)).toBe(true);
     const byCode = new Map(result.map((m) => [m.code, m]));
-    expect(byCode.get("prototype.speech.articulation_rate")!.value).toBeCloseTo(0.8, 5);
-    expect(byCode.get("prototype.speech.pause_count")!.value).toBe(1);
+    expect(byCode.get("prototype.speech.voiced_time_fraction")!.value).toBeCloseTo(0.8, 5);
+    expect(byCode.get("prototype.speech.pause_rate")!.value).toBe(0);
     expect(byCode.get("prototype.speech.pitch_variability")!.value).toBeGreaterThan(0);
     for (const m of result) {
       expect(m.algorithmVersion).toBe(SPEECH_ACOUSTIC_VERSION);
@@ -49,5 +59,45 @@ describe("extractSpeechAcoustic", () => {
     const frames = [frame(0, true, 120), frame(100, false, null)];
     const result = extractSpeechAcoustic(window, frames) as Abstention;
     expect(result.reasonCode).toBe("insufficient-voiced-frames");
+  });
+
+  it("counts only pauses lasting between 300 and 2000 milliseconds", () => {
+    const frames = [
+      frame(0, true, 120),
+      frame(100, true, 121),
+      frame(200, true, 119),
+      frame(300, false, null),
+      frame(400, false, null),
+      frame(500, false, null),
+      frame(600, true, 122),
+      frame(700, true, 120)
+    ];
+    const result = extractSpeechAcoustic(
+      { ...window, endMs: 700 },
+      frames
+    ) as Measurement[];
+    expect(
+      new Map(result.map((measurement) => [measurement.code, measurement]))
+        .get("prototype.speech.pause_rate")!.value
+    ).toBeGreaterThan(0);
+  });
+
+  it("excludes pauses shorter than 300 ms and longer than 2000 ms", () => {
+    const shortPause = [
+      frame(0, true, 120),
+      frame(100, false, null),
+      frame(200, false, null),
+      frame(300, true, 121)
+    ];
+    const longPause = [
+      frame(0, true, 120),
+      ...Array.from({ length: 21 }, (_, index) =>
+        frame((index + 1) * 100, false, null)
+      ),
+      frame(2200, true, 121)
+    ];
+
+    expect(countBoundedPauses(shortPause)).toBe(0);
+    expect(countBoundedPauses(longPause)).toBe(0);
   });
 });

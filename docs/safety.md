@@ -2,60 +2,56 @@
 
 ## Prototype boundary
 
-Neurotrax is not a medical device and must not be used with real patient
-data or for clinical decisions.
+Neurotrax is an engineering and hackathon demonstration, not a medical device.
+Use only the presenter's explicitly consented self-demo data. Do not use PHI or
+make clinical decisions from its output.
 
 ## Required behavior
 
-- Obtain explicit consent before device access or analysis.
-- Keep the analysis state visible.
-- Stop analysis immediately on pause or withdrawal.
-- Process raw audiovisual frames ephemerally and locally by default.
-- Do not retain raw media unless a separately approved evidence-snippet policy
-  explicitly permits it.
-- Return `not measurable` when quality fails.
-- Keep measurement, interpretation, and action separate.
-- Require human acceptance before updating longitudinal history.
-- Treat media and transcripts as untrusted data.
-- Record window, quality, device, context, and algorithm provenance.
-- Derive the visible agent flight recorder from immutable system events.
-- Ground each generated evidence-card claim in a measurement, quality result,
-  context field, or source clip.
+- Consent is required before device access or analysis.
+- Live device and fixture modes remain visibly distinguishable.
+- Camera and microphone tracks stop when the encounter ends or the page exits.
+- Raw frames and samples are processed ephemerally; no recording path exists.
+- Each modality applies its own quality contract and can abstain independently.
+- An unusable interval yields no measurement value.
+- Measurements, comparison, narrative generation, and human disposition remain
+  separate steps.
+- Only accepted observations enter in-memory page-session history.
+- Every visible agent action derives from a versioned workflow event.
+- Every narrative claim resolves to a precomputed fact, aggregate, measurement
+  window, quality/confound envelope, and originating events.
+
+## Model boundary
+
+The Evidence Agent receives bounded structured non-PHI facts only. It never
+receives microphone samples, camera frames, landmarks, screenshots,
+transcripts, or conversation content.
+
+The model cannot create measurements or choose compatible history. A
+deterministic validator blocks unsupported or clinical language. Failure is
+shown openly and must be retried; the application does not replace it with
+apparently successful canned prose.
+
+`OPENAI_API_KEY` is server-side only. It must never use a `VITE_` prefix or be
+committed.
 
 ## Forbidden MVP behavior
 
-- diagnosis;
-- treatment or medication advice;
-- emergency prediction;
-- analysis without explicit, revocable consent;
-- continuous raw-media recording;
+- diagnosis, disease classification, or progression inference;
+- treatment, medication, or clinical recommendations;
+- emergency, fall, swallowing, or respiratory-risk prediction;
+- emotion, truthfulness, intent, capacity, or cognition inference;
 - interpretation of conversation content;
-- emotion, intent, capacity, or truthfulness inference;
-- rigidity, aspiration, respiratory-failure, or fall-risk claims;
-- silent model training on captured media;
-- automated patient communication;
-- use of protected health information;
-- fabricated agent activity, progress, confidence, or hidden reasoning.
+- patient alerts or autonomous communication;
+- EHR writes or other consequential actions;
+- PHI, patient data, or real clinical use;
+- raw-media recording, screenshots, transcripts, or retained clips;
+- hidden fixture substitution;
+- fabricated agent activity, progress, confidence, or reasoning.
 
-## Movement safety
+## Deployment deferrals
 
-The initial check-in is seated. It does not include walking, balance challenges,
-swallowing, medication withholding, or exertion.
-
-## Privacy
-
-The preferred prototype mode is local:
-
-- synthetic identifiers;
-- derived primitive frames and measurements rather than retained media;
-- explicit deletion for any future governed evidence snippets;
-- no Git-tracked media;
-- no cloud upload by default.
-
-The live demo may use seeded longitudinal history only when it is deterministic,
-synthetic, and visibly labeled. The current camera and microphone capture must
-remain live unless the interface explicitly discloses fallback playback.
-
-Before any production or research deployment, complete a formal threat model,
-privacy review, consent design, security controls, and applicable regulatory and
-institutional review.
+Before research or production use, complete technical verification, analytical
+repeatability, clinical validation for an intended population, privacy and
+security review, consent design, threat modeling, model governance, regulatory
+analysis, and institutional review as applicable.

@@ -20,7 +20,9 @@
           </span>
         </a>
         <div class="header-badges">
-          <span class="badge badge-outline">Research prototype</span>
+          <span class="badge badge-outline" id="capture-mode-badge"
+            >Research prototype</span
+          >
           <span class="badge badge-live" id="header-mode">Ready</span>
         </div>
       </header>
@@ -28,13 +30,21 @@
       <main>
         <section class="intro-row" aria-labelledby="page-title">
           <div>
-            <p class="eyebrow">Live MacBook adapter · v0.1</p>
+            <p class="eyebrow">Live MacBook adapter · v0.2</p>
             <h1 id="page-title">Let the encounter explain itself.</h1>
           </div>
           <p class="intro-copy">
-            Your camera stays live for context. Your microphone becomes
-            ephemeral feature frames. Nothing is recorded or uploaded.
+            Raw camera and microphone data remain ephemeral. Only bounded,
+            non-PHI measurements can reach the Evidence Agent.
           </p>
+        </section>
+
+        <section class="readiness-bar" id="readiness-bar" aria-live="polite">
+          <span class="readiness-dot" id="readiness-dot"></span>
+          <strong id="readiness-title">Checking demo readiness</strong>
+          <span id="readiness-detail"
+            >Loading the facial model and checking the Evidence Agent.</span
+          >
         </section>
 
         <section class="demo-shell" aria-label="Live ambient capture">
@@ -47,6 +57,11 @@
                 playsinline
                 aria-label="Live self-facing camera preview"
               ></video>
+              <canvas
+                id="face-overlay"
+                class="face-overlay"
+                aria-hidden="true"
+              ></canvas>
 
               <div class="camera-empty" id="camera-empty">
                 <span class="camera-aperture" aria-hidden="true"></span>
@@ -82,6 +97,21 @@
                 <span><strong id="frame-count">0</strong> audio frames</span>
                 <span><strong id="voiced-count">0</strong> voiced</span>
                 <span><strong id="pitch-value">—</strong> pitch</span>
+              </div>
+            </div>
+
+            <div class="telemetry telemetry-face" aria-label="Live facial telemetry">
+              <div class="telemetry-label">
+                <span>Camera signal</span>
+                <strong id="face-state">Waiting</strong>
+              </div>
+              <div class="face-quality-track">
+                <span id="face-quality-fill"></span>
+              </div>
+              <div class="telemetry-stats">
+                <span><strong id="face-frame-count">0</strong> frames</span>
+                <span><strong id="face-yaw-value">—</strong> yaw</span>
+                <span><strong id="face-fps-value">—</strong> FPS</span>
               </div>
             </div>
 
@@ -145,21 +175,39 @@
                 <span class="lane-index">03</span>
                 <div>
                   <strong>Facial Expressivity</strong>
-                  <p>Camera preview only; landmark adapter is not connected.</p>
+                  <p id="face-status">Loading the local landmark adapter.</p>
                 </div>
-                <span class="lane-state">Not connected</span>
+                <span class="lane-state" id="face-lane-state">Loading</span>
+              </article>
+
+              <article class="lane-card" data-lane="personal-trajectory">
+                <span class="lane-index">04</span>
+                <div>
+                  <strong>Personal Trajectory</strong>
+                  <p id="trajectory-status">Waiting for a completed observation.</p>
+                </div>
+                <span class="lane-state" id="trajectory-state">Waiting</span>
+              </article>
+
+              <article class="lane-card" data-lane="evidence-card">
+                <span class="lane-index">05</span>
+                <div>
+                  <strong>Evidence Agent</strong>
+                  <p id="evidence-status">Checking GPT-5.6 readiness.</p>
+                </div>
+                <span class="lane-state" id="evidence-state">Checking</span>
               </article>
             </div>
 
             <div class="trace-block">
               <div class="trace-heading">
                 <h3>Structured event trace</h3>
-                <span>Created after capture</span>
+                <span>Live · versioned · no chain-of-thought</span>
               </div>
               <ol class="event-list" id="event-list">
                 <li class="event-placeholder">
-                  The Conductor will publish its versioned events here after
-                  you end the encounter.
+                  The Conductor will publish real, versioned workflow events
+                  here while the encounter runs.
                 </li>
               </ol>
             </div>
@@ -175,7 +223,79 @@
             <div class="result-summary" id="result-summary"></div>
           </div>
 
-          <div class="aggregate-grid" id="aggregate-grid"></div>
+          <div class="result-section">
+            <div class="section-heading">
+              <div>
+                <span class="section-number">01</span>
+                <h3>Current encounter measurements</h3>
+              </div>
+              <span class="disclosure-chip">LIVE SELF-DEMO</span>
+            </div>
+            <div class="aggregate-grid" id="aggregate-grid"></div>
+          </div>
+
+          <div class="result-section trajectory-section" id="trajectory-panel">
+            <div class="section-heading">
+              <div>
+                <span class="section-number">02</span>
+                <h3>Personal trajectory</h3>
+              </div>
+              <span class="disclosure-chip disclosure-synthetic"
+                >SYNTHETIC HISTORY</span
+              >
+            </div>
+            <div class="trajectory-summary" id="trajectory-summary"></div>
+            <div class="trajectory-grid" id="trajectory-grid"></div>
+            <div class="exclusion-list" id="exclusion-list"></div>
+          </div>
+
+          <div class="result-section evidence-section" id="evidence-panel">
+            <div class="section-heading">
+              <div>
+                <span class="section-number">03</span>
+                <h3>Clinician Evidence Card</h3>
+              </div>
+              <span class="disclosure-chip" id="evidence-model-chip"
+                >GPT-5.6 REQUIRED</span
+              >
+            </div>
+            <div class="evidence-loading" id="evidence-loading">
+              The Evidence Agent will synthesize only grounded structured facts.
+            </div>
+            <div class="evidence-error" id="evidence-error" hidden></div>
+            <button
+              class="button button-quiet"
+              id="retry-evidence-button"
+              hidden
+            >
+              Retry evidence synthesis
+            </button>
+            <article class="evidence-card" id="evidence-card" hidden>
+              <p class="eyebrow">Provisional engineering observation</p>
+              <h3 id="evidence-headline"></h3>
+              <p id="evidence-summary"></p>
+              <div class="evidence-claims" id="evidence-claims"></div>
+              <p class="boundary-statement" id="boundary-statement"></p>
+              <div class="review-controls" id="review-controls">
+                <button class="button button-primary" id="accept-button">
+                  Accept for this session
+                </button>
+                <button class="button button-quiet" id="reject-button">
+                  Reject
+                </button>
+              </div>
+              <p class="review-outcome" id="review-outcome"></p>
+            </article>
+          </div>
+
+          <aside class="trace-drawer" id="trace-drawer" hidden>
+            <button class="trace-close" id="trace-close-button" aria-label="Close evidence trace">
+              ×
+            </button>
+            <p class="eyebrow">Why this appeared</p>
+            <h3 id="trace-title">Evidence trace</h3>
+            <div id="trace-content"></div>
+          </aside>
 
           <details class="technical-details">
             <summary>Inspect the complete observation JSON</summary>
@@ -187,9 +307,9 @@
           <strong>What this build proves</strong>
           <p>
             Live permissioning, ephemeral microphone feature extraction,
-            deterministic agent orchestration, honest abstention, and a
-            traceable per-visit artifact. Facial landmarks, longitudinal
-            comparison, and the clinician evidence card come next.
+            independent audiovisual agents, honest abstention, synthetic
+            personal comparison, and a model-drafted but deterministically
+            grounded clinician artifact.
           </p>
         </section>
       </main>

@@ -8,6 +8,7 @@ export interface DerivedAudioFeature {
 
 export const MIN_VOICE_RMS = 0.012;
 export const VOICE_TO_NOISE_RATIO = 2.5;
+export const VOICE_EXIT_TO_NOISE_RATIO = 1.7;
 const MIN_PITCH_HZ = 70;
 const MAX_PITCH_HZ = 350;
 const MIN_PITCH_CORRELATION = 0.55;
@@ -70,13 +71,17 @@ export function estimatePitchHz(
 export function deriveAudioFeature(
   samples: Float32Array,
   sampleRate: number,
-  noiseFloorRms: number
+  noiseFloorRms: number,
+  currentlyVoiced = false
 ): DerivedAudioFeature {
   const rms = calculateRms(samples);
   const pitchHz = estimatePitchHz(samples, sampleRate);
   const voiceThreshold = Math.max(
-    MIN_VOICE_RMS,
-    noiseFloorRms * VOICE_TO_NOISE_RATIO
+    currentlyVoiced ? MIN_VOICE_RMS * 0.72 : MIN_VOICE_RMS,
+    noiseFloorRms *
+      (currentlyVoiced
+        ? VOICE_EXIT_TO_NOISE_RATIO
+        : VOICE_TO_NOISE_RATIO)
   );
   const safeNoiseFloor = Math.max(noiseFloorRms, 0.0001);
   const snrDb =
@@ -93,5 +98,48 @@ export function deriveAudioFeature(
     voiced: rms >= voiceThreshold,
     clipped: peak >= 0.98,
     snrDb
+  };
+}
+
+export interface VoiceActivityTracker {
+  derive(samples: Float32Array, sampleRate: number): DerivedAudioFeature;
+  reset(): void;
+  getNoiseFloorRms(): number;
+}
+
+export function createVoiceActivityTracker(
+  initialNoiseFloorRms = 0.006
+): VoiceActivityTracker {
+  let noiseFloorRms = initialNoiseFloorRms;
+  let voiced = false;
+
+  return {
+    derive(samples, sampleRate) {
+      const feature = deriveAudioFeature(
+        samples,
+        sampleRate,
+        noiseFloorRms,
+        voiced
+      );
+      voiced = feature.voiced;
+      if (!feature.voiced && feature.rms > 0 && !feature.clipped) {
+        const cappedSample = Math.min(
+          feature.rms,
+          Math.max(MIN_VOICE_RMS, noiseFloorRms * 1.5)
+        );
+        noiseFloorRms = Math.max(
+          0.0005,
+          noiseFloorRms * 0.94 + cappedSample * 0.06
+        );
+      }
+      return feature;
+    },
+    reset() {
+      noiseFloorRms = initialNoiseFloorRms;
+      voiced = false;
+    },
+    getNoiseFloorRms() {
+      return noiseFloorRms;
+    }
   };
 }
