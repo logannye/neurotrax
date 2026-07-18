@@ -11,11 +11,19 @@ required_files=(
   "docs/safety.md"
   "docs/validation.md"
   "apps/capture-web/README.md"
+  "apps/capture-web/server/evidence-agent.ts"
+  "apps/capture-web/src/face-worker.ts"
+  "apps/capture-web/public/models/face_landmarker.task"
+  "apps/capture-web/public/mediapipe/vision_wasm_internal.wasm"
   "apps/clinician-review/README.md"
-  "agents/guided-capture/README.md"
+  "agents/ambient-capture/README.md"
   "agents/personal-trajectory/README.md"
   "agents/evidence-card/README.md"
   "packages/contracts/README.md"
+  "packages/contracts/src/trajectory.ts"
+  "packages/contracts/src/evidence.ts"
+  "packages/trajectory-core/fixtures/synthetic-history.json"
+  "packages/evidence-core/src/evidence.ts"
   "packages/event-log/README.md"
   "protocols/macbook-check-in.v0.1.json"
   "examples/prior-encounter-observation.example.json"
@@ -522,6 +530,56 @@ node <<'NODE'
       "Evidence-card review must match the final human-review event."
     );
   }
+
+  const currentHistory = JSON.parse(
+    fs.readFileSync(
+      "packages/trajectory-core/fixtures/synthetic-history.json",
+      "utf8"
+    )
+  );
+  const currentCapturePackage = JSON.parse(
+    fs.readFileSync("apps/capture-web/package.json", "utf8")
+  );
+  const modern = currentHistory.filter((record) =>
+    record.aggregates.every((aggregate) =>
+      ["speech-acoustic-0.2", "facial-expressivity-0.1"].includes(
+        aggregate.algorithmVersion
+      )
+    )
+  );
+  const oldAlgorithm = currentHistory.filter((record) =>
+    record.aggregates.some((aggregate) =>
+      ["speech-acoustic-0.1", "facial-expressivity-0.0"].includes(
+        aggregate.algorithmVersion
+      )
+    )
+  );
+  if (
+    currentHistory.length !== 4 ||
+    modern.length !== 3 ||
+    oldAlgorithm.length !== 1 ||
+    currentHistory.some(
+      (record) =>
+        record.containsPHI !== false ||
+        record.synthetic !== true ||
+        record.source !== "synthetic-fixture" ||
+        record.reviewStatus !== "accepted"
+    )
+  ) {
+    throw new Error(
+      "Current trajectory fixture must contain three compatible synthetic visits and one old-algorithm exclusion."
+    );
+  }
+  if (
+    currentCapturePackage.dependencies["@mediapipe/tasks-vision"] !==
+      "0.10.35" ||
+    currentCapturePackage.dependencies.openai !== "6.48.0" ||
+    currentCapturePackage.dependencies.zod !== "4.4.3"
+  ) {
+    throw new Error(
+      "MediaPipe, OpenAI, and Zod must remain pinned to the demo-reviewed versions."
+    );
+  }
 NODE
 
 agent_count="$(find agents -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d ' ')"
@@ -537,4 +595,14 @@ if find . -type f \
   exit 1
 fi
 
-echo "Neurotrax structure and event stream are valid."
+expected_model_hash="64184e229b263107bc2b804c6625db1341ff2bb731874b0bcc2fe6544e0bc9ff"
+actual_model_hash="$(
+  shasum -a 256 apps/capture-web/public/models/face_landmarker.task |
+    awk '{print $1}'
+)"
+if [[ "$actual_model_hash" != "$expected_model_hash" ]]; then
+  echo "Face Landmarker model hash does not match the reviewed asset." >&2
+  exit 1
+fi
+
+echo "Neurotrax structure, assets, fixtures, and event stream are valid."

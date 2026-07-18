@@ -1,0 +1,166 @@
+[
+  {
+    "containsPHI": false,
+    "synthetic": true,
+    "source": "synthetic-fixture",
+    "visitId": "synthetic-history-2026-04",
+    "participantId": "developer-self-demo",
+    "occurredAt": "2026-04-18T16:00:00.000Z",
+    "captureMode": "fixture-playback",
+    "captureAdapter": { "id": "macbook-browser", "version": "0.2.0" },
+    "reviewStatus": "accepted",
+    "aggregates": [
+      {
+        "code": "prototype.speech.pitch_variability",
+        "label": "Pitch variability",
+        "unit": "semitone-stddev",
+        "contextKind": "spontaneous-speech",
+        "value": 1.8,
+        "spread": 0.1,
+        "confidence": 0.72,
+        "windowCount": 2,
+        "algorithmVersion": "speech-acoustic-0.2",
+        "confounds": { "snrDb": 17, "faceFramingFraction": 0, "observedFrameRate": 0, "illuminationRelative": 0, "yawDegrees": 0 },
+        "uncertainty": "placeholder",
+        "clinicalValidation": "none"
+      },
+      {
+        "code": "prototype.face.expressivity",
+        "label": "Facial movement",
+        "unit": "motion-index",
+        "contextKind": "listening-expressive",
+        "value": 0.042,
+        "spread": 0.004,
+        "confidence": 0.82,
+        "windowCount": 2,
+        "algorithmVersion": "facial-expressivity-0.1",
+        "confounds": { "snrDb": 0, "faceFramingFraction": 0.84, "observedFrameRate": 10, "illuminationRelative": 0.58, "yawDegrees": 8 },
+        "uncertainty": "placeholder",
+        "clinicalValidation": "none"
+      }
+    ]
+  },
+  {
+    "containsPHI": false,
+    "synthetic": true,
+    "source": "synthetic-fixture",
+    "visitId": "synthetic-history-2026-05",
+    "participantId": "developer-self-demo",
+    "occurredAt": "2026-05-18T16:00:00.000Z",
+    "captureMode": "fixture-playback",
+    "captureAdapter": { "id": "macbook-browser", "version": "0.2.0" },
+    "reviewStatus": "accepted",
+    "aggregates": [
+      {
+        "code": "prototype.speech.pitch_variability",
+        "label": "Pitch variability",
+        "unit": "semitone-stddev",
+        "contextKind": "spontaneous-speech",
+        "value": 2,
+        "spread": 0.1,
+        "confidence": 0.74,
+        "windowCount": 2,
+        "algorithmVersion": "speech-acoustic-0.2",
+        "confounds": { "snrDb": 16, "faceFramingFraction": 0, "observedFrameRate": 0, "illuminationRelative": 0, "yawDegrees": 0 },
+        "uncertainty": "placeholder",
+        "clinicalValidation": "none"
+      },
+      {
+        "code": "prototype.face.expressivity",
+        "label": "Facial movement",
+        "unit": "motion-index",
+        "contextKind": "listening-expressive",
+        "value": 0.047,
+        "spread": 0.004,
+        "confidence": 0.84,
+        "windowCount": 2,
+        "algorithmVersion": "facial-expressivity-0.1",
+        "confounds": { "snrDb": 0, "faceFramingFraction": 0.86, "observedFrameRate": 10, "illuminationRelative": 0.6, "yawDegrees": 7 },
+        "uncertainty": "placeholder",
+        "clinicalValidation": "none"
+      }
+    ]
+  },
+  {
+    "containsPHI": false,
+    "synthetic": true,
+    "source": "synthetic-fixture",
+    "visitId": "synthetic-history-2026-06",
+    "participantId": "developer-self-demo",
+    "occurredAt": "2026-06-18T16:00:00.000Z",
+    "captureMode": "fixture-playback",
+    "captureAdapter": { "id": "macbook-browser", "version": "0.2.0" },
+    "reviewStatus": "accepted",
+    "aggregates": [
+      {
+        "code": "prototype.speech.pitch_variability",
+        "label": "Pitch variability",
+        "unit": "semitone-stddev",
+        "contextKind": "spontaneous-speech",
+        "value": 1.9,
+        "spread": 0.1,
+        "confidence": 0.76,
+        "windowCount": 2,
+        "algorithmVersion": "speech-acoustic-0.2",
+        "confounds": { "snrDb": 18, "faceFramingFraction": 0, "observedFrameRate": 0, "illuminationRelative": 0, "yawDegrees": 0 },
+        "uncertainty": "placeholder",
+        "clinicalValidation": "none"
+      },
+      {
+        "code": "prototype.face.expressivity",
+        "label": "Facial movement",
+        "unit": "motion-index",
+        "contextKind": "listening-expressive",
+        "value": 0.045,
+        "spread": 0.004,
+        "confidence": 0.85,
+        "windowCount": 2,
+        "algorithmVersion": "facial-expressivity-0.1",
+        "confounds": { "snrDb": 0, "faceFramingFraction": 0.85, "observedFrameRate": 10, "illuminationRelative": 0.59, "yawDegrees": 8 },
+        "uncertainty": "placeholder",
+        "clinicalValidation": "none"
+      }
+    ]
+  },
+  {
+    "containsPHI": false,
+    "synthetic": true,
+    "source": "synthetic-fixture",
+    "visitId": "synthetic-history-2026-03-incompatible",
+    "participantId": "developer-self-demo",
+    "occurredAt": "2026-03-18T16:00:00.000Z",
+    "captureMode": "fixture-playback",
+    "captureAdapter": { "id": "macbook-browser", "version": "0.2.0" },
+    "reviewStatus": "accepted",
+    "aggregates": [
+      {
+        "code": "prototype.speech.pitch_variability",
+        "label": "Pitch variability",
+        "unit": "hz-stddev",
+        "contextKind": "spontaneous-speech",
+        "value": 48,
+        "spread": 3,
+        "confidence": 0.7,
+        "windowCount": 2,
+        "algorithmVersion": "speech-acoustic-0.1",
+        "confounds": { "snrDb": 17, "faceFramingFraction": 0, "observedFrameRate": 0, "illuminationRelative": 0, "yawDegrees": 0 },
+        "uncertainty": "placeholder",
+        "clinicalValidation": "none"
+      },
+      {
+        "code": "prototype.face.expressivity",
+        "label": "Facial movement",
+        "unit": "motion-index",
+        "contextKind": "listening-expressive",
+        "value": 0.044,
+        "spread": 0.004,
+        "confidence": 0.8,
+        "windowCount": 2,
+        "algorithmVersion": "facial-expressivity-0.0",
+        "confounds": { "snrDb": 0, "faceFramingFraction": 0.85, "observedFrameRate": 10, "illuminationRelative": 0.58, "yawDegrees": 8 },
+        "uncertainty": "placeholder",
+        "clinicalValidation": "none"
+      }
+    ]
+  }
+]

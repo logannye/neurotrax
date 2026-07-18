@@ -1,23 +1,50 @@
 export type AmbientActorId =
+  | "capture-web"
   | "capture-conductor"
   | "speech-acoustic"
-  | "facial-expressivity";
+  | "facial-expressivity"
+  | "personal-trajectory"
+  | "evidence-card"
+  | "clinician-review";
 
 export interface AmbientActor {
-  kind: "agent";
+  kind: "application" | "agent" | "human-interface";
   id: AmbientActorId;
   lane: AmbientActorId;
   version: string;
 }
 
 export type AmbientEventType =
+  | "consent.recorded"
+  | "analysis.started"
+  | "analysis.stopped"
+  | "capture.quality.changed"
+  | "capture.window.opened"
+  | "capture.window.closed"
   | "capture.window.detected"
+  | "extractor.routed"
   | "measurement.recorded"
   | "measurement.abstained"
-  | "encounter-observation.created";
+  | "encounter-observation.created"
+  | "trajectory.compatibility.assessed"
+  | "trajectory.comparison.completed"
+  | "evidence-card.requested"
+  | "evidence-card.drafted"
+  | "evidence-claim.grounded"
+  | "evidence-claim.rejected"
+  | "evidence.trace.opened"
+  | "human-review.pending"
+  | "human-review.accepted"
+  | "human-review.rejected";
+
+export type WorkflowStage =
+  | "ambient-capture"
+  | "personal-trajectory"
+  | "evidence-card"
+  | "human-review";
 
 export interface EventEnvelope {
-  schemaVersion: "neurotrax.ambient-event.v0.1";
+  schemaVersion: "neurotrax.workflow-event.v0.2";
   eventId: string;
   sequence: number;
   occurredAt: string;
@@ -25,8 +52,9 @@ export interface EventEnvelope {
   participantId: string;
   actor: AmbientActor;
   type: AmbientEventType;
-  stage: "ambient-capture";
+  stage: WorkflowStage;
   summary: string;
   payload: Record<string, unknown>;
   evidenceRefs: string[];
+  causedByEventId?: string;
 }

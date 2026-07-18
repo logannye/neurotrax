@@ -35,11 +35,11 @@ describe("detectMeasurableWindows", () => {
   });
 
   it("retains bounded intra-speech silence inside one candidate window", () => {
-    const audio = Array.from({ length: 20 }, (_, i) => ({
+    const audio = Array.from({ length: 30 }, (_, i) => ({
       tMs: i * 100,
-      voiced: i !== 3,
-      rms: i === 3 ? 0.03 : 0.4,
-      pitchHz: i === 3 ? null : 120,
+      voiced: i < 8 || i >= 18,
+      rms: i >= 8 && i < 18 ? 0.03 : 0.4,
+      pitchHz: i >= 8 && i < 18 ? null : 120,
       clipped: false,
       snrDb: 20
     }));
@@ -50,7 +50,7 @@ describe("detectMeasurableWindows", () => {
     expect(windows[0]).toMatchObject({
       modality: "speech",
       startMs: 0,
-      endMs: 1900
+      endMs: 2900
     });
   });
 

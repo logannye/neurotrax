@@ -8,8 +8,20 @@ describe("createEventFactory", () => {
       participantId: "synthetic-participant-001",
       baseTimeMs: Date.parse("2026-07-18T16:00:00.000Z")
     });
-    const first = factory.next("capture-conductor", "capture.window.detected", "Detected a window.", 0);
-    const second = factory.next("speech-acoustic", "measurement.recorded", "Recorded a measurement.", -500);
+    const first = factory.next(
+      "capture-conductor",
+      "capture.window.detected",
+      "ambient-capture",
+      "Detected a window.",
+      0
+    );
+    const second = factory.next(
+      "speech-acoustic",
+      "measurement.recorded",
+      "ambient-capture",
+      "Recorded a measurement.",
+      -500
+    );
 
     expect(first.sequence).toBe(1);
     expect(first.eventId).toBe("1-capture.window.detected");

@@ -11,6 +11,7 @@ export interface ConfoundEnvelope {
   faceFramingFraction: number;
   observedFrameRate: number;
   illuminationRelative: number;
+  yawDegrees: number;
 }
 
 export interface MeasurementContext {

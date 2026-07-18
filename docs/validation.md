@@ -1,79 +1,100 @@
-# Validation plan
+# Validation and demo-readiness plan
 
-> **Superseded validation plan.** The checks below describe the earlier
-> prompted speech-and-finger-tapping demo. The accepted ambient design requires
-> candidate-window, abstention, context/confound, and longitudinal-comparability
-> validation. Treat this file as historical until the live-ingestion plan
-> replaces it.
+The validation target is agentic infrastructure and evidence fidelity—not a
+neurological biomarker claim.
 
-The first validation target is the infrastructure, not a disease biomarker.
+## Automated checks
 
-## Question 1: Can Guided Capture create a repeatable observation?
+### Ambient Capture
 
-Measure:
+- calibrated VAD and entry/exit hysteresis;
+- 300–2,000 ms pause counting;
+- semitone-normalized pitch variability;
+- face visibility, framing, yaw, blendshape proxies, and normalized motion;
+- 750 ms facial withhold/recovery thresholds;
+- incremental window open/close lifecycle;
+- monotonic event ordering and unique event IDs;
+- aggregate confound and confidence propagation;
+- explicit abstention rather than a fabricated value.
 
-- permission and consent completion;
-- successful first-pass capture;
-- bounded retry behavior;
-- audio clipping and noise detection;
-- video framing and observed frame rate;
-- correct task labeling;
-- asset hash and metadata completeness.
+The deterministic turn-away replay proves that face analysis abstains, speech
+continues, face analysis recovers, and no face measurement overlaps the
+unusable interval.
 
-## Question 2: Can Personal Trajectory select comparable history?
+### Personal Trajectory
 
-Test:
+- accepted-state, participant, code, context, and algorithm compatibility;
+- every SNR, framing, frame-rate, and illumination tolerance;
+- three included synthetic encounters and one algorithm-version exclusion;
+- median, range, median absolute deviation, delta, and direction;
+- session-only Accept mutation and Reject non-mutation.
 
-- inclusion of matching protocol and measurement versions;
-- exclusion of failed-quality observations;
-- visibility of device or context changes;
-- deterministic comparison selection;
-- uncertainty propagation;
-- no progression claim from one deviation.
+### Evidence Agent
 
-## Question 3: Can the Evidence Card support fast, correct review?
+- strict request and response schemas;
+- known claim IDs and exact pre-grounded statements;
+- measurement/window/event provenance;
+- unsupported numbers and prohibited clinical language;
+- model refusal or missing parsed output;
+- API timeout;
+- one grounding retry and second-failure block;
+- blank or absent server credential;
+- no deterministic prose fallback.
 
-Measure:
+### Browser state machine
 
-- time to understand the result;
-- ability to inspect source clips;
-- correctness of the accepted-or-rejected decision;
-- usefulness and fidelity of optional annotations;
-- whether rejected observations remain out of history;
-- note-edit burden;
-- reviewer trust and comprehension.
+Playwright runs a persistently disclosed derived-frame fixture through consent,
+facial abstention and recovery, trajectory inclusion/exclusion, evidence-card
+assembly, claim tracing, Accept, and Reject. Genuine hardware remains the
+default route and is not simulated by this test.
 
-## Demo-readiness gate
+## Commands
 
-The hackathon build is ready to present only when:
+```bash
+pnpm test
+pnpm test:browser
+pnpm demo:smoke
+```
 
-- the complete consent-to-review path runs locally in under three minutes;
-- every Agent Activity entry resolves to an immutable event envelope;
-- poor hand framing pauses capture, requests at most one correction, verifies
-  recovery, and can still end as `not measurable`;
-- the current camera and microphone capture is live or unmistakably labeled as
-  fixture playback;
-- all prior encounters remain visibly labeled synthetic;
-- the same deterministic fixture yields three included encounters and one
-  prompt-version exclusion;
-- every generated claim resolves to a measurement, source clip, and grounding
-  event;
-- acceptance and rejection produce different history outcomes; and
-- the interface makes no diagnosis, progression, cause, or treatment claim.
+`pnpm test` runs structure validation, all unit tests, all workspace
+typechecks, and the production build. `pnpm test:browser` uses installed Chrome.
+`pnpm demo:smoke` makes a real GPT-5.6 request and therefore requires a key and
+network access.
 
-Rehearse the preferred live path and every labeled fallback described in
-[the demo experience](demo-experience.md). Demo smoothness cannot come from
-fabricated agent activity or hidden fixture substitution.
+## Manual hardware rehearsal
 
-## Later validation
+Use the presentation MacBook, Chrome, seat position, resolution, and lighting:
 
-Only after the three-capability loop works should a measurement advance through:
+1. confirm the startup readiness bar;
+2. grant camera/microphone permission;
+3. verify a mirrored live preview and approximately 10 facial FPS;
+4. speak for at least three seconds and confirm the speech lane turns teal;
+5. keep speaking, turn away for at least one second, and confirm only the face
+   lane turns amber;
+6. return for at least one second and confirm face recovery;
+7. run for 20–30 seconds total, then end;
+8. verify both audio and facial aggregates;
+9. verify three synthetic inclusions and one exact version exclusion;
+10. require a grounded Evidence Card within 20 seconds;
+11. open every claim trace;
+12. test both Accept and Reject across two encounters;
+13. verify the Chrome camera indicator turns off after each encounter.
 
-1. technical verification;
-2. analytical repeatability;
-3. clinical validation in an intended population;
-4. responsiveness to meaningful change;
-5. clinical utility;
-6. economic evaluation.
+## Demo-ready gate
 
-Extractability is not validity, and sensitivity is not a surrogate endpoint.
+The build is ready when the manual path reliably:
+
+- shows real live media by default;
+- performs the facial abstention/recovery moment while speech continues;
+- creates both audio and facial measurements;
+- labels every historical point `SYNTHETIC`;
+- excludes the old algorithm encounter by its exact rule;
+- produces a grounded required-model card within 20 seconds;
+- traces every displayed claim to structured evidence;
+- visibly distinguishes Accept from Reject; and
+- makes no diagnostic, progression, causal, or treatment claim.
+
+## Current limitation
+
+Passing these gates validates software behavior only. It does not validate any
+`prototype.*` signal as a clinical biomarker or establish clinical utility.

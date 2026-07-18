@@ -23,20 +23,21 @@ describe("observation and event contracts", () => {
               snrDb: 20,
               faceFramingFraction: 0,
               observedFrameRate: 0,
-              illuminationRelative: 0
+              illuminationRelative: 0,
+              yawDegrees: 0
             }
           }
         }
       ],
       measurements: [
         {
-          code: "prototype.speech.articulation_rate",
-          label: "Articulation rate",
+          code: "prototype.speech.voiced_time_fraction",
+          label: "Voiced-time fraction",
           value: 0.95,
           unit: "voiced-fraction",
           confidence: 0.67,
           uncertainty: "placeholder",
-          algorithmVersion: "speech-acoustic-0.1",
+          algorithmVersion: "speech-acoustic-0.2",
           clinicalValidation: "none",
           contextRef: "speech-0",
           windowStartMs: 0,
@@ -46,20 +47,36 @@ describe("observation and event contracts", () => {
       ],
       aggregates: [
         {
-          code: "prototype.speech.articulation_rate",
-          label: "Articulation rate",
-          unit: "voiced-fraction",
+          code: "prototype.speech.voiced_time_fraction",
+          label: "Voiced-time fraction",
+          unit: "ratio",
           contextKind: "spontaneous-speech",
           value: 0.6,
           spread: 0.03,
+          confidence: 0.8,
           windowCount: 4,
-          algorithmVersion: "speech-acoustic-0.1",
+          algorithmVersion: "speech-acoustic-0.2",
+          confounds: {
+            snrDb: 20,
+            faceFramingFraction: 0,
+            observedFrameRate: 0,
+            illuminationRelative: 0,
+            yawDegrees: 0
+          },
           uncertainty: "placeholder",
           clinicalValidation: "none"
         }
       ],
       abstentions: [],
-      measurementCount: 1
+      measurementCount: 1,
+      occurredAt: "2026-07-18T16:00:00.000Z",
+      captureAdapter: { id: "fixture-replay", version: "0.2.0" },
+      qualitySummary: {
+        speechWindowCount: 1,
+        faceWindowCount: 0,
+        abstentionCount: 0,
+        qualityTransitionCount: 1
+      }
     };
     expect(observation.containsPHI).toBe(false);
     expect(observation.windows[0].context.confounds.snrDb).toBe(20);
@@ -69,7 +86,7 @@ describe("observation and event contracts", () => {
 
   it("models an ambient event envelope with lane identity", () => {
     const event: EventEnvelope = {
-      schemaVersion: "neurotrax.ambient-event.v0.1",
+      schemaVersion: "neurotrax.workflow-event.v0.2",
       eventId: "1-capture.window.detected",
       sequence: 1,
       occurredAt: "2026-07-18T16:00:00.000Z",
