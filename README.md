@@ -34,30 +34,36 @@ no invented value. The language model stays outside the measurement loop.
 
 ## What is implemented today
 
-The repository now contains a runnable, deterministic **headless ambient
-capture core**. It operates on a synthetic stream of already-derived audio
-features and face landmarks—never raw audio or video—and produces:
+The repository contains two runnable layers:
 
-- candidate speech and face measurement windows;
-- placeholder acoustic and facial measurements;
-- explicit extractor abstentions when quality gates fail;
+1. a deterministic **headless ambient capture core** that replays synthetic
+   derived audio and face primitives; and
+2. a minimal **live MacBook browser adapter** that requests explicit consent,
+   opens the self-facing camera and microphone, displays the live preview,
+   computes ephemeral audio features in the browser, and hands them to the
+   Capture Conductor when the encounter ends.
+
+The current system produces:
+
+- candidate speech measurement windows from live or fixture audio features;
+- placeholder acoustic measurements and honest no-value outcomes;
+- synthetic facial measurements and facial-quality abstentions in fixture
+  replay only;
 - robust per-visit aggregates using median and median absolute deviation;
 - a monotonic, ordered event trace tagged by processing lane; and
-- one synthetic `EncounterObservation` that preserves candidate windows,
-  confounds, per-window measurements, aggregates, and abstentions for the
-  future longitudinal layer.
+- an `EncounterObservation` preserving windows, confounds, per-window
+  measurements, aggregates, and abstentions.
 
-The headless replay is deliberately the first slice. It proves the measurement
-contracts, orchestration, deterministic replay, abstention behavior, and event
-provenance before browser and user-interface complexity are added.
+No raw microphone or camera media is recorded, uploaded, or persisted by the
+live adapter.
 
 ### Not implemented yet
 
 The current code does **not** yet:
 
-- open the MacBook camera or microphone;
-- compute voice activity, pitch, or face landmarks from live media;
-- provide a browser application or telehealth call;
+- compute face landmarks or facial measurements from the live camera;
+- stream Conductor events incrementally during an encounter;
+- provide a telehealth call;
 - retain or promote evidence clips;
 - store or trend observations across visits;
 - generate a clinician evidence card; or
@@ -111,7 +117,10 @@ not additional product capabilities or autonomous clinical actors.
 
 ```mermaid
 flowchart LR
-    FIXTURE["Synthetic primitive-frame stream"] --> CONDUCTOR["Capture Conductor"]
+    LIVE["Live MacBook mic"] --> AUDIO["Ephemeral browser audio features"]
+    CAMERA["Live MacBook camera"] --> PREVIEW["Local preview"]
+    FIXTURE["Synthetic audio + face primitives"] --> CONDUCTOR["Capture Conductor"]
+    AUDIO --> CONDUCTOR
     CONDUCTOR --> WINDOWS["Candidate-window detection"]
     WINDOWS --> SPEECH["Speech-acoustic extractor"]
     WINDOWS --> FACE["Facial-expressivity extractor"]
@@ -123,20 +132,21 @@ flowchart LR
     CONDUCTOR -. emits .-> EVENTS["Lane-tagged event stream"]
     SPEECH -. emits .-> EVENTS
     FACE -. emits .-> EVENTS
+
+    PREVIEW -. "landmark adapter next" .-> FACE
 ```
 
-The future browser ingestion layer will compute shared primitives once and feed
-the same core contracts:
+The live browser path currently operates as:
 
 ```text
 consented MacBook camera + microphone
-  -> ephemeral Web Audio and face-landmark primitives
-  -> Capture Conductor
+  -> live local camera preview
+  -> ephemeral Web Audio RMS, voice activity, SNR, clipping, and pitch features
+  -> Capture Conductor after the encounter ends
   -> candidate measurement windows
-  -> speech-acoustic and facial-expressivity extractors
+  -> speech-acoustic extractor
   -> per-visit aggregate + abstentions + agent events
-  -> longitudinal compatibility and trending
-  -> grounded clinician evidence card
+  -> structured observation displayed in the browser
 ```
 
 ### Why this is agentic
@@ -174,8 +184,23 @@ pnpm test
 `pnpm test` runs:
 
 1. the repository structure and safety-fixture validator;
-2. the ambient-core unit and end-to-end replay tests; and
-3. TypeScript typechecking.
+2. the browser audio-feature and ambient-core replay tests;
+3. TypeScript typechecking; and
+4. the production browser build.
+
+### Launch the live MacBook demo
+
+```bash
+pnpm dev
+```
+
+Open `http://127.0.0.1:4173`, check the self-demo consent box, and choose
+**Begin live encounter**. Allow camera and microphone access when the browser
+asks. Speak naturally for 8–12 seconds, then choose **End & analyze**.
+
+The app releases the camera and microphone before rendering the structured
+observation. If the browser or macOS blocks access, enable camera and
+microphone permission for the browser and reload the page.
 
 To run only the headless end-to-end replay tests:
 
@@ -231,7 +256,9 @@ deterministic signal processing
 - Analysis requires explicit, revocable consent.
 - The intended live path is **continuous analysis, not continuous recording**.
 - Raw audiovisual frames should be processed ephemerally and released.
-- The current core consumes derived primitives only and persists no media.
+- The live adapter releases its media tracks at the end of the encounter and
+  persists no raw media.
+- The core consumes derived primitives only.
 - Short evidence snippets are a future, separately governed feature.
 - Transcripts and media are untrusted data, never agent instructions.
 - Quality failure returns `not measurable`.
@@ -259,16 +286,15 @@ split in agent behavior: for example, the participant moves partially out of
 frame, the facial lane visibly abstains when its framing gate fails, and the
 speech lane continues only if its own quality contract still passes.
 
-The current visit will be genuinely live. Prior history will be deterministic
-and clearly labeled synthetic.
+The current camera and microphone session can now be genuinely live. Prior
+history and the live facial lane remain future work.
 
 ## Implementation roadmap
 
 The next three slices preserve the same three-capability product:
 
-1. **Browser real-time ingestion:** request consent and `getUserMedia`
-   permissions, compute audio and face primitives locally, and feed the
-   ambient core incrementally.
+1. **Complete live ambient capture:** add local face landmarks, facial
+   primitives, and incremental Conductor event emission.
 2. **Longitudinal store and compatibility:** persist accepted per-visit
    observations and compare only matching context, confounds, and algorithm
    versions.
@@ -284,14 +310,14 @@ this loop works beautifully end to end.
 ```text
 neurotrax/
 ├── apps/
-│   ├── capture-web/             # Legacy brief; ambient browser slice is next
+│   ├── capture-web/             # Runnable MacBook camera/mic demo
 │   └── clinician-review/        # Partial legacy brief; ambient re-key pending
 ├── agents/
 │   ├── guided-capture/          # Legacy capability notes; ambient design supersedes the script
 │   ├── personal-trajectory/     # Legacy prompt-version logic; ambient re-key pending
 │   └── evidence-card/           # Evidence boundary; ambient inputs pending
 ├── packages/
-│   ├── ambient-core/            # Runnable deterministic headless pipeline
+│   ├── ambient-core/            # Deterministic measurement pipeline
 │   ├── contracts/               # Shared ambient measurement contracts
 │   └── event-log/               # Legacy/demo event-log documentation
 ├── docs/

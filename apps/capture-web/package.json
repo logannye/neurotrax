@@ -1,0 +1,20 @@
+{
+  "name": "@neurotrax/capture-web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1 --port 4173 --strictPort",
+    "build": "vite build",
+    "test:unit": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@neurotrax/ambient-core": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "5.6.3",
+    "vite": "8.1.5",
+    "vitest": "2.1.4"
+  }
+}

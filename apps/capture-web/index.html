@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="Neurotrax live ambient capture prototype for a consented MacBook self-demo."
+    />
+    <title>Neurotrax · Live Capture</title>
+  </head>
+  <body>
+    <div id="app">
+      <header class="app-header">
+        <a class="brand" href="/" aria-label="Neurotrax home">
+          <span class="brand-mark" aria-hidden="true">N</span>
+          <span>
+            <strong>Neurotrax</strong>
+            <small>Ambient encounter prototype</small>
+          </span>
+        </a>
+        <div class="header-badges">
+          <span class="badge badge-outline">Research prototype</span>
+          <span class="badge badge-live" id="header-mode">Ready</span>
+        </div>
+      </header>
+
+      <main>
+        <section class="intro-row" aria-labelledby="page-title">
+          <div>
+            <p class="eyebrow">Live MacBook adapter · v0.1</p>
+            <h1 id="page-title">Let the encounter explain itself.</h1>
+          </div>
+          <p class="intro-copy">
+            Your camera stays live for context. Your microphone becomes
+            ephemeral feature frames. Nothing is recorded or uploaded.
+          </p>
+        </section>
+
+        <section class="demo-shell" aria-label="Live ambient capture">
+          <article class="camera-panel">
+            <div class="camera-stage" id="camera-stage">
+              <video
+                id="camera-preview"
+                autoplay
+                muted
+                playsinline
+                aria-label="Live self-facing camera preview"
+              ></video>
+
+              <div class="camera-empty" id="camera-empty">
+                <span class="camera-aperture" aria-hidden="true"></span>
+                <strong>Camera preview is off</strong>
+                <span>Consent and begin when you are ready.</span>
+              </div>
+
+              <div class="live-strip" id="live-strip" hidden>
+                <span class="live-dot" aria-hidden="true"></span>
+                Live analysis · not recording
+              </div>
+
+              <div class="session-clock" id="session-clock">00:00</div>
+            </div>
+
+            <div class="telemetry" aria-label="Live capture telemetry">
+              <div class="telemetry-label">
+                <span>Microphone</span>
+                <strong id="voice-state">Waiting</strong>
+              </div>
+              <div
+                class="meter-track"
+                role="meter"
+                aria-label="Microphone level"
+                aria-valuemin="0"
+                aria-valuemax="100"
+                aria-valuenow="0"
+                id="mic-meter"
+              >
+                <span id="mic-meter-fill"></span>
+              </div>
+              <div class="telemetry-stats">
+                <span><strong id="frame-count">0</strong> audio frames</span>
+                <span><strong id="voiced-count">0</strong> voiced</span>
+                <span><strong id="pitch-value">—</strong> pitch</span>
+              </div>
+            </div>
+
+            <div class="capture-controls">
+              <label class="consent-control">
+                <input id="consent-checkbox" type="checkbox" />
+                <span>
+                  <strong>I consent to this self-demo</strong>
+                  <small>
+                    I am using my own non-patient data and will not mention PHI.
+                  </small>
+                </span>
+              </label>
+              <div class="button-row">
+                <button class="button button-primary" id="start-button" disabled>
+                  Begin live encounter
+                </button>
+                <button class="button button-stop" id="stop-button" disabled>
+                  End &amp; analyze
+                </button>
+                <button class="button button-quiet" id="reset-button" hidden>
+                  New encounter
+                </button>
+              </div>
+              <p class="capture-hint" id="capture-hint">
+                Once live, speak naturally for 8–12 seconds before ending the
+                encounter.
+              </p>
+            </div>
+          </article>
+
+          <aside class="agent-panel" aria-labelledby="agent-heading">
+            <div class="panel-heading">
+              <div>
+                <p class="eyebrow">System activity</p>
+                <h2 id="agent-heading">Agent lanes</h2>
+              </div>
+              <span class="event-count" id="event-count">0 events</span>
+            </div>
+
+            <div class="lane-stack">
+              <article class="lane-card" data-lane="capture-conductor">
+                <span class="lane-index">01</span>
+                <div>
+                  <strong>Capture Conductor</strong>
+                  <p id="conductor-status">Waiting for a consented stream.</p>
+                </div>
+                <span class="lane-state" id="conductor-state">Waiting</span>
+              </article>
+
+              <article class="lane-card" data-lane="speech-acoustic">
+                <span class="lane-index">02</span>
+                <div>
+                  <strong>Speech Acoustic</strong>
+                  <p id="speech-status">No audio features received.</p>
+                </div>
+                <span class="lane-state" id="speech-state">Waiting</span>
+              </article>
+
+              <article class="lane-card lane-muted" data-lane="facial-expressivity">
+                <span class="lane-index">03</span>
+                <div>
+                  <strong>Facial Expressivity</strong>
+                  <p>Camera preview only; landmark adapter is not connected.</p>
+                </div>
+                <span class="lane-state">Not connected</span>
+              </article>
+            </div>
+
+            <div class="trace-block">
+              <div class="trace-heading">
+                <h3>Structured event trace</h3>
+                <span>Created after capture</span>
+              </div>
+              <ol class="event-list" id="event-list">
+                <li class="event-placeholder">
+                  The Conductor will publish its versioned events here after
+                  you end the encounter.
+                </li>
+              </ol>
+            </div>
+          </aside>
+        </section>
+
+        <section class="results-panel" id="results-panel" hidden aria-live="polite">
+          <div class="results-heading">
+            <div>
+              <p class="eyebrow">Encounter deliverable</p>
+              <h2>Structured observation</h2>
+            </div>
+            <div class="result-summary" id="result-summary"></div>
+          </div>
+
+          <div class="aggregate-grid" id="aggregate-grid"></div>
+
+          <details class="technical-details">
+            <summary>Inspect the complete observation JSON</summary>
+            <pre id="observation-json"></pre>
+          </details>
+        </section>
+
+        <section class="prototype-note">
+          <strong>What this build proves</strong>
+          <p>
+            Live permissioning, ephemeral microphone feature extraction,
+            deterministic agent orchestration, honest abstention, and a
+            traceable per-visit artifact. Facial landmarks, longitudinal
+            comparison, and the clinician evidence card come next.
+          </p>
+        </section>
+      </main>
+
+      <footer class="app-footer">
+        <span id="privacy-status">Camera and microphone are off.</span>
+        <span>Prototype measurements · no clinical validation</span>
+      </footer>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
