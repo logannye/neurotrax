@@ -2,7 +2,7 @@ import type { FaceLandmarkFrame } from "./primitives.js";
 import type { Abstention, MeasurableWindow, Measurement } from "@neurotrax/contracts";
 import { mean } from "./stats.js";
 
-export const FACIAL_EXPRESSIVITY_VERSION = "facial-expressivity-0.1";
+export const FACIAL_EXPRESSIVITY_VERSION = "facial-expressivity-0.2";
 export const FACE_FRAMING_FLOOR = 0.6;
 export const BLINK_EAR_THRESHOLD = 0.2;
 const MIN_VISIBLE_FRAMES = 3;

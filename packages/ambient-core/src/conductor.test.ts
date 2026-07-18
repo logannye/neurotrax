@@ -190,4 +190,57 @@ describe("runConductor", () => {
       expect(event.sequence).toBe(index + 1)
     );
   });
+
+  it("emits a specific facial quality reason after calibration", () => {
+    const session = createConductorSession({
+      containsPHI: false,
+      visitId: "visit-position-quality",
+      participantId: "developer-self-demo",
+      captureMode: "fixture-playback",
+      calibration: {
+        profileId: "macbook-guided-v0.1",
+        calibratedAt: "2026-07-18T16:00:00.000Z",
+        audio: {
+          medianNoiseRms: 0.002,
+          noiseP90Rms: 0.0024,
+          entryThresholdRms: 0.008,
+          exitThresholdRms: 0.006
+        },
+        face: {
+          baselineBoxWidth: 0.24,
+          baselineBoxHeight: 0.4,
+          baselineIllumination: 0.58
+        }
+      }
+    });
+
+    for (let tMs = 0; tMs <= 1700; tMs += 100) {
+      const offCenter = tMs >= 900;
+      session.ingestFace({
+        tMs,
+        faceVisible: true,
+        framingFraction: offCenter ? 0 : 0.9,
+        illumination: 0.58,
+        yawDegrees: 3,
+        eyeAspectRatio: 0.3,
+        browRaise: 0.15,
+        mouthOpen: 0.1,
+        landmarkMotion: 0.02,
+        observedFrameRate: 10,
+        faceBoxWidth: 0.24,
+        faceBoxHeight: 0.4,
+        edgeMargin: offCenter ? 0.005 : 0.08
+      });
+    }
+
+    expect(
+      session
+        .getEvents()
+        .some(
+          (event) =>
+            event.type === "capture.quality.changed" &&
+            event.payload.reasonCode === "face-off-center"
+        )
+    ).toBe(true);
+  });
 });

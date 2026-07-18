@@ -1,80 +1,116 @@
 import type {
+  EncounterObservation,
   EvidenceCardDraft,
   EvidenceClaimFact,
   EventEnvelope,
   GroundingResult,
-  TrajectoryComparison
+  Modality
 } from "@neurotrax/contracts";
 
 export const EVIDENCE_BOUNDARY =
-  "Engineering demonstration only. No disease progression, diagnosis, cause, or treatment inference was made.";
+  "For clinician review. This summary does not provide a diagnosis or treatment recommendation.";
 
 const PROHIBITED_CLINICAL_LANGUAGE =
   /\b(diagnos(?:is|e|ed|tic)|disease|progress(?:ion|ed|ing)?|treat(?:ment|ed|ing)?|medicat(?:ion|e|ed)|risk|normal|abnormal|worsen(?:ed|ing)?|improv(?:ed|ing|ement)?|cause|clinical decline)\b/i;
 
-function directionPhrase(direction: EvidenceClaimFact["direction"]): string {
-  switch (direction) {
-    case "above-reference":
-      return "was above the compatible synthetic personal reference";
-    case "below-reference":
-      return "was below the compatible synthetic personal reference";
-    case "within-reference":
-      return "remained within the compatible synthetic personal reference";
-    case "not-comparable":
-      return "did not have enough compatible synthetic history for comparison";
-  }
-}
+const SPEECH_PRIORITY = [
+  "prototype.speech.pitch_variability",
+  "prototype.speech.voiced_time_fraction",
+  "prototype.speech.pause_rate"
+];
+const FACE_PRIORITY = [
+  "prototype.face.expressivity",
+  "prototype.face.blink_rate",
+  "prototype.face.brow_amplitude"
+];
 
 function formatNumber(value: number): string {
   if (Number.isInteger(value)) return value.toString();
   return Number(value.toFixed(3)).toString();
 }
 
-export function createEvidenceClaimFacts(
-  comparison: TrajectoryComparison,
+function priorityFor(code: string, modality: Modality): number {
+  const list = modality === "speech" ? SPEECH_PRIORITY : FACE_PRIORITY;
+  const index = list.indexOf(code);
+  return index === -1 ? Number.MAX_SAFE_INTEGER : index;
+}
+
+export function createEncounterClaimFacts(
+  observation: EncounterObservation,
   events: EventEnvelope[]
 ): EvidenceClaimFact[] {
-  const trajectoryEventIds = events
-    .filter((event) => event.stage === "personal-trajectory")
-    .map((event) => event.eventId);
-  const ranked = [...comparison.biomarkers].sort((left, right) => {
-    const leftChanged = left.direction === "within-reference" ? 1 : 0;
-    const rightChanged = right.direction === "within-reference" ? 1 : 0;
-    return leftChanged - rightChanged || left.code.localeCompare(right.code);
-  });
+  const facts: EvidenceClaimFact[] = [];
 
-  const selected = [];
-  const speech = ranked.find((item) =>
-    item.code.startsWith("prototype.speech.")
-  );
-  const face = ranked.find((item) => item.code.startsWith("prototype.face."));
-  if (speech) selected.push(speech);
-  if (face) selected.push(face);
-  for (const item of ranked) {
-    if (selected.length >= 2) break;
-    if (!selected.includes(item)) selected.push(item);
+  for (const modality of ["speech", "face"] as const) {
+    const aggregate = observation.aggregates
+      .filter((candidate) =>
+        candidate.code.startsWith(`prototype.${modality}.`)
+      )
+      .sort(
+        (left, right) =>
+          priorityFor(left.code, modality) -
+            priorityFor(right.code, modality) ||
+          right.confidence - left.confidence
+      )[0];
+    if (!aggregate) continue;
+
+    const measurements = observation.measurements.filter(
+      (measurement) => measurement.code === aggregate.code
+    );
+    const measurementRefs = [
+      ...new Set(measurements.map((measurement) => measurement.contextRef))
+    ];
+    const supportingEvents = events.filter(
+      (event) => {
+        if (event.type === "encounter-observation.created") return true;
+        if (event.type === "measurement.recorded") {
+          return event.payload.code === aggregate.code;
+        }
+        if (
+          event.type === "capture.window.opened" ||
+          event.type === "capture.window.closed" ||
+          event.type === "extractor.routed"
+        ) {
+          return (
+            typeof event.payload.windowId === "string" &&
+            measurementRefs.includes(event.payload.windowId)
+          );
+        }
+        if (
+          event.type === "capture.quality.changed" ||
+          event.type === "measurement.abstained"
+        ) {
+          return (
+            event.payload.modality === modality ||
+            event.actor.id ===
+              (modality === "speech"
+                ? "speech-acoustic"
+                : "facial-expressivity")
+          );
+        }
+        return false;
+      }
+    );
+    const statement =
+      modality === "speech"
+        ? `${aggregate.label} was measured from a technically usable speech interval.`
+        : `${aggregate.label} was measured before and after a quality-withheld interval.`;
+
+    facts.push({
+      claimId: `claim-${aggregate.code.replaceAll(".", "-")}`,
+      measurementCode: aggregate.code,
+      label: aggregate.label,
+      modality,
+      statement,
+      currentValue: aggregate.value,
+      unit: aggregate.unit,
+      supportRefs: measurementRefs,
+      eventIds: supportingEvents.map((event) => event.eventId),
+      allowedNumbers: [formatNumber(aggregate.value)]
+    });
   }
 
-  return selected.slice(0, 2).map((biomarker) => ({
-    claimId: `claim-${biomarker.code.replaceAll(".", "-")}`,
-    measurementCode: biomarker.code,
-    label: biomarker.label,
-    direction: biomarker.direction,
-    statement: `${biomarker.label} ${directionPhrase(biomarker.direction)}.`,
-    currentValue: biomarker.currentValue,
-    unit: biomarker.unit,
-    supportRefs: [
-      ...biomarker.currentEvidenceRefs,
-      ...biomarker.referenceMeasurementRefs
-    ],
-    eventIds: trajectoryEventIds,
-    allowedNumbers: [
-      formatNumber(biomarker.currentValue),
-      formatNumber(biomarker.priorMedian),
-      formatNumber(biomarker.priorMinimum),
-      formatNumber(biomarker.priorMaximum)
-    ]
-  }));
+  return facts;
 }
 
 function numericTokens(value: string): string[] {
@@ -103,14 +139,17 @@ export function validateEvidenceCardDraft(
   const factById = new Map(facts.map((fact) => [fact.claimId, fact]));
   const groundedClaimIds: string[] = [];
 
-  if (draft.claims.length < 1 || draft.claims.length > 2) {
-    errors.push("The evidence card must contain one or two claims.");
+  if (facts.length !== 2 || new Set(facts.map((fact) => fact.modality)).size !== 2) {
+    errors.push("Current-encounter synthesis requires one speech fact and one face fact.");
+  }
+  if (draft.claims.length !== 2) {
+    errors.push("The encounter summary must contain exactly two claims.");
   }
   if (draft.headline.length > 90 || draft.summary.length > 360) {
     errors.push("The headline or summary exceeds its length contract.");
   }
   if (draft.boundaryStatement !== EVIDENCE_BOUNDARY) {
-    errors.push("The required research boundary statement was changed.");
+    errors.push("The required review boundary statement was changed.");
   }
   if (
     PROHIBITED_CLINICAL_LANGUAGE.test(draft.headline) ||
@@ -161,6 +200,16 @@ export function validateEvidenceCardDraft(
       continue;
     }
     groundedClaimIds.push(claim.claimId);
+  }
+
+  if (
+    new Set(
+      draft.claims
+        .map((claim) => factById.get(claim.claimId)?.modality)
+        .filter(Boolean)
+    ).size !== 2
+  ) {
+    errors.push("The summary must include one speech claim and one face claim.");
   }
 
   const selectedFacts = draft.claims

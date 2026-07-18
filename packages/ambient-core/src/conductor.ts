@@ -2,6 +2,7 @@ import type {
   Abstention,
   EncounterObservation,
   EventEnvelope,
+  CaptureQualityPolicy,
   Measurement,
   MeasurementContext,
   MeasurableWindow,
@@ -31,6 +32,15 @@ const FACE_QUALITY_DEBOUNCE_MS = 750;
 const SPEECH_OPEN_DEBOUNCE_MS = 300;
 export const MAX_FACE_YAW_DEGREES = 30;
 
+export const DEFAULT_CAPTURE_QUALITY_POLICY: CaptureQualityPolicy = {
+  id: "guided-live-v0.1",
+  speechOpenDebounceMs: SPEECH_OPEN_DEBOUNCE_MS,
+  maximumSpeechPauseMs: MAX_SPEECH_PAUSE_MS,
+  faceQualityDebounceMs: FACE_QUALITY_DEBOUNCE_MS,
+  faceFramingFloor: FACE_FRAMING_FLOOR,
+  maximumFaceYawDegrees: MAX_FACE_YAW_DEGREES
+};
+
 type LaneQuality = "unknown" | "measurable" | "withheld";
 
 interface LaneState {
@@ -54,6 +64,7 @@ export interface ConductorSession {
 export interface ConductorSessionOptions {
   baseTimeMs?: number;
   onEvent?: (event: EventEnvelope) => void;
+  qualityPolicy?: CaptureQualityPolicy;
 }
 
 function slice<T extends { tMs: number }>(
@@ -194,7 +205,54 @@ function processObservation(
       faceWindowCount: windows.filter((window) => window.modality === "face")
         .length,
       abstentionCount: abstentions.length,
-      qualityTransitionCount
+      qualityTransitionCount,
+      audioFrameCount: stream.audio.length,
+      speechActiveFrameCount: stream.audio.filter((frame) => frame.voiced)
+        .length,
+      pitchedFrameCount: stream.audio.filter(
+        (frame) =>
+          frame.pitchHz !== null && (frame.pitchConfidence ?? 1) >= 0.55
+      ).length,
+      pitchCoverage:
+        stream.audio.filter((frame) => frame.voiced).length === 0
+          ? 0
+          : stream.audio.filter(
+                (frame) =>
+                  frame.voiced &&
+                  frame.pitchHz !== null &&
+                  (frame.pitchConfidence ?? 1) >= 0.55
+              ).length /
+            stream.audio.filter((frame) => frame.voiced).length,
+      faceFrameCount: stream.face.length,
+      usableFaceFrameCount: stream.face.filter(
+        (frame) =>
+          frame.faceVisible &&
+          frame.framingFraction >= FACE_FRAMING_FLOOR &&
+          Math.abs(frame.yawDegrees ?? 0) <= MAX_FACE_YAW_DEGREES
+      ).length,
+      usableFaceFraction:
+        stream.face.length === 0
+          ? 0
+          : stream.face.filter(
+                (frame) =>
+                  frame.faceVisible &&
+                  frame.framingFraction >= FACE_FRAMING_FLOOR &&
+                  Math.abs(frame.yawDegrees ?? 0) <= MAX_FACE_YAW_DEGREES
+              ).length / stream.face.length,
+      faceWithholdingDurationMs: abstentions
+        .filter((abstention) => abstention.modality === "face")
+        .reduce(
+          (total, abstention) =>
+            total + Math.max(0, abstention.windowEndMs - abstention.windowStartMs),
+          0
+        ),
+      faceRecoveryObserved:
+        windows.filter((window) => window.modality === "face").length >= 2 &&
+        abstentions.some((abstention) => abstention.modality === "face"),
+      postRecoveryFaceWindowCount: Math.max(
+        0,
+        windows.filter((window) => window.modality === "face").length - 1
+      )
     }
   };
 
@@ -254,8 +312,57 @@ export function createConductorSession(
   const speechState = freshLaneState();
   const faceState = freshLaneState();
   const liveAbstentions: Abstention[] = [];
+  const qualityPolicy =
+    options.qualityPolicy ?? DEFAULT_CAPTURE_QUALITY_POLICY;
   let completed = false;
   let qualityTransitionCount = 0;
+
+  const faceQualityReason = (
+    frame: FaceLandmarkFrame
+  ): string | null => {
+    if (!frame.faceVisible) return "face-not-visible";
+    if (
+      Math.abs(frame.yawDegrees ?? 0) >
+      qualityPolicy.maximumFaceYawDegrees
+    ) {
+      return "face-off-axis";
+    }
+    const faceCalibration = identity.calibration?.face;
+    if (
+      faceCalibration &&
+      frame.faceBoxWidth !== undefined &&
+      frame.faceBoxHeight !== undefined
+    ) {
+      const widthRatio =
+        frame.faceBoxWidth /
+        Math.max(0.001, faceCalibration.baselineBoxWidth);
+      const heightRatio =
+        frame.faceBoxHeight /
+        Math.max(0.001, faceCalibration.baselineBoxHeight);
+      if (widthRatio < 0.6 || heightRatio < 0.6) {
+        return "face-too-small";
+      }
+      if (widthRatio > 1.7 || heightRatio > 1.7) {
+        return "face-too-large";
+      }
+    }
+    if (frame.edgeMargin !== undefined && frame.edgeMargin < 0.01) {
+      return "face-off-center";
+    }
+    if (
+      frame.illumination < 0.1 ||
+      (faceCalibration &&
+        Math.abs(
+          frame.illumination - faceCalibration.baselineIllumination
+        ) > 0.3)
+    ) {
+      return "illumination-out-of-range";
+    }
+    if (frame.framingFraction < qualityPolicy.faceFramingFloor) {
+      return "face-not-framed";
+    }
+    return null;
+  };
 
   const emit = (event: EventEnvelope): void => {
     events.push(event);
@@ -368,11 +475,29 @@ export function createConductorSession(
       "capture-web",
       "consent.recorded",
       "ambient-capture",
-      "Recorded explicit consent for this non-PHI self-demo.",
+      "Recorded consent for in-session audiovisual analysis.",
       0,
-      { containsPHI: false, consentScope: "developer-self-demo" }
+      { containsPHI: false, consentScope: "developer-self-assessment" }
     )
   );
+
+  if (identity.calibration) {
+    emit(
+      factory.next(
+        "capture-web",
+        "device.preflight.passed",
+        "ambient-capture",
+        "Verified camera framing, room conditions, and speech signal.",
+        0,
+        {
+          profileId: identity.calibration.profileId,
+          calibratedAt: identity.calibration.calibratedAt,
+          audio: identity.calibration.audio,
+          face: identity.calibration.face
+        }
+      )
+    );
+  }
 
   emit(
     factory.next(
@@ -400,7 +525,7 @@ export function createConductorSession(
         speechState.candidateSinceMs ??= frame.tMs;
         if (
           frame.tMs - speechState.candidateSinceMs >=
-          SPEECH_OPEN_DEBOUNCE_MS
+          qualityPolicy.speechOpenDebounceMs
         ) {
           changeQuality(
             "speech",
@@ -417,7 +542,8 @@ export function createConductorSession(
         if (
           speechState.openWindowId &&
           speechState.lastGoodMs !== null &&
-          frame.tMs - speechState.lastGoodMs > MAX_SPEECH_PAUSE_MS
+          frame.tMs - speechState.lastGoodMs >
+            qualityPolicy.maximumSpeechPauseMs
         ) {
           closeWindow(
             "speech",
@@ -440,17 +566,15 @@ export function createConductorSession(
       if (completed) throw new Error("Cannot ingest after session completion.");
       face.push(frame);
 
-      const usable =
-        frame.faceVisible &&
-        frame.framingFraction >= FACE_FRAMING_FLOOR &&
-        Math.abs(frame.yawDegrees ?? 0) <= MAX_FACE_YAW_DEGREES;
+      const reasonCode = faceQualityReason(frame);
+      const usable = reasonCode === null;
       if (usable) {
         faceState.lastGoodMs = frame.tMs;
         faceState.adverseSinceMs = null;
         faceState.candidateSinceMs ??= frame.tMs;
         if (
           frame.tMs - faceState.candidateSinceMs >=
-          FACE_QUALITY_DEBOUNCE_MS
+          qualityPolicy.faceQualityDebounceMs
         ) {
           changeQuality(
             "face",
@@ -466,7 +590,7 @@ export function createConductorSession(
         faceState.adverseSinceMs ??= frame.tMs;
         if (
           frame.tMs - faceState.adverseSinceMs >=
-          FACE_QUALITY_DEBOUNCE_MS
+          qualityPolicy.faceQualityDebounceMs
         ) {
           closeWindow(
             "face",
@@ -479,11 +603,7 @@ export function createConductorSession(
             faceState,
             "withheld",
             frame.tMs,
-            !frame.faceVisible
-              ? "face-not-visible"
-              : Math.abs(frame.yawDegrees ?? 0) > MAX_FACE_YAW_DEGREES
-                ? "face-off-axis"
-                : "face-not-framed"
+            reasonCode ?? "face-not-framed"
           );
         }
       }

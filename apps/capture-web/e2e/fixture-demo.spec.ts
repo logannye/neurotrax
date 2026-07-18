@@ -1,7 +1,24 @@
 import { expect, test, type Page } from "@playwright/test";
 
 const boundary =
-  "Engineering demonstration only. No disease progression, diagnosis, cause, or treatment inference was made.";
+  "For clinician review. This summary does not provide a diagnosis or treatment recommendation.";
+
+async function expectCleanPresentationCopy(page: Page): Promise<void> {
+  const body = (await page.locator("body").innerText()).toLowerCase();
+  for (const forbidden of [
+    "synthetic",
+    "prototype",
+    "gpt",
+    "openai",
+    "api key",
+    "worker",
+    "adapter version",
+    "speech-acoustic",
+    "facial-expressivity"
+  ]) {
+    expect(body).not.toContain(forbidden);
+  }
+}
 
 async function installReadinessMock(page: Page): Promise<void> {
   await page.route("**/api/model-readiness", async (route) => {
@@ -10,8 +27,8 @@ async function installReadinessMock(page: Page): Promise<void> {
       contentType: "application/json",
       body: JSON.stringify({
         ready: true,
-        model: "gpt-5.6",
-        credentialSource: "fixture-browser-test"
+        model: "service-ready",
+        credentialSource: "browser-test"
       })
     });
   });
@@ -24,20 +41,21 @@ async function installEvidenceMock(page: Page): Promise<void> {
       facts: Array<{
         claimId: string;
         label: string;
+        modality: "speech" | "face";
         statement: string;
       }>;
     };
-    const facts = payload.facts.slice(0, 2);
+    expect(payload.facts).toHaveLength(2);
+    expect(new Set(payload.facts.map((fact) => fact.modality)).size).toBe(2);
     await route.fulfill({
       status: 200,
       contentType: "application/json",
       body: JSON.stringify({
         draft: {
-          headline: "A grounded personal comparison is ready",
-          summary: `${facts.map((fact) => fact.label).join(
-            " and "
-          )} were compared with compatible synthetic personal history.`,
-          claims: facts.map((fact) => ({
+          headline: "Two encounter signals are ready for review",
+          summary:
+            "Pitch variability and facial movement were measured during technically usable portions of the encounter.",
+          claims: payload.facts.map((fact) => ({
             claimId: fact.claimId,
             statement: fact.statement
           })),
@@ -46,85 +64,81 @@ async function installEvidenceMock(page: Page): Promise<void> {
         grounding: {
           status: "pass",
           errors: [],
-          groundedClaimIds: facts.map((fact) => fact.claimId)
+          groundedClaimIds: payload.facts.map((fact) => fact.claimId)
         },
-        model: "gpt-5.6-sol",
-        promptVersion: "evidence-card-grounded.v0.1",
-        responseId: "fixture-browser-response",
+        model: "service-response",
+        promptVersion: "test-contract",
+        responseId: "test-response",
         attemptCount: 1
       })
     });
   });
 }
 
-test("initializes the local MediaPipe module worker", async ({ page }) => {
+async function runGuidedCapture(page: Page): Promise<void> {
+  await installEvidenceMock(page);
+  await page.goto("/?testCapture=1&fast=1");
+  await expect(page.locator("#face-lane-state")).toHaveText("Ready");
+  await page.locator("#consent-checkbox").check();
+  await page.locator("#start-button").click();
+  await expect(page.locator("#start-button")).toHaveText("Begin assessment");
+  await page.locator("#start-button").click();
+  await expect(page.locator("#stop-button")).toBeEnabled({
+    timeout: 10_000
+  });
+  await expect(
+    page.locator('[data-milestone="withheld"]')
+  ).toHaveClass(/is-complete/);
+  await expect(
+    page.locator('[data-milestone="recovered"]')
+  ).toHaveClass(/is-complete/);
+  await page.locator("#stop-button").click();
+  await expect(page.locator("#evidence-card")).toBeVisible();
+  await expect(page.locator(".evidence-claim")).toHaveCount(2);
+}
+
+test("loads the local facial analysis and keeps presentation copy clean", async ({
+  page
+}) => {
   await installReadinessMock(page);
   await page.goto("/");
-
   await expect(page.locator("#face-lane-state")).toHaveText("Ready", {
     timeout: 15_000
   });
-  await expect(page.locator("#readiness-title")).toHaveText(
-    "Demo systems ready"
+  await expect(page.locator("#page-title")).toHaveText(
+    "Ambient telehealth neuro assessment"
   );
-  await expect(page.locator("#face-status")).toContainText(
-    "Local landmark worker loaded"
-  );
+  await expectCleanPresentationCopy(page);
 });
 
-async function runFixture(page: Page): Promise<void> {
-  await installEvidenceMock(page);
-  await page.goto("/?fixture=1&fast=1");
-  await expect(page.locator("#capture-mode-badge")).toContainText(
-    "FIXTURE PLAYBACK"
-  );
-  await expect(page.locator("#readiness-title")).toHaveText(
-    "Demo systems ready"
-  );
-  await page.locator("#consent-checkbox").check();
-  await page.locator("#start-button").click();
-  await expect(page.locator("#evidence-card")).toBeVisible();
-}
-
-test("runs the complete disclosed fixture and accepts the observation", async ({
+test("runs guided capture, traces both claims, and approves the summary", async ({
   page
 }) => {
-  await runFixture(page);
-
-  await expect(page.locator("#event-list")).toContainText(
-    "Face measurement withheld"
+  await runGuidedCapture(page);
+  await expect(page.locator("#result-summary")).toContainText(
+    "2 facial windows"
   );
-  await expect(page.locator("#event-list")).toContainText(
-    "Face signal is measurable"
-  );
-  await expect(page.locator("#trajectory-summary")).toContainText(
-    "3 compatible encounters included"
-  );
-  await expect(page.locator("#exclusion-list")).toContainText(
-    "algorithm version mismatch"
-  );
-  await expect(page.locator(".trajectory-points").first()).toContainText(
-    "SYNTHETIC"
-  );
-
+  await expectCleanPresentationCopy(page);
   await page.locator(".evidence-claim").first().click();
   await expect(page.locator("#trace-drawer")).toBeVisible();
   await expect(page.locator("#trace-content")).toContainText(
-    "Quality and aggregate confounds"
+    "Quality conditions"
   );
   await page.locator("#trace-close-button").click();
   await page.locator("#accept-button").click();
-  await expect(page.locator("#review-outcome")).toContainText(
-    "Accepted for this browser session"
+  await expect(page.locator("#review-outcome")).toHaveText(
+    "Summary approved for this session."
   );
+  await expect(page.locator("#header-mode")).toHaveText("Complete");
 });
 
-test("reject keeps the live observation out of session history", async ({
+test("dismiss completes review without approving the summary", async ({
   page
 }) => {
-  await runFixture(page);
+  await runGuidedCapture(page);
   await page.locator("#reject-button").click();
   await expect(page.locator("#review-outcome")).toHaveText(
-    "Rejected · no live observation added to session history"
+    "Summary dismissed."
   );
+  await expect(page.locator("#review-state")).toHaveText("Dismissed");
 });

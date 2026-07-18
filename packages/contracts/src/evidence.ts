@@ -1,10 +1,10 @@
-import type { TrajectoryDirection } from "./trajectory.js";
+import type { Modality } from "./measurement.js";
 
 export interface EvidenceClaimFact {
   claimId: string;
   measurementCode: string;
   label: string;
-  direction: TrajectoryDirection;
+  modality: Modality;
   statement: string;
   currentValue: number;
   unit: string;
@@ -32,7 +32,7 @@ export interface GroundingResult {
 }
 
 export interface ReviewDecision {
-  decision: "accepted" | "rejected";
-  acceptedIntoSessionHistory: boolean;
+  decision: "approved" | "dismissed";
+  approvedForSession: boolean;
   decidedAt: string;
 }

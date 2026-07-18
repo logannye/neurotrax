@@ -2,9 +2,11 @@ import type { AudioFeatureFrame } from "./primitives.js";
 import type { Abstention, MeasurableWindow, Measurement } from "@neurotrax/contracts";
 import { mean, median, stdDev } from "./stats.js";
 
-export const SPEECH_ACOUSTIC_VERSION = "speech-acoustic-0.2";
+export const SPEECH_ACOUSTIC_VERSION = "speech-acoustic-0.3";
 export const SPEECH_SNR_FLOOR_DB = 12;
 const MIN_VOICED_FRAMES = 3;
+export const MIN_PITCHED_FRAMES = 10;
+export const MIN_PITCH_COVERAGE = 0.2;
 export const MIN_PAUSE_MS = 300;
 export const MAX_PAUSE_MS = 2000;
 
@@ -105,19 +107,77 @@ export function extractSpeechAcoustic(
     );
   }
 
-  const confidence = Math.min(1, meanSnr / 30);
   const voicedTimeFraction = voiced.length / frames.length;
   const pauseCount = countBoundedPauses(frames);
-  const durationMinutes =
-    Math.max(1, window.endMs - window.startMs) / 60000;
+  const durationMs = Math.max(1, window.endMs - window.startMs);
+  const durationMinutes = durationMs / 60000;
   const pauseRate = pauseCount / durationMinutes;
-  const pitchVariability = pitchVariabilitySemitones(
-    voiced.map((f) => f.pitchHz).filter((p): p is number => p !== null)
+  const pitched = voiced.filter(
+    (frame) =>
+      frame.pitchHz !== null && (frame.pitchConfidence ?? 1) >= 0.55
+  );
+  const pitchCoverage = pitched.length / Math.max(1, voiced.length);
+  const clippingScore =
+    1 -
+    frames.filter((frame) => frame.clipped).length /
+      Math.max(1, frames.length);
+  const snrScore = Math.min(1, Math.max(0, (meanSnr - 12) / 12));
+  const durationScore = Math.min(1, durationMs / 10_000);
+  const generalConfidence = Math.min(
+    1,
+    0.35 * snrScore +
+      0.25 * durationScore +
+      0.2 * pitchCoverage +
+      0.2 * clippingScore
   );
 
-  return [
-    measurement(window, "prototype.speech.voiced_time_fraction", "Voiced-time fraction", voicedTimeFraction, "ratio", confidence),
-    measurement(window, "prototype.speech.pause_rate", "Pause rate", pauseRate, "pauses-per-minute", confidence),
-    measurement(window, "prototype.speech.pitch_variability", "Pitch variability", pitchVariability, "semitone-stddev", confidence)
+  const measurements = [
+    measurement(
+      window,
+      "prototype.speech.voiced_time_fraction",
+      "Voiced-time fraction",
+      voicedTimeFraction,
+      "ratio",
+      generalConfidence
+    ),
+    measurement(
+      window,
+      "prototype.speech.pause_rate",
+      "Pause rate",
+      pauseRate,
+      "pauses-per-minute",
+      generalConfidence
+    )
   ];
+
+  if (
+    pitched.length >= MIN_PITCHED_FRAMES &&
+    pitchCoverage >= MIN_PITCH_COVERAGE
+  ) {
+    const pitchVariability = pitchVariabilitySemitones(
+      pitched.map((frame) => frame.pitchHz as number)
+    );
+    const meanPitchConfidence = mean(
+      pitched.map((frame) => frame.pitchConfidence ?? 1)
+    );
+    measurements.push(
+      measurement(
+        window,
+        "prototype.speech.pitch_variability",
+        "Pitch variability",
+        pitchVariability,
+        "semitone-stddev",
+        Math.min(
+          1,
+          0.3 * snrScore +
+            0.2 * durationScore +
+            0.2 * pitchCoverage +
+            0.15 * meanPitchConfidence +
+            0.15 * clippingScore
+        )
+      )
+    );
+  }
+
+  return measurements;
 }

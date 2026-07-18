@@ -542,7 +542,7 @@ node <<'NODE'
   );
   const modern = currentHistory.filter((record) =>
     record.aggregates.every((aggregate) =>
-      ["speech-acoustic-0.2", "facial-expressivity-0.1"].includes(
+      ["speech-acoustic-0.3", "facial-expressivity-0.2"].includes(
         aggregate.algorithmVersion
       )
     )

@@ -30,14 +30,16 @@ function frame(tMs: number, voiced: boolean, pitchHz: number | null, snrDb = 20)
 
 describe("extractSpeechAcoustic", () => {
   it("emits three measurements over a clean voiced window", () => {
-    const frames = [
-      frame(0, true, 120), frame(100, true, 130), frame(200, false, null),
-      frame(300, true, 110), frame(400, true, 140)
-    ];
-    const result = extractSpeechAcoustic(window, frames) as Measurement[];
+    const frames = Array.from({ length: 12 }, (_, index) =>
+      frame(index * 100, index !== 5, 110 + (index % 5) * 8)
+    );
+    const result = extractSpeechAcoustic(
+      { ...window, endMs: 1100 },
+      frames
+    ) as Measurement[];
     expect(Array.isArray(result)).toBe(true);
     const byCode = new Map(result.map((m) => [m.code, m]));
-    expect(byCode.get("prototype.speech.voiced_time_fraction")!.value).toBeCloseTo(0.8, 5);
+    expect(byCode.get("prototype.speech.voiced_time_fraction")!.value).toBeCloseTo(11 / 12, 5);
     expect(byCode.get("prototype.speech.pause_rate")!.value).toBe(0);
     expect(byCode.get("prototype.speech.pitch_variability")!.value).toBeGreaterThan(0);
     for (const m of result) {
@@ -99,5 +101,31 @@ describe("extractSpeechAcoustic", () => {
 
     expect(countBoundedPauses(shortPause)).toBe(0);
     expect(countBoundedPauses(longPause)).toBe(0);
+  });
+
+  it("reduces confidence when clipping is present", () => {
+    const cleanFrames = Array.from({ length: 12 }, (_, index) =>
+      frame(index * 100, true, 120 + (index % 3) * 4)
+    );
+    const clippedFrames = cleanFrames.map((item, index) => ({
+      ...item,
+      clipped: index < 6
+    }));
+    const clean = extractSpeechAcoustic(
+      { ...window, endMs: 1100 },
+      cleanFrames
+    ) as Measurement[];
+    const clipped = extractSpeechAcoustic(
+      { ...window, endMs: 1100 },
+      clippedFrames
+    ) as Measurement[];
+    const confidenceFor = (measurements: Measurement[]) =>
+      measurements.find(
+        (measurement) =>
+          measurement.code ===
+          "prototype.speech.pitch_variability"
+      )!.confidence;
+
+    expect(confidenceFor(clipped)).toBeLessThan(confidenceFor(clean));
   });
 });

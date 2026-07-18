@@ -66,4 +66,38 @@ describe("browser audio feature derivation", () => {
     expect(clearVoice.voiced).toBe(true);
     expect(softerContinuation.voiced).toBe(true);
   });
+
+  it("calibrates entry and exit thresholds from quiet-room samples", () => {
+    const tracker = createVoiceActivityTracker();
+    const calibration = tracker.calibrate([
+      0.002,
+      0.0022,
+      0.0021,
+      0.0024,
+      0.0023
+    ]);
+    expect(calibration.entryThresholdRms).toBeGreaterThanOrEqual(0.008);
+    expect(calibration.exitThresholdRms).toBeLessThan(
+      calibration.entryThresholdRms
+    );
+    expect(tracker.getCalibration()).toEqual(calibration);
+  });
+
+  it("does not classify unpitched room energy as speech onset", () => {
+    const tracker = createVoiceActivityTracker();
+    tracker.calibrate([0.002, 0.002, 0.002]);
+    const noise = Float32Array.from(
+      { length: 4096 },
+      (_, index) => Math.sin(index * index * 0.071) * 0.025
+    );
+    expect(tracker.derive(noise, 48_000).voiced).toBe(false);
+  });
+
+  it("does not treat mains-frequency hum as speech onset", () => {
+    const tracker = createVoiceActivityTracker();
+    tracker.calibrate([0.002, 0.002, 0.002]);
+    const hum = sineWave(60, 48_000, 4096, 0.03);
+
+    expect(tracker.derive(hum, 48_000).voiced).toBe(false);
+  });
 });

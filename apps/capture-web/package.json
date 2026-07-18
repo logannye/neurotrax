@@ -16,7 +16,6 @@
     "@neurotrax/ambient-core": "workspace:*",
     "@neurotrax/contracts": "workspace:*",
     "@neurotrax/evidence-core": "workspace:*",
-    "@neurotrax/trajectory-core": "workspace:*",
     "openai": "6.48.0",
     "zod": "4.4.3"
   },
