@@ -3,7 +3,7 @@ import { expect, test, type Page } from "@playwright/test";
 const boundary =
   "Engineering demonstration only. No disease progression, diagnosis, cause, or treatment inference was made.";
 
-async function installEvidenceMock(page: Page): Promise<void> {
+async function installReadinessMock(page: Page): Promise<void> {
   await page.route("**/api/model-readiness", async (route) => {
     await route.fulfill({
       status: 200,
@@ -15,6 +15,10 @@ async function installEvidenceMock(page: Page): Promise<void> {
       })
     });
   });
+}
+
+async function installEvidenceMock(page: Page): Promise<void> {
+  await installReadinessMock(page);
   await page.route("**/api/evidence-card", async (route) => {
     const payload = route.request().postDataJSON() as {
       facts: Array<{
@@ -52,6 +56,21 @@ async function installEvidenceMock(page: Page): Promise<void> {
     });
   });
 }
+
+test("initializes the local MediaPipe module worker", async ({ page }) => {
+  await installReadinessMock(page);
+  await page.goto("/");
+
+  await expect(page.locator("#face-lane-state")).toHaveText("Ready", {
+    timeout: 15_000
+  });
+  await expect(page.locator("#readiness-title")).toHaveText(
+    "Demo systems ready"
+  );
+  await expect(page.locator("#face-status")).toContainText(
+    "Local landmark worker loaded"
+  );
+});
 
 async function runFixture(page: Page): Promise<void> {
   await installEvidenceMock(page);
