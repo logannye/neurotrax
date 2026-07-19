@@ -95,7 +95,8 @@ describe("runEvidenceAgent", () => {
       expect.objectContaining({
         model: EVIDENCE_MODEL,
         service_tier: "priority",
-        max_output_tokens: 180,
+        store: false,
+        max_output_tokens: 96,
         reasoning: { effort: "none" }
       })
     );

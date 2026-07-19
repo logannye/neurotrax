@@ -62,6 +62,9 @@ export function evidenceAgentPlugin(): Plugin {
         try {
           warmupPromise ??= runEvidenceAgent(EVIDENCE_SMOKE_REQUEST);
           const result = await warmupPromise;
+          console.info(
+            `[Neurotrax operator] Clinical synthesis warmed in ${result.timing.totalMs} ms.`
+          );
           response.setHeader(
             "Server-Timing",
             `synthesis-warmup;dur=${result.timing.totalMs}`
@@ -98,6 +101,9 @@ export function evidenceAgentPlugin(): Plugin {
         try {
           const payload = await readJson(request);
           const result = await runEvidenceAgent(payload);
+          console.info(
+            `[Neurotrax operator] Clinical synthesis completed in ${result.timing.totalMs} ms (${result.attemptCount} attempt${result.attemptCount === 1 ? "" : "s"}).`
+          );
           response.setHeader(
             "Server-Timing",
             `clinical-synthesis;dur=${result.timing.totalMs}`
@@ -108,6 +114,9 @@ export function evidenceAgentPlugin(): Plugin {
             error instanceof Error
               ? error.message
               : "Evidence synthesis failed.";
+          console.warn(
+            `[Neurotrax operator] Clinical synthesis failed: ${message}`
+          );
           json(response, 422, { error: message });
         }
       }

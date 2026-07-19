@@ -52,9 +52,8 @@ that variable for a live presentation.
 7. Return to the original calibrated position until Signal restored appears.
 8. Confirm that capture closes automatically after the final valid facial
    window and that the camera and microphone are released.
-9. Select **View measured evidence** or **View encounter summary**. Summary
-   synthesis begins before this action, so a completed card may already be
-   waiting.
+9. Confirm that the results workspace opens automatically. Grounded evidence
+   appears immediately while the short narrative is prepared in place.
 10. Confirm that both summary statements open a complete grounding trace.
 
 Clinical Synthesis uses priority processing, no reasoning pass, and a bounded

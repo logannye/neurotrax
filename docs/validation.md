@@ -24,6 +24,7 @@ The browser suite covers:
 - system check and guided capture;
 - speech continuity through facial withholding;
 - facial recovery and a second window;
+- automatic results reveal while synthesis is still pending;
 - two current-encounter statements;
 - measurement trace opening;
 - summary approval and dismissal.

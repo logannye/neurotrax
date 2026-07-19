@@ -9,7 +9,7 @@
 | Quality withheld | Turn away while continuing to speak. | Facial Analysis turns amber; Speech Analysis remains active. |
 | Signal restored | Return to the calibrated position. | Facial Analysis returns to teal and opens a second window. |
 | Summary | Continue briefly after returning to center. | Capture closes automatically, measured evidence is assembled, and synthesis starts before the presenter opens the results. |
-| Reveal | Select View measured evidence or View encounter summary. | Grounded statements appear immediately; the completed narrative fills in as soon as it is ready. |
+| Reveal | No additional presenter action is required. | The results workspace opens automatically with grounded statements; the completed narrative fills in as soon as it is ready. |
 | Review | Inspect a trace and approve or dismiss. | Human review closes the workflow. |
 
 ## Visual hierarchy

@@ -138,8 +138,8 @@ In the live experience:
     the background.
 11. Two grounded encounter statements are available immediately while a short
     clinician-readable narrative is synthesized.
-12. The clinician opens the prepared summary, inspects the evidence, and
-    approves or dismisses it.
+12. The results workspace opens automatically; the clinician inspects the
+    evidence and approves or dismisses the completed summary.
 
 The guided assessment is designed to complete in approximately 20–30 seconds
 after the system check.

@@ -49,7 +49,6 @@ type CaptureState =
   | "ready"
   | "capturing"
   | "analyzing"
-  | "summary-ready"
   | "review"
   | "reviewed"
   | "error";
@@ -242,7 +241,6 @@ function updateState(nextState: CaptureState, detail?: string): void {
     ready: "Check complete",
     capturing: "Assessment live",
     analyzing: "Preparing summary",
-    "summary-ready": "Summary ready",
     review: "Review ready",
     reviewed: "Complete",
     error: "Needs attention"
@@ -262,14 +260,8 @@ function updateState(nextState: CaptureState, detail?: string): void {
     stopButton.disabled = true;
   }
   if (nextState === "analyzing") {
-    stopButton.textContent = latestObservation
-      ? "View measured evidence"
-      : "Preparing summary";
-    stopButton.disabled = !latestObservation || resultsVisible;
-  }
-  if (nextState === "summary-ready") {
-    stopButton.textContent = "View encounter summary";
-    stopButton.disabled = false;
+    stopButton.textContent = "Summary in progress";
+    stopButton.disabled = true;
   }
   if (detail) captureHint.textContent = detail;
 }
@@ -1300,17 +1292,10 @@ async function synthesizeEvidence(): Promise<void> {
     );
     renderEvidence(body);
     milestone("summary")?.classList.add("is-complete");
-    if (resultsVisible) {
-      updateState(
-        "review",
-        "Review the two grounded statements, then approve or dismiss the summary."
-      );
-    } else {
-      updateState(
-        "summary-ready",
-        "The encounter summary is ready for clinician review."
-      );
-    }
+    updateState(
+      "review",
+      "Review the two grounded statements, then approve or dismiss the summary."
+    );
   } catch {
     emitWorkflowEvent(
       "evidence-card",
@@ -1371,6 +1356,7 @@ async function finishEncounter(): Promise<void> {
     "analyzing",
     "Measured evidence is ready while the encounter summary is prepared."
   );
+  revealResults();
   await synthesizeEvidence();
 }
 
@@ -1378,15 +1364,6 @@ function revealResults(): void {
   if (!latestObservation) return;
   resultsVisible = true;
   resultsPanel.hidden = false;
-  if (latestEvidence) {
-    updateState(
-      "review",
-      "Review the two grounded statements, then approve or dismiss the summary."
-    );
-  } else {
-    stopButton.disabled = true;
-    stopButton.textContent = "Summary in progress";
-  }
   resultsPanel.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
@@ -1635,11 +1612,6 @@ consentCheckbox.addEventListener("change", refreshStartAvailability);
 startButton.addEventListener("click", () => {
   if (state === "idle") void runSystemCheck();
   else if (state === "ready") startAssessment();
-});
-stopButton.addEventListener("click", () => {
-  if (state === "analyzing" || state === "summary-ready") {
-    revealResults();
-  }
 });
 resetButton.addEventListener("click", () => void resetCapture());
 retryEvidenceButton.addEventListener("click", () => void synthesizeEvidence());

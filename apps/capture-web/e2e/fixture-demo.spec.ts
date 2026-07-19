@@ -88,17 +88,15 @@ async function runGuidedCapture(page: Page): Promise<void> {
   await page.locator("#start-button").click();
   await expect(page.locator("#start-button")).toHaveText("Begin assessment");
   await page.locator("#start-button").click();
-  await expect(page.locator("#stop-button")).toHaveText(/View/, {
-    timeout: 10_000
-  });
   await expect(
     page.locator('[data-milestone="withheld"]')
   ).toHaveClass(/is-complete/);
   await expect(
     page.locator('[data-milestone="recovered"]')
   ).toHaveClass(/is-complete/);
-  await expect(page.locator("#stop-button")).toBeEnabled();
-  await page.locator("#stop-button").click();
+  await expect(page.locator("#results-panel")).toBeVisible({
+    timeout: 10_000
+  });
   await expect(page.locator("#evidence-card")).toBeVisible();
   await expect(page.locator(".evidence-claim")).toHaveCount(2);
 }
@@ -198,10 +196,7 @@ test("prefetches synthesis and exposes measured evidence during service latency"
   await expect(page.locator("#start-button")).toHaveText("Begin assessment");
   await page.locator("#start-button").click();
   await expect.poll(() => requestStarted).toBe(true);
-  await expect(page.locator("#stop-button")).toHaveText(
-    "View measured evidence"
-  );
-  await page.locator("#stop-button").click();
+  await expect(page.locator("#results-panel")).toBeVisible();
   await expect(page.locator("#evidence-headline")).toHaveText(
     "Measured evidence assembled"
   );

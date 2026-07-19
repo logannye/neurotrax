@@ -121,8 +121,7 @@ function userPayload(input: EvidenceAgentRequest): string {
     },
     measurements: input.facts.map((fact) => ({
       label: fact.label,
-      modality: fact.modality,
-      groundedStatement: fact.statement
+      modality: fact.modality
     }))
   });
 }
@@ -142,7 +141,8 @@ export async function runEvidenceAgent(
     const response = await client.responses.parse({
       model: EVIDENCE_MODEL,
       service_tier: "priority",
-      max_output_tokens: 180,
+      store: false,
+      max_output_tokens: 96,
       reasoning: { effort: "none" },
       text: {
         verbosity: "low",
