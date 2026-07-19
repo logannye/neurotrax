@@ -3,7 +3,7 @@ import type {
   FaceLandmarkerResult,
   NormalizedLandmark
 } from "@mediapipe/tasks-vision";
-import type { FaceLandmarkFrame } from "@neurotrax/ambient-core";
+import type { FaceLandmarkFrame } from "@phenometric/ambient-core";
 
 const SELECTED_MOTION_LANDMARKS = [1, 13, 14, 33, 61, 70, 263, 291, 300];
 const LEFT_CHEEK_INDEX = 234;

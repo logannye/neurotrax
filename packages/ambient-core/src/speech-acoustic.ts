@@ -1,5 +1,5 @@
 import type { AudioFeatureFrame } from "./primitives.js";
-import type { Abstention, MeasurableWindow, Measurement } from "@neurotrax/contracts";
+import type { Abstention, MeasurableWindow, Measurement } from "@phenometric/contracts";
 import { mean, median, stdDev } from "./stats.js";
 
 export const SPEECH_ACOUSTIC_VERSION = "speech-acoustic-0.4";

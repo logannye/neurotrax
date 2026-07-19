@@ -1,11 +1,11 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { runConductor, type FrameStream } from "@neurotrax/ambient-core";
+import { runConductor, type FrameStream } from "@phenometric/ambient-core";
 import type {
   EncounterObservation,
   TrajectoryHistoryRecord
-} from "@neurotrax/contracts";
+} from "@phenometric/contracts";
 import {
   compareTrajectory,
   DEFAULT_TRAJECTORY_POLICY

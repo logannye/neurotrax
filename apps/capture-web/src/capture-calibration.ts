@@ -3,8 +3,8 @@ import type {
   CalibrationQuality,
   CaptureCalibration,
   FaceCalibration
-} from "@neurotrax/contracts";
-import type { FaceLandmarkFrame } from "@neurotrax/ambient-core";
+} from "@phenometric/contracts";
+import type { FaceLandmarkFrame } from "@phenometric/ambient-core";
 
 export const PREFLIGHT_FACE_WINDOW = 15;
 export const PREFLIGHT_FACE_REQUIRED = 12;

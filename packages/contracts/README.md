@@ -1,6 +1,6 @@
-# Neurotrax shared contracts
+# PhenoMetric shared contracts
 
-`@neurotrax/contracts` defines the boundaries among the three implemented
+`@phenometric/contracts` defines the boundaries among the three implemented
 capabilities. These are research-prototype contracts, not clinical schemas.
 
 The generalized platform will add a versioned `ClinicalProtocolPack` and
@@ -44,7 +44,7 @@ in
 ## Workflow events
 
 `EventEnvelope` is the append-only
-`neurotrax.workflow-event.v0.2` contract shared by `ambient-capture`,
+`phenometric.workflow-event.v0.2` contract shared by `ambient-capture`,
 `personal-trajectory`, `evidence-card`, and `human-review`. Visible UI activity
 must resolve to one of these real events.
 

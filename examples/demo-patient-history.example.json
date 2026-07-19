@@ -3,7 +3,7 @@
   "containsPHI": false,
   "synthetic": true,
   "captureMode": "synthetic-fixture",
-  "datasetId": "neurotrax-demo-history.v0.1",
+  "datasetId": "phenometric-demo-history.v0.1",
   "participant": {
     "participantId": "synthetic-participant-001",
     "displayName": "Demo Patient",

@@ -17,7 +17,7 @@ export default defineConfig({
     env: {
       ...process.env,
       OPENAI_API_KEY: "fixture-browser-test-key",
-      NEUROTRAX_SKIP_SYNTHESIS_WARMUP: "1"
+      PHENOMETRIC_SKIP_SYNTHESIS_WARMUP: "1"
     },
     reuseExistingServer: true,
     timeout: 30_000

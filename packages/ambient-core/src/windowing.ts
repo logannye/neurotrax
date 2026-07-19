@@ -1,5 +1,5 @@
 import type { AudioFeatureFrame, FaceLandmarkFrame, FrameStream } from "./primitives.js";
-import type { ConfoundEnvelope, MeasurableWindow, Modality } from "@neurotrax/contracts";
+import type { ConfoundEnvelope, MeasurableWindow, Modality } from "@phenometric/contracts";
 import { mean } from "./stats.js";
 
 export const MIN_WINDOW_MS = 1500;

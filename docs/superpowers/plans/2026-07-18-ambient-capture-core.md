@@ -25,7 +25,7 @@ Every task's requirements implicitly include this section. Values are copied ver
 - **Node version:** `>=22` (root `package.json` `engines.node`). Use pnpm.
 - **Minimize features:** No fourth product capability, agent, service, or UI surface without an explicit scope decision. This plan adds no top-level `agents/*` directory. The three extractor/orchestrator units live inside `packages/ambient-core/src`.
 - **Do not break the legacy structure validator.** `scripts/validate-structure.sh` (run by `npm run check`) hard-asserts: exactly 3 directories under `agents/`; the legacy scripted event lifecycle in `examples/encounter-events.example.jsonl`; the 3-included/1-excluded history fixture; and that no media files (`*.wav *.mp3 *.m4a *.mp4 *.mov *.webm`) are committed. Do not add `agents/*` dirs, do not edit any file under `examples/`, `protocols/`, or `agents/`, and never commit media.
-- **Separate event taxonomy.** The ambient core uses `schemaVersion: "neurotrax.ambient-event.v0.1"`, `stage: "ambient-capture"`, and its own event types. It does not reuse or validate against the legacy `neurotrax.event-envelope.v0.1` taxonomy.
+- **Separate event taxonomy.** The ambient core uses `schemaVersion: "phenometric.ambient-event.v0.1"`, `stage: "ambient-capture"`, and its own event types. It does not reuse or validate against the legacy `phenometric.event-envelope.v0.1` taxonomy.
 - **Ephemeral capture.** The core consumes derived primitive frames only. It never handles or persists raw audio/video. `evidenceSnippetRef` is an opaque string reference, never embedded media.
 - **LLM stays out of the measurement loop.** This entire package is deterministic signal processing and orchestration. No model calls.
 - **Honesty of measurements.** Every `Measurement` sets `uncertainty: "placeholder"` and `clinicalValidation: "none"`. Values are engineering placeholders, never presented as validated biomarkers.
@@ -39,7 +39,7 @@ Every task's requirements implicitly include this section. Values are copied ver
 ```text
 packages/
 ├── contracts/
-│   ├── package.json                # @neurotrax/contracts
+│   ├── package.json                # @phenometric/contracts
 │   ├── tsconfig.json
 │   └── src/
 │       ├── capture-mode.ts         # CaptureMode
@@ -48,7 +48,7 @@ packages/
 │       ├── event.ts                # AmbientActor, AmbientEventType, EventEnvelope
 │       └── index.ts                # barrel export
 └── ambient-core/
-    ├── package.json                # @neurotrax/ambient-core (depends on @neurotrax/contracts)
+    ├── package.json                # @phenometric/ambient-core (depends on @phenometric/contracts)
     ├── tsconfig.json
     ├── vitest.config.ts
     ├── fixtures/
@@ -88,7 +88,7 @@ Root changes: `package.json` scripts, `.github/workflows/ci.yml`, `.gitignore`, 
 
 **Interfaces:**
 - Consumes: nothing.
-- Produces: a runnable `pnpm -w test:unit` that executes Vitest in `packages/ambient-core`, and `@neurotrax/contracts` exporting `CaptureMode`.
+- Produces: a runnable `pnpm -w test:unit` that executes Vitest in `packages/ambient-core`, and `@phenometric/contracts` exporting `CaptureMode`.
 
 - [ ] **Step 1: Add the `.gitignore` entries for Node**
 
@@ -107,7 +107,7 @@ Create `packages/contracts/package.json`:
 
 ```json
 {
-  "name": "@neurotrax/contracts",
+  "name": "@phenometric/contracts",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -163,7 +163,7 @@ Create `packages/ambient-core/package.json`:
 
 ```json
 {
-  "name": "@neurotrax/ambient-core",
+  "name": "@phenometric/ambient-core",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -174,7 +174,7 @@ Create `packages/ambient-core/package.json`:
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@neurotrax/contracts": "workspace:*"
+    "@phenometric/contracts": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "22.7.5",
@@ -229,7 +229,7 @@ Create `packages/ambient-core/src/smoke.test.ts`:
 ```ts
 import { describe, expect, it } from "vitest";
 import { AMBIENT_CORE_VERSION } from "./index.js";
-import type { CaptureMode } from "@neurotrax/contracts";
+import type { CaptureMode } from "@phenometric/contracts";
 
 describe("ambient-core toolchain", () => {
   it("exposes a version and resolves the contracts package", () => {
@@ -246,15 +246,15 @@ In root `package.json`, set `packageManager` and add scripts. The `check` script
 
 ```json
 {
-  "name": "neurotrax",
+  "name": "phenometric",
   "version": "0.1.0",
   "private": true,
-  "description": "A demo-first agentic audiovisual sidecar for longitudinal tele-neurology.",
+  "description": "A clinical observability prototype for quality-aware face and voice measurement across telehealth encounters.",
   "license": "MIT",
   "packageManager": "pnpm@9.12.3",
   "scripts": {
     "check": "bash scripts/validate-structure.sh",
-    "test:unit": "pnpm -r --filter @neurotrax/ambient-core test:unit",
+    "test:unit": "pnpm -r --filter @phenometric/ambient-core test:unit",
     "test": "npm run check && npm run test:unit"
   },
   "engines": {
@@ -303,7 +303,7 @@ Expected: Vitest runs `smoke.test.ts` and reports `1 passed`.
 - [ ] **Step 9: Verify the legacy structure check still passes**
 
 Run: `npm run check`
-Expected: prints `Neurotrax structure and event stream are valid.`
+Expected: prints `PhenoMetric structure and event stream are valid.`
 
 - [ ] **Step 10: Commit**
 
@@ -335,7 +335,7 @@ import type {
   Abstention,
   Measurement,
   MeasurableWindow
-} from "@neurotrax/contracts";
+} from "@phenometric/contracts";
 
 describe("measurement contracts", () => {
   it("models a measurement with provenance and placeholder honesty", () => {
@@ -387,7 +387,7 @@ describe("measurement contracts", () => {
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `pnpm -w test:unit`
-Expected: FAIL — cannot find exported types from `@neurotrax/contracts`.
+Expected: FAIL — cannot find exported types from `@phenometric/contracts`.
 
 - [ ] **Step 3: Write the contract types**
 
@@ -498,7 +498,7 @@ import { describe, expect, it } from "vitest";
 import type {
   EncounterObservation,
   EventEnvelope
-} from "@neurotrax/contracts";
+} from "@phenometric/contracts";
 
 describe("observation and event contracts", () => {
   it("models a per-visit aggregate observation", () => {
@@ -530,7 +530,7 @@ describe("observation and event contracts", () => {
 
   it("models an ambient event envelope with lane identity", () => {
     const event: EventEnvelope = {
-      schemaVersion: "neurotrax.ambient-event.v0.1",
+      schemaVersion: "phenometric.ambient-event.v0.1",
       eventId: "1-capture.window.detected",
       sequence: 1,
       occurredAt: "2026-07-18T16:00:00.000Z",
@@ -615,7 +615,7 @@ export type AmbientEventType =
   | "encounter-observation.created";
 
 export interface EventEnvelope {
-  schemaVersion: "neurotrax.ambient-event.v0.1";
+  schemaVersion: "phenometric.ambient-event.v0.1";
   eventId: string;
   sequence: number;
   occurredAt: string;
@@ -730,7 +730,7 @@ Expected: FAIL — cannot find `./primitives.js`.
 Create `packages/ambient-core/src/primitives.ts`:
 
 ```ts
-import type { CaptureMode } from "@neurotrax/contracts";
+import type { CaptureMode } from "@phenometric/contracts";
 
 export interface AudioFeatureFrame {
   tMs: number;
@@ -885,7 +885,7 @@ Create `packages/ambient-core/src/speech-acoustic.test.ts`:
 import { describe, expect, it } from "vitest";
 import { extractSpeechAcoustic, SPEECH_ACOUSTIC_VERSION } from "./speech-acoustic.js";
 import type { AudioFeatureFrame } from "./primitives.js";
-import type { Abstention, MeasurableWindow, Measurement } from "@neurotrax/contracts";
+import type { Abstention, MeasurableWindow, Measurement } from "@phenometric/contracts";
 
 const window: MeasurableWindow = {
   windowId: "w-speech-1",
@@ -948,7 +948,7 @@ Create `packages/ambient-core/src/speech-acoustic.ts`:
 
 ```ts
 import type { AudioFeatureFrame } from "./primitives.js";
-import type { Abstention, MeasurableWindow, Measurement } from "@neurotrax/contracts";
+import type { Abstention, MeasurableWindow, Measurement } from "@phenometric/contracts";
 import { mean, stdDev } from "./stats.js";
 
 export const SPEECH_ACOUSTIC_VERSION = "speech-acoustic-0.1";
@@ -1074,7 +1074,7 @@ Create `packages/ambient-core/src/facial-expressivity.test.ts`:
 import { describe, expect, it } from "vitest";
 import { extractFacialExpressivity, FACIAL_EXPRESSIVITY_VERSION } from "./facial-expressivity.js";
 import type { FaceLandmarkFrame } from "./primitives.js";
-import type { Abstention, MeasurableWindow, Measurement } from "@neurotrax/contracts";
+import type { Abstention, MeasurableWindow, Measurement } from "@phenometric/contracts";
 
 const window: MeasurableWindow = {
   windowId: "w-face-1",
@@ -1132,7 +1132,7 @@ Create `packages/ambient-core/src/facial-expressivity.ts`:
 
 ```ts
 import type { FaceLandmarkFrame } from "./primitives.js";
-import type { Abstention, MeasurableWindow, Measurement } from "@neurotrax/contracts";
+import type { Abstention, MeasurableWindow, Measurement } from "@phenometric/contracts";
 import { mean } from "./stats.js";
 
 export const FACIAL_EXPRESSIVITY_VERSION = "facial-expressivity-0.1";
@@ -1311,7 +1311,7 @@ Create `packages/ambient-core/src/windowing.ts`:
 
 ```ts
 import type { AudioFeatureFrame, FaceLandmarkFrame, FrameStream } from "./primitives.js";
-import type { ConfoundEnvelope, MeasurableWindow, Modality } from "@neurotrax/contracts";
+import type { ConfoundEnvelope, MeasurableWindow, Modality } from "@phenometric/contracts";
 import { mean } from "./stats.js";
 
 export const MIN_WINDOW_MS = 1500;
@@ -1427,7 +1427,7 @@ Create `packages/ambient-core/src/aggregate.test.ts`:
 ```ts
 import { describe, expect, it } from "vitest";
 import { aggregateMeasurements } from "./aggregate.js";
-import type { Measurement, MeasurementContextKind } from "@neurotrax/contracts";
+import type { Measurement, MeasurementContextKind } from "@phenometric/contracts";
 
 function m(code: string, value: number): Measurement {
   return {
@@ -1478,7 +1478,7 @@ import type {
   BiomarkerAggregate,
   Measurement,
   MeasurementContextKind
-} from "@neurotrax/contracts";
+} from "@phenometric/contracts";
 import { median, medianAbsoluteDeviation } from "./stats.js";
 
 export function aggregateMeasurements(
@@ -1586,7 +1586,7 @@ Expected: FAIL — cannot find `./events.js`.
 Create `packages/ambient-core/src/events.ts`:
 
 ```ts
-import type { AmbientActorId, AmbientEventType, EventEnvelope } from "@neurotrax/contracts";
+import type { AmbientActorId, AmbientEventType, EventEnvelope } from "@phenometric/contracts";
 
 export interface EventFactory {
   next(
@@ -1612,7 +1612,7 @@ export function createEventFactory(input: {
       sequence += 1;
       lastOffsetMs = Math.max(lastOffsetMs, occurredAtMs);
       return {
-        schemaVersion: "neurotrax.ambient-event.v0.1",
+        schemaVersion: "phenometric.ambient-event.v0.1",
         eventId: `${sequence}-${type}`,
         sequence,
         occurredAt: new Date(input.baseTimeMs + lastOffsetMs).toISOString(),
@@ -1788,7 +1788,7 @@ import type {
   Measurement,
   MeasurableWindow,
   MeasurementContextKind
-} from "@neurotrax/contracts";
+} from "@phenometric/contracts";
 import type { AudioFeatureFrame, FaceLandmarkFrame, FrameStream } from "./primitives.js";
 import { detectMeasurableWindows } from "./windowing.js";
 import { extractSpeechAcoustic } from "./speech-acoustic.js";
@@ -1921,14 +1921,14 @@ export { runConductor } from "./conductor.js";
 Run:
 ```bash
 pnpm -w test:unit
-pnpm --filter @neurotrax/ambient-core exec tsc --noEmit
+pnpm --filter @phenometric/ambient-core exec tsc --noEmit
 ```
 Expected: all tests PASS; `tsc` reports no errors.
 
 - [ ] **Step 7: Verify the legacy structure check still passes**
 
 Run: `npm run check`
-Expected: prints `Neurotrax structure and event stream are valid.`
+Expected: prints `PhenoMetric structure and event stream are valid.`
 
 - [ ] **Step 8: Commit**
 

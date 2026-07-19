@@ -5,11 +5,11 @@ import {
   type AudioFeatureFrame,
   type ConductorSession,
   type FaceLandmarkFrame
-} from "@neurotrax/ambient-core";
+} from "@phenometric/ambient-core";
 import {
   createModalityOutcomes,
   EVIDENCE_BOUNDARY
-} from "@neurotrax/evidence-core";
+} from "@phenometric/evidence-core";
 import type {
   AmbientActorId,
   AmbientEventType,
@@ -24,7 +24,7 @@ import type {
   ModalityOutcome,
   ReviewDecision,
   WorkflowStage
-} from "@neurotrax/contracts";
+} from "@phenometric/contracts";
 import {
   calculateRms,
   createVoiceActivityTracker,
@@ -2122,7 +2122,7 @@ async function synthesizeEvidence(): Promise<void> {
       );
     }
     latestEvidence = body;
-    console.info("[Neurotrax operator] Clinical synthesis timing", body.timing);
+    console.info("[PhenoMetric operator] Clinical synthesis timing", body.timing);
     const drafted = emitWorkflowEvent(
       "evidence-card",
       "evidence-card.drafted",

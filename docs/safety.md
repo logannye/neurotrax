@@ -2,7 +2,7 @@
 
 ## Demonstration boundary
 
-Neurotrax is an engineering and hackathon demonstration, not a medical device.
+PhenoMetric is an engineering and hackathon demonstration, not a medical device.
 Use only the presenter's explicitly consented self-demo data. Do not use PHI or
 make clinical decisions from its output.
 

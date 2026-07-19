@@ -1,7 +1,7 @@
 # Clinician review surface
 
 The active review surface is implemented inside
-`apps/capture-web/src/main.ts` to preserve Neurotrax's continuous one-screen
+`apps/capture-web/src/main.ts` to preserve PhenoMetric's continuous one-screen
 demo.
 
 It renders:

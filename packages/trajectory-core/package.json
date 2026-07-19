@@ -1,5 +1,5 @@
 {
-  "name": "@neurotrax/trajectory-core",
+  "name": "@phenometric/trajectory-core",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -14,8 +14,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@neurotrax/ambient-core": "workspace:*",
-    "@neurotrax/contracts": "workspace:*"
+    "@phenometric/ambient-core": "workspace:*",
+    "@phenometric/contracts": "workspace:*"
   },
   "devDependencies": {
     "typescript": "5.6.3",

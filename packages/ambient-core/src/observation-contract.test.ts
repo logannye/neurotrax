@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type {
   EncounterObservation,
   EventEnvelope
-} from "@neurotrax/contracts";
+} from "@phenometric/contracts";
 
 describe("observation and event contracts", () => {
   it("models a per-visit aggregate observation", () => {
@@ -96,7 +96,7 @@ describe("observation and event contracts", () => {
 
   it("models an ambient event envelope with lane identity", () => {
     const event: EventEnvelope = {
-      schemaVersion: "neurotrax.workflow-event.v0.2",
+      schemaVersion: "phenometric.workflow-event.v0.2",
       eventId: "1-capture.window.detected",
       sequence: 1,
       occurredAt: "2026-07-18T16:00:00.000Z",

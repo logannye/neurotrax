@@ -4,7 +4,7 @@
 
 | Moment | Presenter action | Visible system behavior |
 | --- | --- | --- |
-| System check | Consent, remain quiet, then speak naturally. | Neurotrax prepares speech and facial analysis, then enables the assessment. |
+| System check | Consent, remain quiet, then speak naturally. | PhenoMetric prepares speech and facial analysis, then enables the assessment. |
 | Signals established | Begin and keep speaking while centered. | Speech and facial windows open independently. |
 | Facial branch paused | Turn away while continuing to speak. | Facial Analysis turns amber; Speech Analysis remains active. |
 | Signal restored | Return to a centered position. | Facial Analysis reconnects and opens a new measurement window. |

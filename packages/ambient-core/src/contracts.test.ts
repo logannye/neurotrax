@@ -3,7 +3,7 @@ import type {
   Abstention,
   Measurement,
   MeasurableWindow
-} from "@neurotrax/contracts";
+} from "@phenometric/contracts";
 
 describe("measurement contracts", () => {
   it("models a measurement with provenance and placeholder honesty", () => {

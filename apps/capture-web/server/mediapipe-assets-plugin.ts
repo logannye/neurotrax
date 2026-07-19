@@ -52,7 +52,7 @@ function runtimeMiddleware(): Connect.NextHandleFunction {
 
 export function mediapipeAssetsPlugin(): Plugin {
   return {
-    name: "neurotrax-mediapipe-runtime-assets",
+    name: "phenometric-mediapipe-runtime-assets",
     configureServer(server) {
       server.middlewares.use(runtimeMiddleware());
     },

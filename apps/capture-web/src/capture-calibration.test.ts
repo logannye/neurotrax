@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { FaceLandmarkFrame } from "@neurotrax/ambient-core";
+import type { FaceLandmarkFrame } from "@phenometric/ambient-core";
 import {
   calibrateFaceFrame,
   classifyAudioCalibration,

@@ -1,5 +1,5 @@
 import type { FaceLandmarkFrame } from "./primitives.js";
-import type { Abstention, MeasurableWindow, Measurement } from "@neurotrax/contracts";
+import type { Abstention, MeasurableWindow, Measurement } from "@phenometric/contracts";
 import { mean } from "./stats.js";
 
 export const FACIAL_EXPRESSIVITY_VERSION = "facial-expressivity-0.3";

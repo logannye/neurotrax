@@ -6,7 +6,7 @@ import type {
   EvidenceSynthesisTiming,
   GroundingResult,
   ModalityOutcome
-} from "@neurotrax/contracts";
+} from "@phenometric/contracts";
 import {
   assembleEvidenceCardDraft,
   validateEvidenceCardDraft
@@ -126,7 +126,7 @@ function systemPrompt(validationErrors: string[] = []): string {
     validationErrors.length === 0
       ? ""
       : `\nA prior draft failed validation. Correct only these errors:\n- ${validationErrors.join("\n- ")}`;
-  return `Draft one concise, EHR-ready Neurotrax encounter report from the successfully measured current-encounter metrics.
+  return `Draft one concise, EHR-ready PhenoMetric encounter report from the successfully measured current-encounter metrics.
 
 Requirements:
 - Return only a direct headline and a one-sentence summary.
@@ -179,7 +179,7 @@ export async function runEvidenceAgent(
         verbosity: "low",
         format: zodTextFormat(
           EvidenceNarrativeDraftSchema,
-          "neurotrax_encounter_narrative"
+          "phenometric_encounter_narrative"
         )
       },
       input: [

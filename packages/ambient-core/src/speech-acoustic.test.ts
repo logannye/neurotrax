@@ -5,7 +5,7 @@ import {
   SPEECH_ACOUSTIC_VERSION
 } from "./speech-acoustic.js";
 import type { AudioFeatureFrame } from "./primitives.js";
-import type { Abstention, MeasurableWindow, Measurement } from "@neurotrax/contracts";
+import type { Abstention, MeasurableWindow, Measurement } from "@phenometric/contracts";
 
 const window: MeasurableWindow = {
   windowId: "w-speech-1",

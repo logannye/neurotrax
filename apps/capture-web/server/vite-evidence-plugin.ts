@@ -54,7 +54,7 @@ export function evidenceAgentPlugin(): Plugin {
           json(response, 200, { ready: false });
           return;
         }
-        if (process.env.NEUROTRAX_SKIP_SYNTHESIS_WARMUP === "1") {
+        if (process.env.PHENOMETRIC_SKIP_SYNTHESIS_WARMUP === "1") {
           json(response, 200, { ready: true, warmupSkipped: true });
           return;
         }
@@ -63,7 +63,7 @@ export function evidenceAgentPlugin(): Plugin {
           warmupPromise ??= runEvidenceAgent(EVIDENCE_SMOKE_REQUEST);
           const result = await warmupPromise;
           console.info(
-            `[Neurotrax operator] Clinical synthesis warmed in ${result.timing.totalMs} ms.`
+            `[PhenoMetric operator] Clinical synthesis warmed in ${result.timing.totalMs} ms.`
           );
           response.setHeader(
             "Server-Timing",
@@ -102,7 +102,7 @@ export function evidenceAgentPlugin(): Plugin {
           const payload = await readJson(request);
           const result = await runEvidenceAgent(payload);
           console.info(
-            `[Neurotrax operator] Clinical synthesis completed in ${result.timing.totalMs} ms (${result.attemptCount} attempt${result.attemptCount === 1 ? "" : "s"}).`
+            `[PhenoMetric operator] Clinical synthesis completed in ${result.timing.totalMs} ms (${result.attemptCount} attempt${result.attemptCount === 1 ? "" : "s"}).`
           );
           response.setHeader(
             "Server-Timing",
@@ -115,7 +115,7 @@ export function evidenceAgentPlugin(): Plugin {
               ? error.message
               : "Evidence synthesis failed.";
           console.warn(
-            `[Neurotrax operator] Clinical synthesis failed: ${message}`
+            `[PhenoMetric operator] Clinical synthesis failed: ${message}`
           );
           json(response, 422, { error: message });
         }
@@ -124,7 +124,7 @@ export function evidenceAgentPlugin(): Plugin {
   };
 
   return {
-    name: "neurotrax-evidence-agent",
+    name: "phenometric-evidence-agent",
     configureServer(server) {
       install(server.middlewares);
     },

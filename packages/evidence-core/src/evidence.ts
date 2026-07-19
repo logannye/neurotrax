@@ -7,7 +7,7 @@ import type {
   GroundingResult,
   Modality,
   ModalityOutcome
-} from "@neurotrax/contracts";
+} from "@phenometric/contracts";
 
 export const EVIDENCE_BOUNDARY =
   "For clinician review. This summary does not provide a diagnosis or treatment recommendation.";

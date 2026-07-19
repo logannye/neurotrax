@@ -32,5 +32,5 @@ It captures:
 2. a brief seated finger-tapping sample.
 
 The protocol exists to test consent, capture, quality, provenance, comparison,
-and review in the Neurotrax demo spine. It is not a validated neurological
+and review in the PhenoMetric demo spine. It is not a validated neurological
 examination.
