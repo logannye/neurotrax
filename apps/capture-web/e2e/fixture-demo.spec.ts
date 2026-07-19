@@ -152,6 +152,34 @@ test("runs guided capture, traces both claims, and approves the summary", async 
   await expect(page.locator("#result-summary")).toContainText(
     "2 encounter metrics"
   );
+  await expect(page.getByRole("heading", {
+    name: "Clinician encounter summary"
+  })).toBeVisible();
+  await expect(page.getByRole("heading", {
+    name: "Measured signals"
+  })).toBeVisible();
+  await expect(page.getByRole("heading", {
+    name: "Clinician note"
+  })).toBeVisible();
+  await expect(page.locator(".assessment-shell")).toBeHidden();
+  await expect(page.locator("#capture-handoff")).toHaveClass(
+    /is-complete/
+  );
+  await expect(page.locator("#capture-handoff")).toHaveAttribute(
+    "data-event-id",
+    /coordinator\.decision\.recorded/
+  );
+  await expect(page.locator("#grounding-handoff")).toHaveClass(
+    /is-complete/
+  );
+  await expect(page.locator("#grounding-handoff")).toHaveAttribute(
+    "data-event-id",
+    /evidence\.grounding\.completed/
+  );
+  await expect(page.locator("#review-handoff")).toHaveAttribute(
+    "data-event-id",
+    /human-review\.pending/
+  );
   await expectCleanPresentationCopy(page);
   await page.locator(".evidence-claim").first().click();
   await expect(page.locator("#trace-drawer")).toBeVisible();

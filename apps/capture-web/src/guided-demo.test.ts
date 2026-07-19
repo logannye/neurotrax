@@ -6,27 +6,27 @@ describe("timed guided demo controller", () => {
     const controller = createGuidedDemoController();
     controller.noteSpeechWindow();
     controller.noteInitialFaceWindow();
-    expect(controller.tick(3_999).phase).toBe("establishing");
-    expect(controller.tick(4_000)).toMatchObject({
+    expect(controller.tick(6_999).phase).toBe("establishing");
+    expect(controller.tick(7_000)).toMatchObject({
       phase: "turn-away",
       confirmations: { establishing: "confirmed" }
     });
 
     controller.noteWithholding(true);
-    expect(controller.tick(6_999).phase).toBe("turn-away");
-    expect(controller.tick(7_000)).toMatchObject({
+    expect(controller.tick(10_999).phase).toBe("turn-away");
+    expect(controller.tick(11_000)).toMatchObject({
       phase: "return",
       confirmations: { withholding: "confirmed" }
     });
 
     controller.noteRecovery();
-    expect(controller.tick(11_000)).toMatchObject({
+    expect(controller.tick(18_000)).toMatchObject({
       phase: "post-recovery",
       confirmations: { recovery: "confirmed" }
     });
 
     controller.notePostRecoveryWindow();
-    expect(controller.tick(14_000)).toMatchObject({
+    expect(controller.tick(24_000)).toMatchObject({
       phase: "complete",
       confirmations: { postRecovery: "confirmed" },
       canComplete: true
@@ -36,7 +36,7 @@ describe("timed guided demo controller", () => {
   it("cannot stall when turn-away and recovery are not confirmed", () => {
     const controller = createGuidedDemoController();
     controller.noteSpeechWindow();
-    controller.tick(14_000);
+    controller.tick(24_000);
     expect(controller.snapshot()).toMatchObject({
       phase: "complete",
       confirmations: {
@@ -56,9 +56,9 @@ describe("timed guided demo controller", () => {
 
   it("does not confirm withholding unless speech continued", () => {
     const controller = createGuidedDemoController();
-    controller.tick(4_000);
+    controller.tick(7_000);
     controller.noteWithholding(false);
-    expect(controller.tick(7_000).confirmations.withholding).toBe(
+    expect(controller.tick(11_000).confirmations.withholding).toBe(
       "not-confirmed"
     );
   });
@@ -76,28 +76,28 @@ describe("timed guided demo controller", () => {
       const controller = createGuidedDemoController();
       if (scenario !== "missing-speech") controller.noteSpeechWindow();
       if (scenario !== "missing-face") controller.noteInitialFaceWindow();
-      controller.tick(4_000);
+      controller.tick(7_000);
       if (scenario !== "missed-turn" && scenario !== "missing-speech") {
         controller.noteWithholding(true);
-      }
-      controller.tick(7_000);
-      if (
-        scenario !== "missed-recovery" &&
-        scenario !== "missing-face"
-      ) {
-        controller.noteRecovery();
       }
       controller.tick(11_000);
       if (
         scenario !== "missed-recovery" &&
         scenario !== "missing-face"
       ) {
+        controller.noteRecovery();
+      }
+      controller.tick(18_000);
+      if (
+        scenario !== "missed-recovery" &&
+        scenario !== "missing-face"
+      ) {
         controller.notePostRecoveryWindow();
       }
-      const result = controller.tick(14_000);
+      const result = controller.tick(24_000);
       expect(result.phase).toBe("complete");
       expect(result.canComplete).toBe(true);
-      expect(14_000).toBeLessThan(25_000);
+      expect(24_000).toBeLessThan(25_000);
     }
   });
 });

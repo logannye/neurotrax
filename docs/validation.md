@@ -51,8 +51,8 @@ Run five consecutive Chrome rehearsals on the presentation MacBook. Each run
 must:
 
 1. complete the system check;
-2. finish capture after the fixed fourteen-second sequence and reach results
-   within 25 seconds;
+2. finish capture after the fixed twenty-four-second sequence and reach results
+   within 35 seconds;
 3. produce one honest outcome for speech and one for facial analysis;
 4. visibly withhold only facial analysis during turn-away;
 5. visibly restore facial analysis after return;

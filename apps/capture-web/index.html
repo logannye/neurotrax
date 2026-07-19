@@ -237,16 +237,58 @@
         <section class="results-panel" id="results-panel" hidden aria-live="polite">
           <div class="results-heading">
             <div>
-              <p class="eyebrow">Encounter deliverable</p>
-              <h2>Current encounter</h2>
+              <p class="eyebrow">Assessment complete</p>
+              <h2>Clinician encounter summary</h2>
             </div>
             <div class="result-summary" id="result-summary"></div>
+          </div>
+
+          <div
+            class="results-handoff"
+            id="results-handoff"
+            aria-label="Agent handoff"
+          >
+            <div class="handoff-label">
+              <span class="handoff-pulse" aria-hidden="true"></span>
+              <div>
+                <strong>Agent handoff</strong>
+                <small>From ambient signals to clinician review</small>
+              </div>
+            </div>
+            <div class="handoff-flow">
+              <article class="handoff-step" id="capture-handoff">
+                <span class="handoff-icon">C</span>
+                <div>
+                  <strong>Signals analyzed</strong>
+                  <small>Speech + facial evidence</small>
+                </div>
+                <span class="handoff-state">Complete</span>
+              </article>
+              <span class="handoff-connector" aria-hidden="true"></span>
+              <article class="handoff-step" id="grounding-handoff">
+                <span class="handoff-icon">G</span>
+                <div>
+                  <strong>Evidence grounding</strong>
+                  <small>Matching claims to source</small>
+                </div>
+                <span class="handoff-state">Preparing</span>
+              </article>
+              <span class="handoff-connector" aria-hidden="true"></span>
+              <article class="handoff-step" id="review-handoff">
+                <span class="handoff-icon">R</span>
+                <div>
+                  <strong>Clinician review</strong>
+                  <small>Human decision required</small>
+                </div>
+                <span class="handoff-state">Next</span>
+              </article>
+            </div>
           </div>
 
           <div class="result-section">
             <div class="section-heading">
               <span class="section-number">01</span>
-              <h3>Encounter metrics</h3>
+              <h3>Measured signals</h3>
             </div>
             <div class="aggregate-grid" id="aggregate-grid"></div>
           </div>
@@ -254,7 +296,7 @@
           <div class="result-section evidence-section" id="evidence-panel">
             <div class="section-heading">
               <span class="section-number">02</span>
-              <h3>EHR-ready encounter report</h3>
+              <h3>Clinician note</h3>
               <span class="summary-status" id="evidence-status-chip"
                 >Preparing</span
               >

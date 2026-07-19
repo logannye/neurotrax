@@ -95,8 +95,8 @@ export function createEncounterClaimFacts(
     );
     const statement =
       modality === "speech"
-        ? `${aggregate.label} was measured from a technically usable speech interval.`
-        : `${aggregate.label} was measured before and after a quality-withheld interval.`;
+        ? `${aggregate.label} was measured across accepted speech analysis windows.`
+        : `${aggregate.label} was measured across accepted facial analysis windows.`;
 
     facts.push({
       claimId: `claim-${aggregate.code.replaceAll(".", "-")}`,
@@ -214,10 +214,10 @@ export function createModalityOutcomes(
         modality,
         statement:
           modality === "speech"
-            ? `${aggregate.label}: ${formatNumber(aggregate.value)} ${aggregate.unit}, measured from a technically usable speech interval.`
+            ? `${aggregate.label}: ${formatNumber(aggregate.value)} ${aggregate.unit}, measured across accepted speech analysis windows.`
             : beforeAndAfter
-              ? `${aggregate.label}: ${formatNumber(aggregate.value)} ${aggregate.unit}, measured before and after a quality-protected interval.`
-              : `${aggregate.label}: ${formatNumber(aggregate.value)} ${aggregate.unit}, measured from a technically usable facial interval.`,
+              ? `${aggregate.label}: ${formatNumber(aggregate.value)} ${aggregate.unit}, measured across accepted facial analysis windows.`
+              : `${aggregate.label}: ${formatNumber(aggregate.value)} ${aggregate.unit}, measured across the encounter.`,
         currentValue: aggregate.value,
         unit: aggregate.unit,
         qualityFacts,

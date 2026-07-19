@@ -861,86 +861,195 @@ body[data-capture-state="capturing"] .button-row {
 
 .results-panel {
   position: relative;
+  display: grid;
+  grid-template-columns: minmax(280px, 0.72fr) minmax(0, 1.28fr);
+  grid-template-areas:
+    "heading heading"
+    "handoff handoff"
+    "metrics report"
+    "baseline baseline";
+  gap: 20px 28px;
   scroll-margin-top: 92px;
   margin-top: 26px;
-  padding: 28px;
+  padding: 26px;
   border: 1px solid var(--line);
   border-radius: 28px;
   background: var(--surface);
   box-shadow: var(--shadow);
 }
 
-body[data-capture-state="review"] .assessment-shell,
-body[data-capture-state="reviewed"] .assessment-shell {
-  grid-template-columns: 1fr;
-  min-height: 0;
-  border-radius: 20px;
-  box-shadow: none;
+body[data-capture-state="analyzing"] main,
+body[data-capture-state="review"] main,
+body[data-capture-state="reviewed"] main {
+  width: min(1260px, calc(100% - 40px));
+  padding: 18px 0 32px;
 }
 
-body[data-capture-state="review"] .capture-panel,
-body[data-capture-state="reviewed"] .capture-panel,
-body[data-capture-state="review"] .milestone-rail,
-body[data-capture-state="reviewed"] .milestone-rail,
-body[data-capture-state="review"] .activity-stream,
-body[data-capture-state="reviewed"] .activity-stream {
+body[data-capture-state="analyzing"] .intro-row,
+body[data-capture-state="review"] .intro-row,
+body[data-capture-state="reviewed"] .intro-row,
+body[data-capture-state="analyzing"] .assessment-shell,
+body[data-capture-state="review"] .assessment-shell,
+body[data-capture-state="reviewed"] .assessment-shell {
   display: none;
 }
 
-body[data-capture-state="review"] .activity-panel,
-body[data-capture-state="reviewed"] .activity-panel {
-  padding: 16px 18px 18px;
-}
-
-body[data-capture-state="review"] .panel-heading,
-body[data-capture-state="reviewed"] .panel-heading {
-  margin-bottom: 12px;
-}
-
-body[data-capture-state="review"] .agent-graph,
-body[data-capture-state="reviewed"] .agent-graph {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 8px;
-}
-
-body[data-capture-state="review"] .parallel-nodes,
-body[data-capture-state="reviewed"] .parallel-nodes {
-  display: contents;
-}
-
-body[data-capture-state="review"] .agent-node,
-body[data-capture-state="reviewed"] .agent-node {
-  grid-template-columns: 28px minmax(0, 1fr);
-  min-height: 58px;
-}
-
-body[data-capture-state="review"] .review-node,
-body[data-capture-state="reviewed"] .review-node {
-  grid-column: 5;
-}
-
-body[data-capture-state="review"] .synthesis-node,
-body[data-capture-state="reviewed"] .synthesis-node {
-  grid-column: 4;
-}
-
-body[data-capture-state="review"] .agent-node p,
-body[data-capture-state="reviewed"] .agent-node p,
-body[data-capture-state="review"] .lane-state,
-body[data-capture-state="reviewed"] .lane-state,
-body[data-capture-state="review"] .graph-connector,
-body[data-capture-state="reviewed"] .graph-connector,
-body[data-capture-state="review"] .coordinator-decision,
-body[data-capture-state="reviewed"] .coordinator-decision,
-body[data-capture-state="review"] .evidence-packet,
-body[data-capture-state="reviewed"] .evidence-packet {
-  display: none !important;
+body[data-capture-state="analyzing"] .results-panel,
+body[data-capture-state="review"] .results-panel,
+body[data-capture-state="reviewed"] .results-panel {
+  min-height: calc(100vh - 140px);
+  margin-top: 0;
 }
 
 .results-heading {
-  padding-bottom: 22px;
-  border-bottom: 1px solid var(--line);
+  grid-area: heading;
+  padding-bottom: 0;
+}
+
+.results-heading h2 {
+  font-size: clamp(25px, 3vw, 38px);
+}
+
+.results-handoff {
+  display: grid;
+  grid-area: handoff;
+  grid-template-columns: 190px minmax(0, 1fr);
+  gap: 18px;
+  align-items: center;
+  padding: 14px 16px;
+  border-radius: 18px;
+  color: white;
+  background:
+    radial-gradient(circle at 78% 0%, rgba(77, 182, 165, 0.22), transparent 38%),
+    var(--ink);
+  box-shadow: 0 18px 42px rgba(16, 47, 54, 0.14);
+}
+
+.handoff-label {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.handoff-label strong,
+.handoff-label small {
+  display: block;
+}
+
+.handoff-label strong {
+  font-size: 12px;
+}
+
+.handoff-label small {
+  margin-top: 3px;
+  color: rgba(255, 255, 255, 0.56);
+  font-size: 8px;
+  line-height: 1.35;
+}
+
+.handoff-pulse {
+  width: 9px;
+  height: 9px;
+  border: 2px solid rgba(255, 255, 255, 0.65);
+  border-radius: 50%;
+  background: var(--teal-bright);
+  box-shadow: 0 0 0 5px rgba(77, 182, 165, 0.14);
+}
+
+.handoff-flow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 18px minmax(0, 1fr) 18px minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+}
+
+.handoff-step {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  min-width: 0;
+  min-height: 52px;
+  padding: 8px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.055);
+  opacity: 0.58;
+  transition:
+    opacity 180ms ease,
+    border-color 180ms ease,
+    background 180ms ease;
+}
+
+.handoff-step.is-active {
+  border-color: rgba(77, 182, 165, 0.62);
+  background: rgba(77, 182, 165, 0.12);
+  opacity: 1;
+}
+
+.handoff-step.is-complete {
+  opacity: 1;
+}
+
+.handoff-icon {
+  display: grid;
+  width: 27px;
+  height: 27px;
+  place-items: center;
+  border-radius: 9px;
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.9);
+  font-size: 9px;
+  font-weight: 850;
+}
+
+.handoff-step.is-active .handoff-icon,
+.handoff-step.is-complete .handoff-icon {
+  color: white;
+  background: var(--teal);
+}
+
+.handoff-step strong,
+.handoff-step small {
+  display: block;
+}
+
+.handoff-step strong {
+  overflow: hidden;
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.handoff-step small {
+  margin-top: 2px;
+  overflow: hidden;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 7px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.handoff-state {
+  color: rgba(255, 255, 255, 0.54);
+  font-size: 7px;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.handoff-step.is-active .handoff-state,
+.handoff-step.is-complete .handoff-state {
+  color: #8ed9cc;
+}
+
+.handoff-connector {
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    rgba(77, 182, 165, 0.75),
+    rgba(255, 255, 255, 0.14)
+  );
 }
 
 .result-summary {
@@ -961,12 +1070,19 @@ body[data-capture-state="reviewed"] .evidence-packet {
 }
 
 .result-section {
-  padding: 24px 0;
-  border-bottom: 1px solid var(--line);
+  min-width: 0;
+  padding: 20px;
+  border: 1px solid var(--line-soft);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.54);
 }
 
-.result-section:last-of-type {
-  border-bottom: 0;
+.result-section:first-of-type {
+  grid-area: metrics;
+}
+
+.evidence-section {
+  grid-area: report;
 }
 
 .section-heading {
@@ -992,16 +1108,30 @@ body[data-capture-state="reviewed"] .evidence-packet {
 
 .aggregate-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: 1fr;
   gap: 10px;
 }
 
 .aggregate-card {
+  position: relative;
+  overflow: hidden;
   min-width: 0;
-  padding: 17px;
+  padding: 18px;
   border: 1px solid var(--line-soft);
   border-radius: 16px;
-  background: white;
+  background:
+    radial-gradient(circle at 100% 0%, rgba(77, 182, 165, 0.11), transparent 38%),
+    white;
+}
+
+.aggregate-card::before {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 3px;
+  background: linear-gradient(var(--teal), var(--teal-bright));
+  content: "";
 }
 
 .aggregate-card > div:first-child {
@@ -1011,7 +1141,7 @@ body[data-capture-state="reviewed"] .evidence-packet {
 }
 
 .aggregate-card > div:first-child strong {
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .aggregate-card > div:first-child span {
@@ -1024,11 +1154,11 @@ body[data-capture-state="reviewed"] .evidence-packet {
   display: flex;
   gap: 6px;
   align-items: baseline;
-  margin: 20px 0 15px;
+  margin: 16px 0 11px;
 }
 
 .aggregate-value span {
-  font-size: clamp(25px, 3vw, 40px);
+  font-size: clamp(27px, 3vw, 40px);
   font-weight: 780;
   letter-spacing: -0.05em;
 }
@@ -1036,7 +1166,8 @@ body[data-capture-state="reviewed"] .evidence-packet {
 .aggregate-value small,
 .aggregate-footer {
   color: var(--ink-soft);
-  font-size: 8px;
+  font-size: 9px;
+  line-height: 1.45;
 }
 
 .evidence-loading,
@@ -1053,7 +1184,8 @@ body[data-capture-state="reviewed"] .evidence-packet {
 }
 
 .evidence-card {
-  padding: clamp(22px, 4vw, 42px);
+  min-height: 300px;
+  padding: clamp(20px, 2.4vw, 30px);
   border: 1px solid rgba(21, 117, 109, 0.22);
   border-radius: 20px;
   background:
@@ -1062,31 +1194,31 @@ body[data-capture-state="reviewed"] .evidence-packet {
 }
 
 .evidence-card > h3 {
-  max-width: 800px;
-  margin-bottom: 12px;
-  font-size: clamp(27px, 4vw, 48px);
-  line-height: 1;
+  max-width: 720px;
+  margin-bottom: 10px;
+  font-size: clamp(27px, 3.2vw, 39px);
+  line-height: 1.02;
   letter-spacing: -0.05em;
 }
 
 .evidence-card > p:not(.eyebrow, .boundary-statement, .review-outcome) {
   max-width: 850px;
   color: var(--ink-soft);
-  font-size: 16px;
-  line-height: 1.55;
+  font-size: 14px;
+  line-height: 1.5;
 }
 
 .evidence-claims {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
-  margin: 24px 0;
+  margin: 18px 0;
 }
 
 .evidence-claim {
   display: grid;
   gap: 7px;
-  padding: 18px;
+  padding: 14px;
   border: 1px solid var(--line);
   border-radius: 15px;
   background: rgba(255, 255, 255, 0.82);
@@ -1123,7 +1255,7 @@ body[data-capture-state="reviewed"] .evidence-packet {
 .review-controls {
   display: flex;
   gap: 10px;
-  margin-top: 18px;
+  margin-top: 16px;
 }
 
 .review-outcome {
@@ -1223,6 +1355,7 @@ body[data-capture-state="reviewed"] .evidence-packet {
 
 .baseline-panel {
   display: grid;
+  grid-area: baseline;
   grid-template-columns: minmax(0, 0.9fr) minmax(520px, 1.1fr);
   gap: 40px;
   align-items: center;
@@ -1328,6 +1461,20 @@ body[data-capture-state="reviewed"] .evidence-packet {
   }
 
   .assessment-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .results-panel {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "heading"
+      "handoff"
+      "metrics"
+      "report"
+      "baseline";
+  }
+
+  .results-handoff {
     grid-template-columns: 1fr;
   }
 
@@ -1497,6 +1644,64 @@ body[data-capture-state="reviewed"] .evidence-packet {
     padding: 5px 0;
   }
 
+  body[data-capture-state="analyzing"] .results-panel,
+  body[data-capture-state="review"] .results-panel,
+  body[data-capture-state="reviewed"] .results-panel {
+    min-height: calc(100vh - 110px);
+    padding: 18px 20px;
+    gap: 12px 20px;
+  }
+
+  .results-handoff {
+    padding: 10px 12px;
+  }
+
+  .handoff-step {
+    min-height: 46px;
+    padding-block: 6px;
+  }
+
+  .result-section {
+    padding: 15px;
+  }
+
+  .section-heading {
+    margin-bottom: 12px;
+  }
+
+  .aggregate-card {
+    padding: 14px 16px;
+  }
+
+  .aggregate-value {
+    margin: 11px 0 8px;
+  }
+
+  .evidence-card {
+    min-height: 0;
+    padding: 18px 20px;
+  }
+
+  .evidence-card > h3 {
+    font-size: clamp(25px, 2.6vw, 34px);
+  }
+
+  .evidence-claims {
+    margin: 12px 0;
+  }
+
+  .evidence-claim {
+    padding: 11px 12px;
+  }
+
+  .boundary-statement {
+    padding-top: 11px;
+  }
+
+  .review-controls {
+    margin-top: 11px;
+  }
+
   .app-footer {
     min-height: 34px;
     padding-block: 10px;
@@ -1541,6 +1746,24 @@ body[data-capture-state="reviewed"] .evidence-packet {
   .aggregate-grid,
   .evidence-claims {
     grid-template-columns: 1fr;
+  }
+
+  .results-panel {
+    gap: 12px;
+  }
+
+  .handoff-flow {
+    grid-template-columns: 1fr;
+  }
+
+  .handoff-connector {
+    width: 1px;
+    height: 10px;
+    justify-self: center;
+    background: linear-gradient(
+      rgba(77, 182, 165, 0.75),
+      rgba(255, 255, 255, 0.14)
+    );
   }
 
   .parallel-nodes,
