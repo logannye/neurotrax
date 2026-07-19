@@ -6,15 +6,22 @@ export interface AudioCalibration {
 }
 
 export interface FaceCalibration {
-  baselineBoxWidth: number;
-  baselineBoxHeight: number;
-  baselineIllumination: number;
+  durationMs: number;
+  totalFrameCount: number;
+  usableFrameCount: number;
+  usableFraction: number;
+  analyzedFrameRate: number;
+  baselineBoxWidthPixels: number;
+  baselineBoxHeightPixels: number;
+  baselineIlluminationMean: number;
+  baselineSharpness: number;
 }
 
 export type CalibrationQuality = "strong" | "limited" | "unavailable";
 
 export interface CaptureCalibration {
-  profileId: "macbook-timed-v0.2";
+  schemaVersion: "phenometric.capture-calibration.v1";
+  profileId: "visual-foundation-v1";
   calibratedAt: string;
   audio: AudioCalibration;
   audioQuality: CalibrationQuality;
@@ -27,15 +34,58 @@ export interface CaptureQualityPolicy {
   speechOpenDebounceMs: number;
   maximumSpeechPauseMs: number;
   faceQualityDebounceMs: number;
-  faceFramingFloor: number;
+  minimumAnalyzedFrameRate: number;
+  maximumVisualFrameGapMs: number;
+  maximumSkippedFrameFraction: number;
+  rollingVisualQualityWindowMs: number;
+  minimumFaceWidthPixels: number;
+  minimumFaceHeightPixels: number;
+  maximumFaceWidthFraction: number;
+  maximumFaceHeightFraction: number;
+  minimumEdgeMarginFraction: number;
   maximumFaceYawDegrees: number;
+  maximumFacePitchDegrees: number;
+  maximumFaceRollDegrees: number;
+  minimumIlluminationMean: number;
+  maximumIlluminationMean: number;
+  maximumDarkClippingFraction: number;
+  maximumBrightClippingFraction: number;
+  minimumSharpness: number;
+  calibrationSharpnessFraction: number;
+  minimumFaceCalibrationDurationMs: number;
+  minimumFaceCalibrationUsableFraction: number;
+}
+
+export type VisualTaskContext =
+  | "establishing"
+  | "turn-away"
+  | "neutral-face"
+  | "smile"
+  | "eye-closure";
+
+export type VisualQualityReasonCode =
+  | "face-not-visible"
+  | "face-too-small"
+  | "face-too-large"
+  | "face-edge-margin"
+  | "pose-out-of-range"
+  | "blur"
+  | "illumination-out-of-range"
+  | "frame-rate-below-minimum"
+  | "visual-frame-gap"
+  | "too-many-skipped-frames"
+  | "worker-unavailable"
+  | "camera-unavailable"
+  | "document-hidden";
+
+export interface VisualQualityAssessment {
+  usable: boolean;
+  reasonCodes: VisualQualityReasonCode[];
+  sharpnessFloor: number;
 }
 
 export type TimedEncounterPhase =
-  | "establishing"
-  | "turn-away"
-  | "return"
-  | "post-recovery";
+  VisualTaskContext;
 
 export type ConfirmationState =
   | "pending"
@@ -51,7 +101,7 @@ export interface TimedEncounterPhasePolicy {
 }
 
 export interface TimedEncounterPolicy {
-  id: "judge-ready-timed-v0.1";
+  id: "judge-ready-timed-v0.2";
   systemCheckMaximumMs: number;
   quietCalibrationMs: number;
   reliablePitchFramesForStrong: number;

@@ -1,5 +1,13 @@
 export const AMBIENT_CORE_VERSION = "0.1.0";
-export type { AudioFeatureFrame, FaceLandmarkFrame, FrameStream } from "./primitives.js";
+export type {
+  AudioFeatureFrame,
+  NormalizedPoint,
+  FacialBoundingBox,
+  FacialPose,
+  BilateralValue,
+  FacialKinematicsFrameV1,
+  FrameStream
+} from "./primitives.js";
 export {
   countBoundedPauses,
   extractSpeechAcoustic,
@@ -9,7 +17,16 @@ export {
   SPEECH_ACOUSTIC_VERSION,
   SPEECH_SNR_FLOOR_DB
 } from "./speech-acoustic.js";
-export { extractFacialExpressivity, FACIAL_EXPRESSIVITY_VERSION, FACE_FRAMING_FLOOR, BLINK_EAR_THRESHOLD } from "./facial-expressivity.js";
+export {
+  extractFacialTaskMeasurements,
+  FACIAL_KINEMATICS_VERSION,
+  SMILE_ADHERENCE_FLOOR,
+  EYE_CLOSURE_ADHERENCE_FLOOR
+} from "./facial-task.js";
+export type { FacialExtractionResult } from "./facial-task.js";
+export {
+  evaluateVisualQuality
+} from "./visual-quality.js";
 export {
   detectMeasurableWindows,
   MAX_FACE_WINDOW_YAW_DEGREES,
@@ -29,3 +46,10 @@ export type {
   ConductorSession,
   ConductorSessionOptions
 } from "./conductor.js";
+export {
+  SYNTHETIC_VISUAL_PIPELINE,
+  SYNTHETIC_VIDEO_SETTINGS,
+  syntheticFacialFrame,
+  syntheticTaskFrames,
+  syntheticFrameStream
+} from "./test-helpers.js";

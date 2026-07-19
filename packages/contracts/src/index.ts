@@ -5,6 +5,9 @@ export type {
   CalibrationQuality,
   CaptureCalibration,
   CaptureQualityPolicy,
+  VisualTaskContext,
+  VisualQualityReasonCode,
+  VisualQualityAssessment,
   TimedEncounterPhase,
   ConfirmationState,
   TimedEncounterPhasePolicy,
@@ -13,15 +16,20 @@ export type {
 export type {
   Modality,
   MeasurementContextKind,
+  SpeechConfoundEnvelope,
+  VisualConfoundEnvelope,
   ConfoundEnvelope,
   MeasurementContext,
   MeasurableWindow,
+  MeasurementUncertainty,
   Measurement,
   Abstention
 } from "./measurement.js";
 export type {
   BiomarkerAggregate,
   CaptureAdapter,
+  VisualPipelineProvenance,
+  VideoCaptureSettings,
   EncounterQualitySummary,
   EncounterObservation
 } from "./observation.js";

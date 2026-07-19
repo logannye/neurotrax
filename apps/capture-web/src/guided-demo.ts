@@ -21,13 +21,15 @@ export interface GuidedDemoSnapshot {
   speechWindowObserved: boolean;
   initialFaceWindowObserved: boolean;
   withholdingObserved: boolean;
-  recoveryObserved: boolean;
-  postRecoveryWindowObserved: boolean;
+  neutralFaceObserved: boolean;
+  smileObserved: boolean;
+  eyeClosureObserved: boolean;
   confirmations: {
     establishing: ConfirmationState;
     withholding: ConfirmationState;
-    recovery: ConfirmationState;
-    postRecovery: ConfirmationState;
+    neutralFace: ConfirmationState;
+    smile: ConfirmationState;
+    eyeClosure: ConfirmationState;
   };
   lastTransition: GuidedPhaseTransition | null;
   canComplete: boolean;
@@ -38,14 +40,15 @@ export interface GuidedDemoController {
   noteSpeechWindow(): GuidedDemoSnapshot;
   noteInitialFaceWindow(): GuidedDemoSnapshot;
   noteWithholding(speechContinued: boolean): GuidedDemoSnapshot;
-  noteRecovery(): GuidedDemoSnapshot;
-  notePostRecoveryWindow(): GuidedDemoSnapshot;
+  noteNeutralFace(): GuidedDemoSnapshot;
+  noteSmile(): GuidedDemoSnapshot;
+  noteEyeClosure(): GuidedDemoSnapshot;
   reset(startedAtMs?: number): void;
   snapshot(tMs?: number): GuidedDemoSnapshot;
 }
 
 export const JUDGE_READY_TIMED_POLICY: TimedEncounterPolicy = {
-  id: "judge-ready-timed-v0.1",
+  id: "judge-ready-timed-v0.2",
   systemCheckMaximumMs: 5_000,
   quietCalibrationMs: 1_500,
   reliablePitchFramesForStrong: 8,
@@ -55,30 +58,37 @@ export const JUDGE_READY_TIMED_POLICY: TimedEncounterPolicy = {
   phases: [
     {
       phase: "establishing",
-      minimumDurationMs: 7_000,
-      maximumDurationMs: 7_000,
+      minimumDurationMs: 5_000,
+      maximumDurationMs: 5_000,
       successCondition: "speech-and-initial-face-window",
       timeoutBehavior: "advance-and-record-not-confirmed"
     },
     {
       phase: "turn-away",
-      minimumDurationMs: 4_000,
-      maximumDurationMs: 4_000,
+      minimumDurationMs: 3_000,
+      maximumDurationMs: 3_000,
       successCondition: "facial-withholding-while-speech-continues",
       timeoutBehavior: "advance-and-record-not-confirmed"
     },
     {
-      phase: "return",
-      minimumDurationMs: 7_000,
-      maximumDurationMs: 7_000,
-      successCondition: "facial-quality-restored",
+      phase: "neutral-face",
+      minimumDurationMs: 3_000,
+      maximumDurationMs: 3_000,
+      successCondition: "usable-neutral-face-evidence",
       timeoutBehavior: "advance-and-record-not-confirmed"
     },
     {
-      phase: "post-recovery",
-      minimumDurationMs: 6_000,
-      maximumDurationMs: 6_000,
-      successCondition: "post-recovery-face-window",
+      phase: "smile",
+      minimumDurationMs: 4_000,
+      maximumDurationMs: 4_000,
+      successCondition: "usable-smile-evidence",
+      timeoutBehavior: "advance-and-record-not-confirmed"
+    },
+    {
+      phase: "eye-closure",
+      minimumDurationMs: 4_000,
+      maximumDurationMs: 4_000,
+      successCondition: "usable-eye-closure-evidence",
       timeoutBehavior: "advance-and-record-not-confirmed"
     }
   ]
@@ -90,8 +100,9 @@ function confirmationFor(
     speechWindow: boolean;
     initialFaceWindow: boolean;
     withholding: boolean;
-    recovery: boolean;
-    postRecoveryWindow: boolean;
+    neutralFace: boolean;
+    smile: boolean;
+    eyeClosure: boolean;
   }
 ): ConfirmationState {
   if (phase === "establishing") {
@@ -102,10 +113,13 @@ function confirmationFor(
   if (phase === "turn-away") {
     return observed.withholding ? "confirmed" : "not-confirmed";
   }
-  if (phase === "return") {
-    return observed.recovery ? "confirmed" : "not-confirmed";
+  if (phase === "neutral-face") {
+    return observed.neutralFace ? "confirmed" : "not-confirmed";
   }
-  return observed.postRecoveryWindow ? "confirmed" : "not-confirmed";
+  if (phase === "smile") {
+    return observed.smile ? "confirmed" : "not-confirmed";
+  }
+  return observed.eyeClosure ? "confirmed" : "not-confirmed";
 }
 
 export function createGuidedDemoController(
@@ -119,13 +133,15 @@ export function createGuidedDemoController(
   let speechWindowObserved = false;
   let initialFaceWindowObserved = false;
   let withholdingObserved = false;
-  let recoveryObserved = false;
-  let postRecoveryWindowObserved = false;
+  let neutralFaceObserved = false;
+  let smileObserved = false;
+  let eyeClosureObserved = false;
   const confirmations: GuidedDemoSnapshot["confirmations"] = {
     establishing: "pending",
     withholding: "pending",
-    recovery: "pending",
-    postRecovery: "pending"
+    neutralFace: "pending",
+    smile: "pending",
+    eyeClosure: "pending"
   };
 
   const currentPhase = (): GuidedPhase =>
@@ -138,8 +154,9 @@ export function createGuidedDemoController(
       speechWindow: speechWindowObserved,
       initialFaceWindow: initialFaceWindowObserved,
       withholding: withholdingObserved,
-      recovery: recoveryObserved,
-      postRecoveryWindow: postRecoveryWindowObserved
+      neutralFace: neutralFaceObserved,
+      smile: smileObserved,
+      eyeClosure: eyeClosureObserved
     });
 
   const setConfirmation = (
@@ -148,28 +165,33 @@ export function createGuidedDemoController(
   ): void => {
     if (phase === "establishing") confirmations.establishing = value;
     else if (phase === "turn-away") confirmations.withholding = value;
-    else if (phase === "return") confirmations.recovery = value;
-    else confirmations.postRecovery = value;
+    else if (phase === "neutral-face") confirmations.neutralFace = value;
+    else if (phase === "smile") confirmations.smile = value;
+    else confirmations.eyeClosure = value;
   };
 
   const snapshot = (tMs = lastTickMs): GuidedDemoSnapshot => {
     const phase = currentPhase();
     const phasePolicy =
       phase === "complete" ? null : policy.phases[phaseIndex];
+    const snapshotTime = Math.max(lastTickMs, tMs);
     return {
       phase,
       phaseStartedAt,
       remainingMs: phasePolicy
         ? Math.max(
             0,
-            phaseStartedAt + phasePolicy.maximumDurationMs - tMs
+            phaseStartedAt +
+              phasePolicy.maximumDurationMs -
+              snapshotTime
           )
         : 0,
       speechWindowObserved,
       initialFaceWindowObserved,
       withholdingObserved,
-      recoveryObserved,
-      postRecoveryWindowObserved,
+      neutralFaceObserved,
+      smileObserved,
+      eyeClosureObserved,
       confirmations: { ...confirmations },
       lastTransition,
       canComplete: phase === "complete"
@@ -200,14 +222,15 @@ export function createGuidedDemoController(
     return snapshot(lastTickMs);
   };
 
-  const note = (apply: () => void): GuidedDemoSnapshot => {
+  const note = (
+    expectedPhase: TimedEncounterPhase,
+    apply: () => void
+  ): GuidedDemoSnapshot => {
+    if (currentPhase() !== expectedPhase) return snapshot();
     apply();
-    const phase = currentPhase();
-    if (phase !== "complete") {
-      const confirmation = phaseConfirmation(phase);
-      if (confirmation === "confirmed") {
-        setConfirmation(phase, confirmation);
-      }
+    const confirmation = phaseConfirmation(expectedPhase);
+    if (confirmation === "confirmed") {
+      setConfirmation(expectedPhase, confirmation);
     }
     return snapshot();
   };
@@ -221,35 +244,41 @@ export function createGuidedDemoController(
     speechWindowObserved = false;
     initialFaceWindowObserved = false;
     withholdingObserved = false;
-    recoveryObserved = false;
-    postRecoveryWindowObserved = false;
+    neutralFaceObserved = false;
+    smileObserved = false;
+    eyeClosureObserved = false;
     confirmations.establishing = "pending";
     confirmations.withholding = "pending";
-    confirmations.recovery = "pending";
-    confirmations.postRecovery = "pending";
+    confirmations.neutralFace = "pending";
+    confirmations.smile = "pending";
+    confirmations.eyeClosure = "pending";
   };
 
   return {
     tick,
     noteSpeechWindow: () =>
-      note(() => {
+      note("establishing", () => {
         speechWindowObserved = true;
       }),
     noteInitialFaceWindow: () =>
-      note(() => {
+      note("establishing", () => {
         initialFaceWindowObserved = true;
       }),
     noteWithholding: (speechContinued) =>
-      note(() => {
+      note("turn-away", () => {
         if (speechContinued) withholdingObserved = true;
       }),
-    noteRecovery: () =>
-      note(() => {
-        recoveryObserved = true;
+    noteNeutralFace: () =>
+      note("neutral-face", () => {
+        neutralFaceObserved = true;
       }),
-    notePostRecoveryWindow: () =>
-      note(() => {
-        postRecoveryWindowObserved = true;
+    noteSmile: () =>
+      note("smile", () => {
+        smileObserved = true;
+      }),
+    noteEyeClosure: () =>
+      note("eye-closure", () => {
+        eyeClosureObserved = true;
       }),
     reset,
     snapshot

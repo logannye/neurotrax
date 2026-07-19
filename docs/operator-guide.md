@@ -49,15 +49,17 @@ that variable for a live presentation.
 4. Use soft, even front lighting.
 5. Run the five-second system check. Limited or unavailable quality will not
    prevent the timed assessment from starting.
-6. During the first seven seconds, remain centered and speak naturally.
-7. Turn away while continuing to speak for four seconds.
-8. Return to the original position and continue speaking through the remaining
-   thirteen seconds.
-9. Confirm that capture closes automatically at twenty-four seconds and that the
+6. During the first five seconds, remain centered and speak naturally.
+7. Turn away while continuing to speak for three seconds.
+8. Return to center, stop speaking, and relax the face for three seconds.
+9. Smile comfortably and hold for four seconds.
+10. Gently close the eyes, hold briefly, then reopen during the final four
+    seconds.
+11. Confirm that capture closes automatically at nineteen seconds and that the
    camera and microphone are released.
-10. Confirm that the results workspace opens automatically. Grounded evidence
+12. Confirm that the results workspace opens automatically. Grounded evidence
    appears immediately while the short narrative is prepared in place.
-11. Confirm that both summary statements open a complete grounding trace and
+13. Confirm that both summary statements open a complete grounding trace and
     approval establishes Visit 1.
 
 Clinical Synthesis uses priority processing, no reasoning pass, and a bounded
@@ -85,9 +87,16 @@ operator mode in the presentation recording.
   camera and microphone permission.
 - **Facial analysis unavailable:** verify that the local MediaPipe assets load
   and refresh Chrome.
-- **Move closer persists:** position the face so it occupies at least 14% of
-  frame width.
+- **Move closer persists:** position the face at least 180×220 pixels in the
+  analyzed frame while leaving a visible margin around it.
 - **Speech quality is limited:** reduce background noise if convenient; the
   assessment will still start when the five-second check ends.
 - **Turn-away is not confirmed:** continue the assessment. The coordinator
   records the missed confirmation and advances on schedule without retrying.
+- **A facial task is not confirmed:** finish the sequence. Only that task's
+  measurements are withheld.
+
+Operator diagnostics report requested and actual camera settings, analyzed
+cadence, result gaps, processing latency, skipped frames, MediaPipe version,
+delegate, and model digest. They never include camera identifiers, device
+labels, native landmarks, transformation matrices, blendshapes, or media.

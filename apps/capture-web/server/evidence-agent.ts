@@ -13,7 +13,7 @@ import {
 } from "../../../packages/evidence-core/src/evidence.ts";
 
 export const EVIDENCE_MODEL = "gpt-5.6-luna";
-export const EVIDENCE_PROMPT_VERSION = "encounter-summary-grounded.v0.3";
+export const EVIDENCE_PROMPT_VERSION = "encounter-summary-grounded.v0.4";
 
 const ModalityOutcomeBaseSchema = z.object({
   outcomeId: z.string().min(1),
@@ -68,6 +68,8 @@ const QualitySummarySchema = z
 export const EvidenceAgentRequestSchema = z
   .object({
     containsPHI: z.literal(false),
+    rawMediaRetained: z.literal(false),
+    nativeVisualObservationsRetained: z.literal(false),
     visitId: z.string().min(1),
     qualitySummary: QualitySummarySchema,
     outcomes: z.array(ModalityOutcomeSchema).length(2)

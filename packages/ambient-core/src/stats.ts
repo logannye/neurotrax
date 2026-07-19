@@ -18,3 +18,19 @@ export function medianAbsoluteDeviation(values: number[]): number {
   const center = median(values);
   return median(values.map((v) => Math.abs(v - center)));
 }
+
+export function percentile(values: number[], probability: number): number {
+  if (values.length === 0) {
+    throw new Error("A percentile requires at least one value.");
+  }
+  if (!Number.isFinite(probability) || probability < 0 || probability > 1) {
+    throw new Error("Percentile probability must be between 0 and 1.");
+  }
+  const sorted = [...values].sort((left, right) => left - right);
+  const index = (sorted.length - 1) * probability;
+  const lower = Math.floor(index);
+  const upper = Math.ceil(index);
+  if (lower === upper) return sorted[lower];
+  const fraction = index - lower;
+  return sorted[lower] * (1 - fraction) + sorted[upper] * fraction;
+}

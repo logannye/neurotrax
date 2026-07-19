@@ -1,39 +1,32 @@
-import type { AudioFeatureFrame, FaceLandmarkFrame, FrameStream } from "./primitives.js";
-import type { ConfoundEnvelope, MeasurableWindow, Modality } from "@phenometric/contracts";
+import type {
+  ConfoundEnvelope,
+  MeasurementContextKind,
+  MeasurableWindow,
+  Modality,
+  SpeechConfoundEnvelope,
+  VisualConfoundEnvelope,
+  VisualTaskContext
+} from "@phenometric/contracts";
+import type {
+  AudioFeatureFrame,
+  FacialKinematicsFrameV1,
+  FrameStream
+} from "./primitives.js";
 import { mean } from "./stats.js";
+import {
+  DEFAULT_CAPTURE_QUALITY_POLICY,
+  evaluateVisualQuality
+} from "./visual-quality.js";
 
-export const MIN_WINDOW_MS = 1500;
-export const MAX_SPEECH_PAUSE_MS = 2000;
-export const MAX_FACE_WINDOW_YAW_DEGREES = 30;
+export const MIN_WINDOW_MS = 1_500;
+export const MAX_SPEECH_PAUSE_MS = 2_000;
+export const MAX_FACE_WINDOW_YAW_DEGREES =
+  DEFAULT_CAPTURE_QUALITY_POLICY.maximumFaceYawDegrees;
 
 interface Run<T> {
   frames: T[];
   startMs: number;
   endMs: number;
-}
-
-function contiguousRuns<T extends { tMs: number }>(
-  frames: T[],
-  predicate: (frame: T) => boolean
-): Run<T>[] {
-  const runs: Run<T>[] = [];
-  let current: T[] = [];
-  const flush = () => {
-    if (current.length > 0) {
-      runs.push({
-        frames: current,
-        startMs: current[0].tMs,
-        endMs: current[current.length - 1].tMs
-      });
-      current = [];
-    }
-  };
-  for (const frame of frames) {
-    if (predicate(frame)) current.push(frame);
-    else flush();
-  }
-  flush();
-  return runs.filter((run) => run.endMs - run.startMs >= MIN_WINDOW_MS);
 }
 
 function speechRuns(frames: AudioFeatureFrame[]): Run<AudioFeatureFrame>[] {
@@ -78,57 +71,182 @@ function speechRuns(frames: AudioFeatureFrame[]): Run<AudioFeatureFrame>[] {
   return runs;
 }
 
-function speechConfounds(frames: AudioFeatureFrame[]): ConfoundEnvelope {
+interface FaceRun extends Run<FacialKinematicsFrameV1> {
+  taskContext: VisualTaskContext;
+}
+
+export interface WindowDetectionOptions {
+  faceSplitPointsMs?: readonly number[];
+}
+
+function faceRuns(
+  stream: FrameStream,
+  splitPointsMs: readonly number[]
+): FaceRun[] {
+  const runs: FaceRun[] = [];
+  let current: FacialKinematicsFrameV1[] = [];
+  let taskContext: VisualTaskContext | null = null;
+
+  const flush = () => {
+    if (current.length > 0 && taskContext !== null) {
+      const startMs = current[0].tMs;
+      const endMs = current[current.length - 1].tMs;
+      if (endMs - startMs >= MIN_WINDOW_MS) {
+        runs.push({ frames: current, startMs, endMs, taskContext });
+      }
+    }
+    current = [];
+    taskContext = null;
+  };
+
+  for (const frame of stream.face) {
+    const assessment = evaluateVisualQuality(
+      frame,
+      stream.calibration?.face ?? null
+    );
+    const prior = current.at(-1);
+    const crossesExternalBoundary =
+      prior !== undefined &&
+      splitPointsMs.some(
+        (boundary) =>
+          boundary >= prior.tMs && boundary <= frame.tMs
+      );
+    const startsNewRun =
+      prior !== undefined &&
+      (frame.taskContext !== taskContext ||
+        frame.captureEpoch !== prior.captureEpoch ||
+        frame.processorRef !== prior.processorRef ||
+        crossesExternalBoundary ||
+        frame.tMs - prior.tMs >
+          DEFAULT_CAPTURE_QUALITY_POLICY.maximumVisualFrameGapMs);
+    if (startsNewRun) flush();
+
+    if (!assessment.usable || frame.taskContext === "turn-away") {
+      flush();
+      continue;
+    }
+
+    taskContext = frame.taskContext;
+    current.push(frame);
+  }
+  flush();
+  return runs;
+}
+
+function speechConfounds(
+  frames: AudioFeatureFrame[]
+): SpeechConfoundEnvelope {
   return {
-    snrDb: mean(frames.map((f) => f.snrDb)),
-    faceFramingFraction: 0,
-    observedFrameRate: 0,
-    illuminationRelative: 0,
-    yawDegrees: 0
+    kind: "speech",
+    snrDb: mean(frames.map((frame) => frame.snrDb)),
+    clippingFraction:
+      frames.filter((frame) => frame.clipped).length /
+      Math.max(1, frames.length)
   };
 }
 
-function faceConfounds(frames: FaceLandmarkFrame[]): ConfoundEnvelope {
+function faceConfounds(
+  frames: FacialKinematicsFrameV1[]
+): VisualConfoundEnvelope {
+  const boxes = frames.flatMap((frame) =>
+    frame.boundingBox === null ? [] : [frame.boundingBox]
+  );
+  const poses = frames.flatMap((frame) =>
+    frame.pose === null ? [] : [frame.pose]
+  );
+  const gaps = frames.flatMap((frame) =>
+    frame.interResultGapMs === null ? [] : [frame.interResultGapMs]
+  );
   return {
-    snrDb: 0,
-    faceFramingFraction: mean(frames.map((f) => f.framingFraction)),
-    observedFrameRate: mean(frames.map((f) => f.observedFrameRate)),
-    illuminationRelative: mean(frames.map((f) => f.illumination)),
-    yawDegrees: mean(frames.map((f) => Math.abs(f.yawDegrees ?? 0)))
+    kind: "visual",
+    faceBoxWidthPixels: mean(boxes.map((box) => box.widthPixels)),
+    faceBoxHeightPixels: mean(boxes.map((box) => box.heightPixels)),
+    faceWidthFraction: mean(boxes.map((box) => box.width)),
+    faceHeightFraction: mean(boxes.map((box) => box.height)),
+    edgeMarginFraction: mean(boxes.map((box) => box.edgeMarginFraction)),
+    analyzedFrameRate: mean(
+      frames.map((frame) => frame.analyzedFrameRate)
+    ),
+    skippedFrameFraction: mean(
+      frames.map((frame) => frame.skippedFrameFraction)
+    ),
+    meanInterResultGapMs: gaps.length === 0 ? 0 : mean(gaps),
+    illuminationMean: mean(
+      frames.map((frame) => frame.imageQuality.illuminationMean)
+    ),
+    darkClippingFraction: mean(
+      frames.map((frame) => frame.imageQuality.darkClippingFraction)
+    ),
+    brightClippingFraction: mean(
+      frames.map((frame) => frame.imageQuality.brightClippingFraction)
+    ),
+    sharpness: mean(frames.map((frame) => frame.imageQuality.sharpness)),
+    yawDegrees: mean(
+      poses.map((pose) => Math.abs(pose.yawDegrees))
+    ),
+    pitchDegrees: mean(
+      poses.map((pose) => Math.abs(pose.pitchDegrees))
+    ),
+    rollDegrees: mean(
+      poses.map((pose) => Math.abs(pose.rollDegrees))
+    )
   };
 }
 
-export function detectMeasurableWindows(stream: FrameStream): MeasurableWindow[] {
+function contextKindForTask(
+  taskContext: VisualTaskContext
+): MeasurementContextKind {
+  if (taskContext === "neutral-face") return "neutral-face";
+  if (taskContext === "smile") return "smile";
+  if (taskContext === "eye-closure") return "eye-closure";
+  return "listening-expressive";
+}
+
+export function detectMeasurableWindows(
+  stream: FrameStream,
+  options: WindowDetectionOptions = {}
+): MeasurableWindow[] {
   const windows: MeasurableWindow[] = [];
 
-  speechRuns(stream.audio).forEach((run, i) => {
+  speechRuns(stream.audio).forEach((run, index) => {
     windows.push({
-      windowId: `speech-${i}`,
+      windowId: `speech-${index}`,
       modality: "speech",
       startMs: run.startMs,
       endMs: run.endMs,
-      context: { kind: "spontaneous-speech", confounds: speechConfounds(run.frames) }
+      context: {
+        kind: "spontaneous-speech",
+        confounds: speechConfounds(run.frames)
+      }
     });
   });
 
-  contiguousRuns(
-    stream.face,
-    (frame) =>
-      frame.faceVisible &&
-      frame.framingFraction >= 0.6 &&
-      Math.abs(frame.yawDegrees ?? 0) <= MAX_FACE_WINDOW_YAW_DEGREES
-  ).forEach((run, i) => {
+  faceRuns(stream, options.faceSplitPointsMs ?? []).forEach((run, index) => {
     windows.push({
-      windowId: `face-${i}`,
+      windowId: `face-${index}`,
       modality: "face",
       startMs: run.startMs,
       endMs: run.endMs,
-      context: { kind: "listening-expressive", confounds: faceConfounds(run.frames) }
+      context: {
+        kind: contextKindForTask(run.taskContext),
+        confounds: faceConfounds(run.frames)
+      }
     });
   });
 
   const modalityOrder: Record<Modality, number> = { speech: 0, face: 1 };
   return windows.sort(
-    (a, b) => a.startMs - b.startMs || modalityOrder[a.modality] - modalityOrder[b.modality]
+    (left, right) =>
+      left.startMs - right.startMs ||
+      modalityOrder[left.modality] - modalityOrder[right.modality]
   );
+}
+
+export function confoundsForWindow(
+  frames: AudioFeatureFrame[] | FacialKinematicsFrameV1[],
+  modality: Modality
+): ConfoundEnvelope {
+  return modality === "speech"
+    ? speechConfounds(frames as AudioFeatureFrame[])
+    : faceConfounds(frames as FacialKinematicsFrameV1[]);
 }

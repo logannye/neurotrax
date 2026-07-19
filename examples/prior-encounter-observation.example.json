@@ -1,94 +1,299 @@
 {
   "exampleOnly": true,
   "containsPHI": false,
-  "encounterId": "demo-encounter-001",
+  "rawMediaRetained": false,
+  "nativeVisualObservationsRetained": false,
+  "synthetic": true,
+  "source": "synthetic-fixture",
+  "visitId": "demo-encounter-001",
   "participantId": "synthetic-participant-001",
-  "captureMode": "synthetic-fixture",
-  "protocolId": "macbook-check-in.v0.1",
+  "occurredAt": "2026-06-18T16:00:00.000Z",
+  "captureMode": "fixture-playback",
   "captureAdapter": {
     "id": "macbook-browser",
-    "version": "0.1.0",
-    "browser": "synthetic-browser",
-    "deviceLabel": "built-in-camera-and-microphone"
+    "version": "0.2.0"
   },
-  "consent": {
-    "capture": true,
-    "derivedMeasurements": true,
-    "retention": "local-review-history",
-    "researchUse": false
+  "visualPipeline": {
+    "processorRef": "mediapipe-face-landmarker:0.10.35:64184e229b26:bilateral-geometry-v1:gpu",
+    "runtime": "mediapipe-tasks-vision",
+    "mediaPipeVersion": "0.10.35",
+    "modelAsset": "/models/face_landmarker.task",
+    "modelSha256": "64184e229b263107bc2b804c6625db1341ff2bb731874b0bcc2fe6544e0bc9ff",
+    "delegate": "GPU",
+    "geometryVersion": "bilateral-geometry-v1"
   },
-  "context": {
-    "medicationPhase": "not-collected",
-    "notes": "Synthetic prior example"
-  },
-  "tasks": [
+  "reviewStatus": "accepted",
+  "aggregates": [
     {
-      "taskId": "standard-speech.v0.1",
-      "promptVersion": "prototype-sentence.v0.1",
-      "startedAt": "2026-06-18T16:00:00Z",
-      "endedAt": "2026-06-18T16:00:15Z",
-      "retryCount": 0,
-      "quality": {
-        "status": "pass",
-        "checks": {
-          "microphone-not-clipped": true,
-          "background-noise-acceptable": true,
-          "face-visible": true,
-          "duration-complete": true
-        }
+      "code": "prototype.speech.pitch_variability",
+      "label": "Pitch variability",
+      "unit": "semitone-stddev",
+      "contextKind": "spontaneous-speech",
+      "value": 1.82,
+      "spread": 0,
+      "confidence": 0.9,
+      "windowCount": 1,
+      "algorithmVersion": "speech-acoustic-0.4",
+      "processorRef": "speech-acoustic-0.4",
+      "sourceWindowRefs": [
+        "prior-speech-0"
+      ],
+      "confounds": {
+        "kind": "speech",
+        "snrDb": 20.8,
+        "clippingFraction": 0
       },
-      "asset": {
-        "assetId": "prior-standard-speech-clip",
-        "retained": true,
-        "localReference": ".local/evidence/demo-encounter-001/standard-speech.webm",
-        "sha256": "synthetic-prior-hash-not-a-real-asset"
+      "uncertainty": {
+        "kind": "not-estimated",
+        "reason": "Speech uncertainty is not estimated by this prototype extractor."
       },
-      "measurements": [
-        {
-          "code": "prototype.speech.duration",
-          "label": "Captured speech duration",
-          "value": 14.7,
-          "unit": "seconds",
-          "uncertainty": "placeholder",
-          "algorithmVersion": "placeholder-0.1",
-          "clinicalValidation": "none"
-        }
-      ]
+      "clinicalValidation": "none"
     },
     {
-      "taskId": "seated-finger-tap.v0.1",
-      "promptVersion": "finger-tap-instruction.v0.1",
-      "startedAt": "2026-06-18T16:00:20Z",
-      "endedAt": "2026-06-18T16:00:30Z",
-      "retryCount": 0,
-      "quality": {
-        "status": "pass",
-        "checks": {
-          "camera-stable": true,
-          "hand-visible": true,
-          "fingers-not-occluded": true,
-          "observed-frame-rate-acceptable": true,
-          "duration-complete": true
-        }
+      "code": "prototype.face.smile_excursion.left",
+      "label": "Left smile excursion",
+      "unit": "inter-eye-normalized-distance",
+      "contextKind": "smile",
+      "value": 0.081,
+      "spread": 0,
+      "confidence": 0.98,
+      "windowCount": 1,
+      "algorithmVersion": "facial-task-kinematics-1.0",
+      "processorRef": "mediapipe-face-landmarker:0.10.35:64184e229b26:bilateral-geometry-v1:gpu",
+      "sourceWindowRefs": [
+        "prior-face-neutral",
+        "prior-face-smile"
+      ],
+      "confounds": {
+        "kind": "visual",
+        "faceBoxWidthPixels": 318,
+        "faceBoxHeightPixels": 361,
+        "faceWidthFraction": 0.248,
+        "faceHeightFraction": 0.501,
+        "edgeMarginFraction": 0.117,
+        "analyzedFrameRate": 29.5,
+        "skippedFrameFraction": 0.024,
+        "meanInterResultGapMs": 33.9,
+        "illuminationMean": 0.55,
+        "darkClippingFraction": 0.011,
+        "brightClippingFraction": 0.006,
+        "sharpness": 0.0023,
+        "yawDegrees": 1.9,
+        "pitchDegrees": 1.5,
+        "rollDegrees": 0.9
       },
-      "asset": {
-        "assetId": "prior-finger-tap-clip",
-        "retained": true,
-        "localReference": ".local/evidence/demo-encounter-001/finger-tap.webm",
-        "sha256": "synthetic-prior-hash-not-a-real-asset"
+      "uncertainty": {
+        "kind": "estimated",
+        "method": "median-absolute-deviation",
+        "value": 0.004,
+        "unit": "inter-eye-normalized-distance"
       },
-      "measurements": [
-        {
-          "code": "prototype.tap.count",
-          "label": "Observed prototype tap count",
-          "value": 27,
-          "unit": "count",
-          "uncertainty": "placeholder",
-          "algorithmVersion": "placeholder-0.1",
-          "clinicalValidation": "none"
-        }
-      ]
+      "clinicalValidation": "none"
+    },
+    {
+      "code": "prototype.face.smile_excursion.right",
+      "label": "Right smile excursion",
+      "unit": "inter-eye-normalized-distance",
+      "contextKind": "smile",
+      "value": 0.073,
+      "spread": 0,
+      "confidence": 0.98,
+      "windowCount": 1,
+      "algorithmVersion": "facial-task-kinematics-1.0",
+      "processorRef": "mediapipe-face-landmarker:0.10.35:64184e229b26:bilateral-geometry-v1:gpu",
+      "sourceWindowRefs": [
+        "prior-face-neutral",
+        "prior-face-smile"
+      ],
+      "confounds": {
+        "kind": "visual",
+        "faceBoxWidthPixels": 318,
+        "faceBoxHeightPixels": 361,
+        "faceWidthFraction": 0.248,
+        "faceHeightFraction": 0.501,
+        "edgeMarginFraction": 0.117,
+        "analyzedFrameRate": 29.5,
+        "skippedFrameFraction": 0.024,
+        "meanInterResultGapMs": 33.9,
+        "illuminationMean": 0.55,
+        "darkClippingFraction": 0.011,
+        "brightClippingFraction": 0.006,
+        "sharpness": 0.0023,
+        "yawDegrees": 1.9,
+        "pitchDegrees": 1.5,
+        "rollDegrees": 0.9
+      },
+      "uncertainty": {
+        "kind": "estimated",
+        "method": "median-absolute-deviation",
+        "value": 0.005,
+        "unit": "inter-eye-normalized-distance"
+      },
+      "clinicalValidation": "none"
+    },
+    {
+      "code": "prototype.face.smile_excursion.asymmetry",
+      "label": "Smile-excursion asymmetry",
+      "unit": "inter-eye-normalized-distance",
+      "contextKind": "smile",
+      "value": 0.008,
+      "spread": 0,
+      "confidence": 0.98,
+      "windowCount": 1,
+      "algorithmVersion": "facial-task-kinematics-1.0",
+      "processorRef": "mediapipe-face-landmarker:0.10.35:64184e229b26:bilateral-geometry-v1:gpu",
+      "sourceWindowRefs": [
+        "prior-face-neutral",
+        "prior-face-smile"
+      ],
+      "confounds": {
+        "kind": "visual",
+        "faceBoxWidthPixels": 318,
+        "faceBoxHeightPixels": 361,
+        "faceWidthFraction": 0.248,
+        "faceHeightFraction": 0.501,
+        "edgeMarginFraction": 0.117,
+        "analyzedFrameRate": 29.5,
+        "skippedFrameFraction": 0.024,
+        "meanInterResultGapMs": 33.9,
+        "illuminationMean": 0.55,
+        "darkClippingFraction": 0.011,
+        "brightClippingFraction": 0.006,
+        "sharpness": 0.0023,
+        "yawDegrees": 1.9,
+        "pitchDegrees": 1.5,
+        "rollDegrees": 0.9
+      },
+      "uncertainty": {
+        "kind": "estimated",
+        "method": "median-absolute-deviation",
+        "value": 0.002,
+        "unit": "inter-eye-normalized-distance"
+      },
+      "clinicalValidation": "none"
+    },
+    {
+      "code": "prototype.face.eye_closure_fraction.left",
+      "label": "Left eye-closure fraction",
+      "unit": "fraction",
+      "contextKind": "eye-closure",
+      "value": 0.84,
+      "spread": 0,
+      "confidence": 0.98,
+      "windowCount": 1,
+      "algorithmVersion": "facial-task-kinematics-1.0",
+      "processorRef": "mediapipe-face-landmarker:0.10.35:64184e229b26:bilateral-geometry-v1:gpu",
+      "sourceWindowRefs": [
+        "prior-face-neutral",
+        "prior-face-eye-closure"
+      ],
+      "confounds": {
+        "kind": "visual",
+        "faceBoxWidthPixels": 317,
+        "faceBoxHeightPixels": 360,
+        "faceWidthFraction": 0.248,
+        "faceHeightFraction": 0.5,
+        "edgeMarginFraction": 0.118,
+        "analyzedFrameRate": 29.6,
+        "skippedFrameFraction": 0.022,
+        "meanInterResultGapMs": 33.8,
+        "illuminationMean": 0.55,
+        "darkClippingFraction": 0.011,
+        "brightClippingFraction": 0.006,
+        "sharpness": 0.0023,
+        "yawDegrees": 2,
+        "pitchDegrees": 1.6,
+        "rollDegrees": 1
+      },
+      "uncertainty": {
+        "kind": "estimated",
+        "method": "median-absolute-deviation",
+        "value": 0.019,
+        "unit": "fraction"
+      },
+      "clinicalValidation": "none"
+    },
+    {
+      "code": "prototype.face.eye_closure_fraction.right",
+      "label": "Right eye-closure fraction",
+      "unit": "fraction",
+      "contextKind": "eye-closure",
+      "value": 0.81,
+      "spread": 0,
+      "confidence": 0.98,
+      "windowCount": 1,
+      "algorithmVersion": "facial-task-kinematics-1.0",
+      "processorRef": "mediapipe-face-landmarker:0.10.35:64184e229b26:bilateral-geometry-v1:gpu",
+      "sourceWindowRefs": [
+        "prior-face-neutral",
+        "prior-face-eye-closure"
+      ],
+      "confounds": {
+        "kind": "visual",
+        "faceBoxWidthPixels": 317,
+        "faceBoxHeightPixels": 360,
+        "faceWidthFraction": 0.248,
+        "faceHeightFraction": 0.5,
+        "edgeMarginFraction": 0.118,
+        "analyzedFrameRate": 29.6,
+        "skippedFrameFraction": 0.022,
+        "meanInterResultGapMs": 33.8,
+        "illuminationMean": 0.55,
+        "darkClippingFraction": 0.011,
+        "brightClippingFraction": 0.006,
+        "sharpness": 0.0023,
+        "yawDegrees": 2,
+        "pitchDegrees": 1.6,
+        "rollDegrees": 1
+      },
+      "uncertainty": {
+        "kind": "estimated",
+        "method": "median-absolute-deviation",
+        "value": 0.02,
+        "unit": "fraction"
+      },
+      "clinicalValidation": "none"
+    },
+    {
+      "code": "prototype.face.eye_closure_fraction.asymmetry",
+      "label": "Eye-closure fraction asymmetry",
+      "unit": "fraction",
+      "contextKind": "eye-closure",
+      "value": 0.03,
+      "spread": 0,
+      "confidence": 0.98,
+      "windowCount": 1,
+      "algorithmVersion": "facial-task-kinematics-1.0",
+      "processorRef": "mediapipe-face-landmarker:0.10.35:64184e229b26:bilateral-geometry-v1:gpu",
+      "sourceWindowRefs": [
+        "prior-face-neutral",
+        "prior-face-eye-closure"
+      ],
+      "confounds": {
+        "kind": "visual",
+        "faceBoxWidthPixels": 317,
+        "faceBoxHeightPixels": 360,
+        "faceWidthFraction": 0.248,
+        "faceHeightFraction": 0.5,
+        "edgeMarginFraction": 0.118,
+        "analyzedFrameRate": 29.6,
+        "skippedFrameFraction": 0.022,
+        "meanInterResultGapMs": 33.8,
+        "illuminationMean": 0.55,
+        "darkClippingFraction": 0.011,
+        "brightClippingFraction": 0.006,
+        "sharpness": 0.0023,
+        "yawDegrees": 2,
+        "pitchDegrees": 1.6,
+        "rollDegrees": 1
+      },
+      "uncertainty": {
+        "kind": "estimated",
+        "method": "median-absolute-deviation",
+        "value": 0.008,
+        "unit": "fraction"
+      },
+      "clinicalValidation": "none"
     }
-  ],
-  "reviewStatus": "accepted"
+  ]
 }

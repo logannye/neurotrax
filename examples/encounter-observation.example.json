@@ -1,120 +1,816 @@
 {
   "exampleOnly": true,
+  "schemaVersion": "phenometric.encounter-observation.v1",
   "containsPHI": false,
-  "encounterId": "demo-encounter-002",
-  "participantId": "synthetic-participant-001",
+  "rawMediaRetained": false,
+  "nativeVisualObservationsRetained": false,
   "captureMode": "live",
-  "fixtureDisclosure": null,
-  "protocolId": "macbook-check-in.v0.1",
+  "visitId": "demo-encounter-002",
+  "participantId": "synthetic-participant-001",
+  "occurredAt": "2026-07-18T16:00:00.000Z",
   "captureAdapter": {
     "id": "macbook-browser",
-    "version": "0.1.0",
-    "browser": "synthetic-browser",
-    "deviceLabel": "built-in-camera-and-microphone"
+    "version": "0.2.0"
   },
-  "consent": {
-    "capture": true,
-    "derivedMeasurements": true,
-    "retention": "local-review-history",
-    "researchUse": false
+  "visualPipeline": {
+    "processorRef": "mediapipe-face-landmarker:0.10.35:64184e229b26:bilateral-geometry-v1:gpu",
+    "runtime": "mediapipe-tasks-vision",
+    "mediaPipeVersion": "0.10.35",
+    "modelAsset": "/models/face_landmarker.task",
+    "modelSha256": "64184e229b263107bc2b804c6625db1341ff2bb731874b0bcc2fe6544e0bc9ff",
+    "delegate": "GPU",
+    "geometryVersion": "bilateral-geometry-v1"
   },
-  "context": {
-    "medicationPhase": "not-collected",
-    "notes": "Synthetic current encounter demonstrating one bounded framing correction"
+  "videoCaptureSettings": {
+    "requested": {
+      "width": 1280,
+      "height": 720,
+      "frameRate": 30
+    },
+    "actual": {
+      "width": 1280,
+      "height": 720,
+      "frameRate": 30
+    },
+    "facingMode": "user",
+    "coordinateSpace": "normalized-unmirrored-image",
+    "displayMirrored": true,
+    "lateralityConvention": "subject-anatomical"
   },
-  "tasks": [
+  "windows": [
     {
-      "taskId": "standard-speech.v0.1",
-      "promptVersion": "prototype-sentence.v0.1",
-      "startedAt": "2026-07-18T16:00:02Z",
-      "endedAt": "2026-07-18T16:00:17Z",
-      "retryCount": 0,
-      "quality": {
-        "status": "pass",
-        "checks": {
-          "microphone-not-clipped": true,
-          "background-noise-acceptable": true,
-          "face-visible": true,
-          "duration-complete": true
+      "windowId": "speech-0",
+      "modality": "speech",
+      "startMs": 400,
+      "endMs": 4900,
+      "context": {
+        "kind": "spontaneous-speech",
+        "confounds": {
+          "kind": "speech",
+          "snrDb": 21.4,
+          "clippingFraction": 0
         }
-      },
-      "asset": {
-        "assetId": "current-standard-speech-clip",
-        "retained": true,
-        "localReference": ".local/evidence/demo-encounter-002/standard-speech.webm",
-        "sha256": "synthetic-hash-not-a-real-asset"
-      },
-      "measurements": [
-        {
-          "code": "prototype.speech.duration",
-          "label": "Captured speech duration",
-          "value": 14.8,
-          "unit": "seconds",
-          "uncertainty": "placeholder",
-          "algorithmVersion": "placeholder-0.1",
-          "clinicalValidation": "none"
-        }
-      ]
+      }
     },
     {
-      "taskId": "seated-finger-tap.v0.1",
-      "promptVersion": "finger-tap-instruction.v0.1",
-      "startedAt": "2026-07-18T16:00:20Z",
-      "endedAt": "2026-07-18T16:00:42Z",
-      "retryCount": 1,
-      "qualityAttempts": [
-        {
-          "attempt": 1,
-          "status": "retry",
-          "assessedAt": "2026-07-18T16:00:22.900Z",
-          "ruleId": "tap-hand-visibility.v0.1",
-          "ruleVersion": "0.1.0",
-          "processorVersion": "placeholder-0.1",
-          "failedChecks": [
-            "hand-visible"
-          ],
-          "agentAction": "request-hand-reposition"
-        },
-        {
-          "attempt": 2,
-          "status": "pass",
-          "assessedAt": "2026-07-18T16:00:31.900Z",
-          "ruleId": "tap-hand-visibility.v0.1",
-          "ruleVersion": "0.1.0",
-          "processorVersion": "placeholder-0.1",
-          "recoveredChecks": [
-            "hand-visible"
-          ]
+      "windowId": "face-0",
+      "modality": "face",
+      "startMs": 0,
+      "endMs": 4967,
+      "context": {
+        "kind": "listening-expressive",
+        "confounds": {
+          "kind": "visual",
+          "faceBoxWidthPixels": 318,
+          "faceBoxHeightPixels": 362,
+          "faceWidthFraction": 0.248,
+          "faceHeightFraction": 0.503,
+          "edgeMarginFraction": 0.116,
+          "analyzedFrameRate": 29.7,
+          "skippedFrameFraction": 0.018,
+          "meanInterResultGapMs": 33.7,
+          "illuminationMean": 0.56,
+          "darkClippingFraction": 0.01,
+          "brightClippingFraction": 0.008,
+          "sharpness": 0.0024,
+          "yawDegrees": 2.1,
+          "pitchDegrees": 1.6,
+          "rollDegrees": 0.9
         }
-      ],
-      "quality": {
-        "status": "pass",
-        "checks": {
-          "camera-stable": true,
-          "hand-visible": true,
-          "fingers-not-occluded": true,
-          "observed-frame-rate-acceptable": true,
-          "duration-complete": true
+      }
+    },
+    {
+      "windowId": "face-1",
+      "modality": "face",
+      "startMs": 8000,
+      "endMs": 10967,
+      "context": {
+        "kind": "neutral-face",
+        "confounds": {
+          "kind": "visual",
+          "faceBoxWidthPixels": 320,
+          "faceBoxHeightPixels": 364,
+          "faceWidthFraction": 0.25,
+          "faceHeightFraction": 0.506,
+          "edgeMarginFraction": 0.115,
+          "analyzedFrameRate": 29.8,
+          "skippedFrameFraction": 0.015,
+          "meanInterResultGapMs": 33.6,
+          "illuminationMean": 0.57,
+          "darkClippingFraction": 0.009,
+          "brightClippingFraction": 0.007,
+          "sharpness": 0.0025,
+          "yawDegrees": 1.4,
+          "pitchDegrees": 1.2,
+          "rollDegrees": 0.7
         }
-      },
-      "asset": {
-        "assetId": "current-finger-tap-clip",
-        "retained": true,
-        "localReference": ".local/evidence/demo-encounter-002/finger-tap.webm",
-        "sha256": "synthetic-hash-not-a-real-asset"
-      },
-      "measurements": [
-        {
-          "code": "prototype.tap.count",
-          "label": "Observed prototype tap count",
-          "value": 31,
-          "unit": "count",
-          "uncertainty": "placeholder",
-          "algorithmVersion": "placeholder-0.1",
-          "clinicalValidation": "none"
+      }
+    },
+    {
+      "windowId": "face-2",
+      "modality": "face",
+      "startMs": 11000,
+      "endMs": 14967,
+      "context": {
+        "kind": "smile",
+        "confounds": {
+          "kind": "visual",
+          "faceBoxWidthPixels": 321,
+          "faceBoxHeightPixels": 364,
+          "faceWidthFraction": 0.251,
+          "faceHeightFraction": 0.506,
+          "edgeMarginFraction": 0.114,
+          "analyzedFrameRate": 29.6,
+          "skippedFrameFraction": 0.021,
+          "meanInterResultGapMs": 33.8,
+          "illuminationMean": 0.57,
+          "darkClippingFraction": 0.009,
+          "brightClippingFraction": 0.007,
+          "sharpness": 0.0025,
+          "yawDegrees": 1.6,
+          "pitchDegrees": 1.3,
+          "rollDegrees": 0.8
         }
-      ]
+      }
+    },
+    {
+      "windowId": "face-3",
+      "modality": "face",
+      "startMs": 15000,
+      "endMs": 18967,
+      "context": {
+        "kind": "eye-closure",
+        "confounds": {
+          "kind": "visual",
+          "faceBoxWidthPixels": 319,
+          "faceBoxHeightPixels": 363,
+          "faceWidthFraction": 0.249,
+          "faceHeightFraction": 0.504,
+          "edgeMarginFraction": 0.115,
+          "analyzedFrameRate": 29.7,
+          "skippedFrameFraction": 0.019,
+          "meanInterResultGapMs": 33.7,
+          "illuminationMean": 0.56,
+          "darkClippingFraction": 0.01,
+          "brightClippingFraction": 0.007,
+          "sharpness": 0.0024,
+          "yawDegrees": 1.8,
+          "pitchDegrees": 1.4,
+          "rollDegrees": 0.9
+        }
+      }
     }
   ],
-  "reviewStatus": "accepted"
+  "measurements": [
+    {
+      "code": "prototype.speech.onset_latency",
+      "label": "Speech initiation latency",
+      "value": 0.4,
+      "unit": "seconds",
+      "confidence": 0.89,
+      "uncertainty": {
+        "kind": "not-estimated",
+        "reason": "Speech uncertainty is not estimated by this prototype extractor."
+      },
+      "algorithmVersion": "speech-acoustic-0.4",
+      "processorRef": "speech-acoustic-0.4",
+      "clinicalValidation": "none",
+      "contextRef": "speech-0",
+      "sourceWindowRefs": [
+        "speech-0"
+      ],
+      "windowStartMs": 0,
+      "windowEndMs": 400,
+      "evidenceSnippetRef": null
+    },
+    {
+      "code": "prototype.speech.voiced_time_fraction",
+      "label": "Voiced-time fraction",
+      "value": 0.82,
+      "unit": "ratio",
+      "confidence": 0.88,
+      "uncertainty": {
+        "kind": "not-estimated",
+        "reason": "Speech uncertainty is not estimated by this prototype extractor."
+      },
+      "algorithmVersion": "speech-acoustic-0.4",
+      "processorRef": "speech-acoustic-0.4",
+      "clinicalValidation": "none",
+      "contextRef": "speech-0",
+      "sourceWindowRefs": [
+        "speech-0"
+      ],
+      "windowStartMs": 400,
+      "windowEndMs": 4900,
+      "evidenceSnippetRef": null
+    },
+    {
+      "code": "prototype.speech.pause_rate",
+      "label": "Pause rate",
+      "value": 13.333,
+      "unit": "pauses-per-minute",
+      "confidence": 0.88,
+      "uncertainty": {
+        "kind": "not-estimated",
+        "reason": "Speech uncertainty is not estimated by this prototype extractor."
+      },
+      "algorithmVersion": "speech-acoustic-0.4",
+      "processorRef": "speech-acoustic-0.4",
+      "clinicalValidation": "none",
+      "contextRef": "speech-0",
+      "sourceWindowRefs": [
+        "speech-0"
+      ],
+      "windowStartMs": 400,
+      "windowEndMs": 4900,
+      "evidenceSnippetRef": null
+    },
+    {
+      "code": "prototype.speech.pitch_center",
+      "label": "Pitch center",
+      "value": 137.2,
+      "unit": "hertz",
+      "confidence": 0.91,
+      "uncertainty": {
+        "kind": "not-estimated",
+        "reason": "Speech uncertainty is not estimated by this prototype extractor."
+      },
+      "algorithmVersion": "speech-acoustic-0.4",
+      "processorRef": "speech-acoustic-0.4",
+      "clinicalValidation": "none",
+      "contextRef": "speech-0",
+      "sourceWindowRefs": [
+        "speech-0"
+      ],
+      "windowStartMs": 400,
+      "windowEndMs": 4900,
+      "evidenceSnippetRef": null
+    },
+    {
+      "code": "prototype.speech.pitch_variability",
+      "label": "Pitch variability",
+      "value": 1.9,
+      "unit": "semitone-stddev",
+      "confidence": 0.91,
+      "uncertainty": {
+        "kind": "not-estimated",
+        "reason": "Speech uncertainty is not estimated by this prototype extractor."
+      },
+      "algorithmVersion": "speech-acoustic-0.4",
+      "processorRef": "speech-acoustic-0.4",
+      "clinicalValidation": "none",
+      "contextRef": "speech-0",
+      "sourceWindowRefs": [
+        "speech-0"
+      ],
+      "windowStartMs": 400,
+      "windowEndMs": 4900,
+      "evidenceSnippetRef": null
+    },
+    {
+      "code": "prototype.face.smile_excursion.left",
+      "label": "Left smile excursion",
+      "value": 0.084,
+      "unit": "inter-eye-normalized-distance",
+      "confidence": 0.99,
+      "uncertainty": {
+        "kind": "estimated",
+        "method": "median-absolute-deviation",
+        "value": 0.004,
+        "unit": "inter-eye-normalized-distance"
+      },
+      "algorithmVersion": "facial-task-kinematics-1.0",
+      "processorRef": "mediapipe-face-landmarker:0.10.35:64184e229b26:bilateral-geometry-v1:gpu",
+      "clinicalValidation": "none",
+      "contextRef": "face-2",
+      "sourceWindowRefs": [
+        "face-1",
+        "face-2"
+      ],
+      "windowStartMs": 11000,
+      "windowEndMs": 14967,
+      "evidenceSnippetRef": null
+    },
+    {
+      "code": "prototype.face.smile_excursion.right",
+      "label": "Right smile excursion",
+      "value": 0.074,
+      "unit": "inter-eye-normalized-distance",
+      "confidence": 0.99,
+      "uncertainty": {
+        "kind": "estimated",
+        "method": "median-absolute-deviation",
+        "value": 0.005,
+        "unit": "inter-eye-normalized-distance"
+      },
+      "algorithmVersion": "facial-task-kinematics-1.0",
+      "processorRef": "mediapipe-face-landmarker:0.10.35:64184e229b26:bilateral-geometry-v1:gpu",
+      "clinicalValidation": "none",
+      "contextRef": "face-2",
+      "sourceWindowRefs": [
+        "face-1",
+        "face-2"
+      ],
+      "windowStartMs": 11000,
+      "windowEndMs": 14967,
+      "evidenceSnippetRef": null
+    },
+    {
+      "code": "prototype.face.smile_excursion.asymmetry",
+      "label": "Smile-excursion asymmetry",
+      "value": 0.01,
+      "unit": "inter-eye-normalized-distance",
+      "confidence": 0.99,
+      "uncertainty": {
+        "kind": "estimated",
+        "method": "median-absolute-deviation",
+        "value": 0.002,
+        "unit": "inter-eye-normalized-distance"
+      },
+      "algorithmVersion": "facial-task-kinematics-1.0",
+      "processorRef": "mediapipe-face-landmarker:0.10.35:64184e229b26:bilateral-geometry-v1:gpu",
+      "clinicalValidation": "none",
+      "contextRef": "face-2",
+      "sourceWindowRefs": [
+        "face-1",
+        "face-2"
+      ],
+      "windowStartMs": 11000,
+      "windowEndMs": 14967,
+      "evidenceSnippetRef": null
+    },
+    {
+      "code": "prototype.face.eye_closure_fraction.left",
+      "label": "Left eye-closure fraction",
+      "value": 0.86,
+      "unit": "fraction",
+      "confidence": 0.99,
+      "uncertainty": {
+        "kind": "estimated",
+        "method": "median-absolute-deviation",
+        "value": 0.018,
+        "unit": "fraction"
+      },
+      "algorithmVersion": "facial-task-kinematics-1.0",
+      "processorRef": "mediapipe-face-landmarker:0.10.35:64184e229b26:bilateral-geometry-v1:gpu",
+      "clinicalValidation": "none",
+      "contextRef": "face-3",
+      "sourceWindowRefs": [
+        "face-1",
+        "face-3"
+      ],
+      "windowStartMs": 15000,
+      "windowEndMs": 18967,
+      "evidenceSnippetRef": null
+    },
+    {
+      "code": "prototype.face.eye_closure_fraction.right",
+      "label": "Right eye-closure fraction",
+      "value": 0.82,
+      "unit": "fraction",
+      "confidence": 0.99,
+      "uncertainty": {
+        "kind": "estimated",
+        "method": "median-absolute-deviation",
+        "value": 0.021,
+        "unit": "fraction"
+      },
+      "algorithmVersion": "facial-task-kinematics-1.0",
+      "processorRef": "mediapipe-face-landmarker:0.10.35:64184e229b26:bilateral-geometry-v1:gpu",
+      "clinicalValidation": "none",
+      "contextRef": "face-3",
+      "sourceWindowRefs": [
+        "face-1",
+        "face-3"
+      ],
+      "windowStartMs": 15000,
+      "windowEndMs": 18967,
+      "evidenceSnippetRef": null
+    },
+    {
+      "code": "prototype.face.eye_closure_fraction.asymmetry",
+      "label": "Eye-closure fraction asymmetry",
+      "value": 0.04,
+      "unit": "fraction",
+      "confidence": 0.99,
+      "uncertainty": {
+        "kind": "estimated",
+        "method": "median-absolute-deviation",
+        "value": 0.009,
+        "unit": "fraction"
+      },
+      "algorithmVersion": "facial-task-kinematics-1.0",
+      "processorRef": "mediapipe-face-landmarker:0.10.35:64184e229b26:bilateral-geometry-v1:gpu",
+      "clinicalValidation": "none",
+      "contextRef": "face-3",
+      "sourceWindowRefs": [
+        "face-1",
+        "face-3"
+      ],
+      "windowStartMs": 15000,
+      "windowEndMs": 18967,
+      "evidenceSnippetRef": null
+    }
+  ],
+  "aggregates": [
+    {
+      "code": "prototype.speech.onset_latency",
+      "label": "Speech initiation latency",
+      "unit": "seconds",
+      "contextKind": "spontaneous-speech",
+      "value": 0.4,
+      "spread": 0,
+      "confidence": 0.89,
+      "windowCount": 1,
+      "algorithmVersion": "speech-acoustic-0.4",
+      "processorRef": "speech-acoustic-0.4",
+      "sourceWindowRefs": [
+        "speech-0"
+      ],
+      "confounds": {
+        "kind": "speech",
+        "snrDb": 21.4,
+        "clippingFraction": 0
+      },
+      "uncertainty": {
+        "kind": "not-estimated",
+        "reason": "Speech uncertainty is not estimated by this prototype extractor."
+      },
+      "clinicalValidation": "none"
+    },
+    {
+      "code": "prototype.speech.voiced_time_fraction",
+      "label": "Voiced-time fraction",
+      "unit": "ratio",
+      "contextKind": "spontaneous-speech",
+      "value": 0.82,
+      "spread": 0,
+      "confidence": 0.88,
+      "windowCount": 1,
+      "algorithmVersion": "speech-acoustic-0.4",
+      "processorRef": "speech-acoustic-0.4",
+      "sourceWindowRefs": [
+        "speech-0"
+      ],
+      "confounds": {
+        "kind": "speech",
+        "snrDb": 21.4,
+        "clippingFraction": 0
+      },
+      "uncertainty": {
+        "kind": "not-estimated",
+        "reason": "Speech uncertainty is not estimated by this prototype extractor."
+      },
+      "clinicalValidation": "none"
+    },
+    {
+      "code": "prototype.speech.pause_rate",
+      "label": "Pause rate",
+      "unit": "pauses-per-minute",
+      "contextKind": "spontaneous-speech",
+      "value": 13.333,
+      "spread": 0,
+      "confidence": 0.88,
+      "windowCount": 1,
+      "algorithmVersion": "speech-acoustic-0.4",
+      "processorRef": "speech-acoustic-0.4",
+      "sourceWindowRefs": [
+        "speech-0"
+      ],
+      "confounds": {
+        "kind": "speech",
+        "snrDb": 21.4,
+        "clippingFraction": 0
+      },
+      "uncertainty": {
+        "kind": "not-estimated",
+        "reason": "Speech uncertainty is not estimated by this prototype extractor."
+      },
+      "clinicalValidation": "none"
+    },
+    {
+      "code": "prototype.speech.pitch_center",
+      "label": "Pitch center",
+      "unit": "hertz",
+      "contextKind": "spontaneous-speech",
+      "value": 137.2,
+      "spread": 0,
+      "confidence": 0.91,
+      "windowCount": 1,
+      "algorithmVersion": "speech-acoustic-0.4",
+      "processorRef": "speech-acoustic-0.4",
+      "sourceWindowRefs": [
+        "speech-0"
+      ],
+      "confounds": {
+        "kind": "speech",
+        "snrDb": 21.4,
+        "clippingFraction": 0
+      },
+      "uncertainty": {
+        "kind": "not-estimated",
+        "reason": "Speech uncertainty is not estimated by this prototype extractor."
+      },
+      "clinicalValidation": "none"
+    },
+    {
+      "code": "prototype.speech.pitch_variability",
+      "label": "Pitch variability",
+      "unit": "semitone-stddev",
+      "contextKind": "spontaneous-speech",
+      "value": 1.9,
+      "spread": 0,
+      "confidence": 0.91,
+      "windowCount": 1,
+      "algorithmVersion": "speech-acoustic-0.4",
+      "processorRef": "speech-acoustic-0.4",
+      "sourceWindowRefs": [
+        "speech-0"
+      ],
+      "confounds": {
+        "kind": "speech",
+        "snrDb": 21.4,
+        "clippingFraction": 0
+      },
+      "uncertainty": {
+        "kind": "not-estimated",
+        "reason": "Speech uncertainty is not estimated by this prototype extractor."
+      },
+      "clinicalValidation": "none"
+    },
+    {
+      "code": "prototype.face.smile_excursion.left",
+      "label": "Left smile excursion",
+      "unit": "inter-eye-normalized-distance",
+      "contextKind": "smile",
+      "value": 0.084,
+      "spread": 0,
+      "confidence": 0.99,
+      "windowCount": 1,
+      "algorithmVersion": "facial-task-kinematics-1.0",
+      "processorRef": "mediapipe-face-landmarker:0.10.35:64184e229b26:bilateral-geometry-v1:gpu",
+      "sourceWindowRefs": [
+        "face-1",
+        "face-2"
+      ],
+      "confounds": {
+        "kind": "visual",
+        "faceBoxWidthPixels": 321,
+        "faceBoxHeightPixels": 364,
+        "faceWidthFraction": 0.251,
+        "faceHeightFraction": 0.506,
+        "edgeMarginFraction": 0.114,
+        "analyzedFrameRate": 29.6,
+        "skippedFrameFraction": 0.021,
+        "meanInterResultGapMs": 33.8,
+        "illuminationMean": 0.57,
+        "darkClippingFraction": 0.009,
+        "brightClippingFraction": 0.007,
+        "sharpness": 0.0025,
+        "yawDegrees": 1.6,
+        "pitchDegrees": 1.3,
+        "rollDegrees": 0.8
+      },
+      "uncertainty": {
+        "kind": "estimated",
+        "method": "median-absolute-deviation",
+        "value": 0.004,
+        "unit": "inter-eye-normalized-distance"
+      },
+      "clinicalValidation": "none"
+    },
+    {
+      "code": "prototype.face.smile_excursion.right",
+      "label": "Right smile excursion",
+      "unit": "inter-eye-normalized-distance",
+      "contextKind": "smile",
+      "value": 0.074,
+      "spread": 0,
+      "confidence": 0.99,
+      "windowCount": 1,
+      "algorithmVersion": "facial-task-kinematics-1.0",
+      "processorRef": "mediapipe-face-landmarker:0.10.35:64184e229b26:bilateral-geometry-v1:gpu",
+      "sourceWindowRefs": [
+        "face-1",
+        "face-2"
+      ],
+      "confounds": {
+        "kind": "visual",
+        "faceBoxWidthPixels": 321,
+        "faceBoxHeightPixels": 364,
+        "faceWidthFraction": 0.251,
+        "faceHeightFraction": 0.506,
+        "edgeMarginFraction": 0.114,
+        "analyzedFrameRate": 29.6,
+        "skippedFrameFraction": 0.021,
+        "meanInterResultGapMs": 33.8,
+        "illuminationMean": 0.57,
+        "darkClippingFraction": 0.009,
+        "brightClippingFraction": 0.007,
+        "sharpness": 0.0025,
+        "yawDegrees": 1.6,
+        "pitchDegrees": 1.3,
+        "rollDegrees": 0.8
+      },
+      "uncertainty": {
+        "kind": "estimated",
+        "method": "median-absolute-deviation",
+        "value": 0.005,
+        "unit": "inter-eye-normalized-distance"
+      },
+      "clinicalValidation": "none"
+    },
+    {
+      "code": "prototype.face.smile_excursion.asymmetry",
+      "label": "Smile-excursion asymmetry",
+      "unit": "inter-eye-normalized-distance",
+      "contextKind": "smile",
+      "value": 0.01,
+      "spread": 0,
+      "confidence": 0.99,
+      "windowCount": 1,
+      "algorithmVersion": "facial-task-kinematics-1.0",
+      "processorRef": "mediapipe-face-landmarker:0.10.35:64184e229b26:bilateral-geometry-v1:gpu",
+      "sourceWindowRefs": [
+        "face-1",
+        "face-2"
+      ],
+      "confounds": {
+        "kind": "visual",
+        "faceBoxWidthPixels": 321,
+        "faceBoxHeightPixels": 364,
+        "faceWidthFraction": 0.251,
+        "faceHeightFraction": 0.506,
+        "edgeMarginFraction": 0.114,
+        "analyzedFrameRate": 29.6,
+        "skippedFrameFraction": 0.021,
+        "meanInterResultGapMs": 33.8,
+        "illuminationMean": 0.57,
+        "darkClippingFraction": 0.009,
+        "brightClippingFraction": 0.007,
+        "sharpness": 0.0025,
+        "yawDegrees": 1.6,
+        "pitchDegrees": 1.3,
+        "rollDegrees": 0.8
+      },
+      "uncertainty": {
+        "kind": "estimated",
+        "method": "median-absolute-deviation",
+        "value": 0.002,
+        "unit": "inter-eye-normalized-distance"
+      },
+      "clinicalValidation": "none"
+    },
+    {
+      "code": "prototype.face.eye_closure_fraction.left",
+      "label": "Left eye-closure fraction",
+      "unit": "fraction",
+      "contextKind": "eye-closure",
+      "value": 0.86,
+      "spread": 0,
+      "confidence": 0.99,
+      "windowCount": 1,
+      "algorithmVersion": "facial-task-kinematics-1.0",
+      "processorRef": "mediapipe-face-landmarker:0.10.35:64184e229b26:bilateral-geometry-v1:gpu",
+      "sourceWindowRefs": [
+        "face-1",
+        "face-3"
+      ],
+      "confounds": {
+        "kind": "visual",
+        "faceBoxWidthPixels": 319,
+        "faceBoxHeightPixels": 363,
+        "faceWidthFraction": 0.249,
+        "faceHeightFraction": 0.504,
+        "edgeMarginFraction": 0.115,
+        "analyzedFrameRate": 29.7,
+        "skippedFrameFraction": 0.019,
+        "meanInterResultGapMs": 33.7,
+        "illuminationMean": 0.56,
+        "darkClippingFraction": 0.01,
+        "brightClippingFraction": 0.007,
+        "sharpness": 0.0024,
+        "yawDegrees": 1.8,
+        "pitchDegrees": 1.4,
+        "rollDegrees": 0.9
+      },
+      "uncertainty": {
+        "kind": "estimated",
+        "method": "median-absolute-deviation",
+        "value": 0.018,
+        "unit": "fraction"
+      },
+      "clinicalValidation": "none"
+    },
+    {
+      "code": "prototype.face.eye_closure_fraction.right",
+      "label": "Right eye-closure fraction",
+      "unit": "fraction",
+      "contextKind": "eye-closure",
+      "value": 0.82,
+      "spread": 0,
+      "confidence": 0.99,
+      "windowCount": 1,
+      "algorithmVersion": "facial-task-kinematics-1.0",
+      "processorRef": "mediapipe-face-landmarker:0.10.35:64184e229b26:bilateral-geometry-v1:gpu",
+      "sourceWindowRefs": [
+        "face-1",
+        "face-3"
+      ],
+      "confounds": {
+        "kind": "visual",
+        "faceBoxWidthPixels": 319,
+        "faceBoxHeightPixels": 363,
+        "faceWidthFraction": 0.249,
+        "faceHeightFraction": 0.504,
+        "edgeMarginFraction": 0.115,
+        "analyzedFrameRate": 29.7,
+        "skippedFrameFraction": 0.019,
+        "meanInterResultGapMs": 33.7,
+        "illuminationMean": 0.56,
+        "darkClippingFraction": 0.01,
+        "brightClippingFraction": 0.007,
+        "sharpness": 0.0024,
+        "yawDegrees": 1.8,
+        "pitchDegrees": 1.4,
+        "rollDegrees": 0.9
+      },
+      "uncertainty": {
+        "kind": "estimated",
+        "method": "median-absolute-deviation",
+        "value": 0.021,
+        "unit": "fraction"
+      },
+      "clinicalValidation": "none"
+    },
+    {
+      "code": "prototype.face.eye_closure_fraction.asymmetry",
+      "label": "Eye-closure fraction asymmetry",
+      "unit": "fraction",
+      "contextKind": "eye-closure",
+      "value": 0.04,
+      "spread": 0,
+      "confidence": 0.99,
+      "windowCount": 1,
+      "algorithmVersion": "facial-task-kinematics-1.0",
+      "processorRef": "mediapipe-face-landmarker:0.10.35:64184e229b26:bilateral-geometry-v1:gpu",
+      "sourceWindowRefs": [
+        "face-1",
+        "face-3"
+      ],
+      "confounds": {
+        "kind": "visual",
+        "faceBoxWidthPixels": 319,
+        "faceBoxHeightPixels": 363,
+        "faceWidthFraction": 0.249,
+        "faceHeightFraction": 0.504,
+        "edgeMarginFraction": 0.115,
+        "analyzedFrameRate": 29.7,
+        "skippedFrameFraction": 0.019,
+        "meanInterResultGapMs": 33.7,
+        "illuminationMean": 0.56,
+        "darkClippingFraction": 0.01,
+        "brightClippingFraction": 0.007,
+        "sharpness": 0.0024,
+        "yawDegrees": 1.8,
+        "pitchDegrees": 1.4,
+        "rollDegrees": 0.9
+      },
+      "uncertainty": {
+        "kind": "estimated",
+        "method": "median-absolute-deviation",
+        "value": 0.009,
+        "unit": "fraction"
+      },
+      "clinicalValidation": "none"
+    }
+  ],
+  "abstentions": [
+    {
+      "modality": "face",
+      "windowStartMs": 5000,
+      "windowEndMs": 8000,
+      "reasonCode": "pose-out-of-range",
+      "detail": "Facial analysis was intentionally withheld during the turn-away phase while speech analysis continued.",
+      "sourceWindowRefs": [],
+      "processorRef": "mediapipe-face-landmarker:0.10.35:64184e229b26:bilateral-geometry-v1:gpu"
+    }
+  ],
+  "measurementCount": 11,
+  "qualitySummary": {
+    "speechWindowCount": 1,
+    "faceWindowCount": 4,
+    "abstentionCount": 1,
+    "qualityTransitionCount": 4,
+    "audioFrameCount": 190,
+    "speechActiveFrameCount": 98,
+    "pitchedFrameCount": 88,
+    "pitchCoverage": 0.898,
+    "faceFrameCount": 570,
+    "usableFaceFrameCount": 478,
+    "usableFaceFraction": 0.839,
+    "faceWithholdingDurationMs": 3000,
+    "faceRecoveryObserved": true,
+    "postRecoveryFaceWindowCount": 3
+  }
 }

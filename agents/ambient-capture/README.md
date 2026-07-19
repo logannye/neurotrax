@@ -8,7 +8,8 @@ conversation, brief prompted microtasks, or both.
 
 ## Agentic behavior
 
-- ingest derived audio and face primitives incrementally;
+- ingest derived audio and versioned facial-kinematics primitives
+  incrementally;
 - apply a versioned protocol and capture context without interpreting disease;
 - open and close independent modality windows;
 - route eligible windows to versioned deterministic extractors;
@@ -16,8 +17,10 @@ conversation, brief prompted microtasks, or both.
 - reconcile results into one `EncounterObservation`; and
 - release raw device access at encounter end.
 
-The hero behavior is modality independence: the face lane withholds during a
-turn-away while the speech lane continues, then face measurement recovers.
+The hero behavior is modality and task independence: the face lane withholds
+during a turn-away while the speech lane continues, then facial quality
+recovers for neutral-face, smile, and eye-closure tasks. Failure of one task
+abstains only its measurements.
 
 Prompted tasks remain inside Ambient Capture. They do not bypass quality gates,
 make a modality mandatory at the platform level, or create clinical meaning.
@@ -26,3 +29,7 @@ make a modality mandatory at the platform level, or create clinical meaning.
 
 Ambient Capture does not interpret conversation content, diagnose, compare
 history, generate narrative conclusions, or recommend action.
+
+Native MediaPipe landmarks, blendshapes, transformation matrices, and video
+frames do not cross the browser-worker boundary. Only compact derived geometry,
+quality, timing, and processor provenance may enter the coordinator.

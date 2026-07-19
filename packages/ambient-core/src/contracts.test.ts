@@ -15,11 +15,9 @@ describe("measurement contracts", () => {
       context: {
         kind: "spontaneous-speech",
         confounds: {
+          kind: "speech",
           snrDb: 22,
-          faceFramingFraction: 1,
-          observedFrameRate: 30,
-          illuminationRelative: 0.8,
-          yawDegrees: 0
+          clippingFraction: 0
         }
       }
     };
@@ -29,10 +27,15 @@ describe("measurement contracts", () => {
       value: 0.61,
       unit: "voiced-fraction",
       confidence: 0.9,
-      uncertainty: "placeholder",
+      uncertainty: {
+        kind: "not-estimated",
+        reason: "not estimated for speech"
+      },
       algorithmVersion: "speech-acoustic-0.1",
+      processorRef: "speech-acoustic-0.1",
       clinicalValidation: "none",
       contextRef: window.windowId,
+      sourceWindowRefs: [window.windowId],
       windowStartMs: window.startMs,
       windowEndMs: window.endMs,
       evidenceSnippetRef: null
@@ -45,7 +48,7 @@ describe("measurement contracts", () => {
       detail: "Mean SNR 4 dB below the 12 dB floor."
     };
 
-    expect(measurement.uncertainty).toBe("placeholder");
+    expect(measurement.uncertainty.kind).toBe("not-estimated");
     expect(measurement.clinicalValidation).toBe("none");
     expect(measurement.contextRef).toBe(window.windowId);
     expect(abstention.reasonCode).toBe("snr-too-low");

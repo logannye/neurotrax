@@ -235,32 +235,34 @@ The working demonstration uses a laptop camera and microphone and implements:
 
 - explicit consent and a bounded system check;
 - quiet-room voice calibration and adaptive voice activity detection;
-- local MediaPipe facial landmarks and blendshape proxies in a browser worker;
+- local MediaPipe facial geometry in a versioned browser-worker pipeline;
+- acquisition-time video scheduling, anatomical laterality, camera and model
+  provenance, and reason-coded visual quality;
 - independent, quality-gated speech and facial measurement windows;
-- ten prototype encounter metrics;
+- eleven prototype encounter metrics;
 - robust per-visit aggregation with algorithm-version checks;
 - reason-coded abstention and append-only workflow events;
 - a deterministic evidence layer with bounded server-side synthesis;
 - a clinician-facing quantitative profile and provenance drawer; and
 - explicit approval or dismissal.
 
-The ten current features are:
+The eleven current features are:
 
 - speech initiation latency;
 - voiced-time fraction;
 - bounded pause rate;
 - pitch center and pitch variability;
-- overall facial movement;
-- blink-rate proxy;
-- brow excursion;
-- mouth-aperture range; and
-- eye-aperture range.
+- left and right smile excursion plus their absolute difference; and
+- left and right eye-closure fraction plus their absolute difference.
 
 They are engineering features, not validated biomarkers. Measurements
-explicitly carry placeholder uncertainty and `clinicalValidation: "none"`.
+explicitly carry technical uncertainty state and
+`clinicalValidation: "none"`.
 
-The live demonstration still uses the original NeuroTrax 24-second
-neurological presentation workflow as its first protocol-shaped example.
+The live demonstration uses a nineteen-second nonclinical task sequence:
+establish the audiovisual signals, demonstrate independent facial withholding,
+capture a neutral reference, hold a comfortable smile, and gently close and
+reopen the eyes.
 Personal Trajectory exists as a tested internal package but is not connected
 to persistent patient history. No authentication, clinical data store, FHIR
 integration, EHR write, or production deployment is implemented.

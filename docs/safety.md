@@ -18,6 +18,8 @@ workflow defined in a versioned protocol pack.
 - A test capture can never silently replace a live-device encounter.
 - Camera and microphone tracks stop when the encounter ends or the page exits.
 - Raw frames and samples are processed ephemerally; no recording path exists.
+- Native facial landmarks, blendshapes, and transformation matrices remain
+  inside the browser worker for one inference and are never serialized.
 - Each modality applies its own quality contract and can abstain independently.
 - An unusable interval yields no measurement value.
 - Measurements, summary generation, grounding, and human disposition remain
@@ -35,8 +37,8 @@ workflow defined in a versioned protocol pack.
 ## Model boundary
 
 The Evidence Agent receives bounded structured non-PHI facts only. It never
-receives microphone samples, camera frames, landmarks, screenshots,
-transcripts, or conversation content.
+receives microphone samples, camera frames, landmarks, blendshapes,
+transformation matrices, screenshots, transcripts, or conversation content.
 
 The model cannot create measurements or select evidence outcomes. A
 deterministic validator blocks unsupported or clinical language. If narrative
@@ -98,8 +100,10 @@ misuse review.
 
 ## Research-media boundary
 
-The current application has no raw-media retention path. That must remain true
-for this prototype.
+The current application has no raw-media or native-visual-observation retention
+path. Serialized observations explicitly assert `rawMediaRetained: false` and
+`nativeVisualObservationsRetained: false`; that must remain true for this
+prototype.
 
 Future analytical or clinical validation may require an independently deployed
 research environment with explicitly consented media retention. Such a system

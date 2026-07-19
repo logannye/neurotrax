@@ -43,6 +43,7 @@ export interface BiomarkerComparison {
   unit: string;
   contextKind: MeasurementContextKind;
   algorithmVersion: string;
+  processorRef: string;
   currentValue: number;
   priorValues: Array<{
     encounterId: string;

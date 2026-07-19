@@ -48,6 +48,9 @@ async function installEvidenceMock(page: Page): Promise<void> {
   await installReadinessMock(page);
   await page.route("**/api/evidence-card", async (route) => {
     const payload = route.request().postDataJSON() as {
+      containsPHI: boolean;
+      rawMediaRetained: boolean;
+      nativeVisualObservationsRetained: boolean;
       outcomes: Array<{
         outcomeId: string;
         label: string;
@@ -56,6 +59,12 @@ async function installEvidenceMock(page: Page): Promise<void> {
         statement: string;
       }>;
     };
+    expect(payload.containsPHI).toBe(false);
+    expect(payload.rawMediaRetained).toBe(false);
+    expect(payload.nativeVisualObservationsRetained).toBe(false);
+    expect(JSON.stringify(payload)).not.toMatch(
+      /deviceId|deviceLabel|faceLandmarks|blendshapes|transformationMatrix|bitmap|mediaStream/i
+    );
     expect(payload.outcomes).toHaveLength(2);
     expect(
       new Set(payload.outcomes.map((outcome) => outcome.modality)).size
@@ -71,7 +80,7 @@ async function installEvidenceMock(page: Page): Promise<void> {
           headline: "Two encounter signals are ready for review",
           summary:
             reportable.length === 2
-              ? "Pitch variability and facial movement were measured during technically usable portions of the encounter."
+              ? "Pitch variability and bilateral facial task measurements were captured during technically usable portions of the encounter."
               : `${reportable[0]?.label ?? "No audiovisual metric"} was included in the encounter report.`,
           claims: reportable.map((outcome) => ({
             claimId: outcome.outcomeId,
@@ -117,7 +126,13 @@ async function runGuidedCapture(
     page.locator('[data-milestone="withheld"]')
   ).toHaveClass(/is-complete/);
   await expect(
-    page.locator('[data-milestone="recovered"]')
+    page.locator('[data-milestone="neutral"]')
+  ).toHaveClass(/is-complete/);
+  await expect(
+    page.locator('[data-milestone="smile"]')
+  ).toHaveClass(/is-complete/);
+  await expect(
+    page.locator('[data-milestone="eye-closure"]')
   ).toHaveClass(/is-complete/);
   await expect(page.locator("#results-panel")).toBeVisible({
     timeout: 10_000
@@ -143,6 +158,52 @@ test("loads the local facial analysis and keeps presentation copy clean", async 
     "Ambient face and voice measurement"
   );
   await expectCleanPresentationCopy(page);
+});
+
+test("runs local visual worker inference on a generated blank bitmap", async ({
+  page
+}) => {
+  await installReadinessMock(page);
+  await page.goto("/?visualWorkerSmoke=1&operator=1");
+  await expect(page.locator("body")).toHaveAttribute(
+    "data-visual-worker-smoke",
+    "complete",
+    { timeout: 15_000 }
+  );
+  await expect(page.locator("body")).toHaveAttribute(
+    "data-visual-worker-smoke-face",
+    "not-visible"
+  );
+  const diagnostics = JSON.parse(
+    (await page.locator("#operator-output").textContent()) ?? "{}"
+  ) as {
+    visualPipeline: {
+      mediaPipeVersion: string;
+      modelSha256: string;
+      delegate: string;
+    };
+    videoCaptureSettings: {
+      requested: { width: number; height: number; frameRate: number };
+    };
+    latestVisualResult: {
+      analyzedFrameRate: number;
+      interResultGapMs: number | null;
+      processingLatencyMs: number;
+    };
+  };
+  expect(diagnostics.visualPipeline.mediaPipeVersion).toBe("0.10.35");
+  expect(diagnostics.visualPipeline.modelSha256).toMatch(/^[a-f0-9]{64}$/);
+  expect(["GPU", "CPU"]).toContain(diagnostics.visualPipeline.delegate);
+  expect(diagnostics.videoCaptureSettings.requested).toEqual({
+    width: 1280,
+    height: 720,
+    frameRate: 30
+  });
+  expect(diagnostics.latestVisualResult.analyzedFrameRate).toBe(0);
+  expect(diagnostics.latestVisualResult.interResultGapMs).toBeNull();
+  expect(diagnostics.latestVisualResult.processingLatencyMs).toBeGreaterThanOrEqual(
+    0
+  );
 });
 
 test("keeps the opening focused and reports device privacy accurately", async ({
@@ -176,7 +237,7 @@ test("runs guided capture, traces both claims, and approves the summary", async 
 }) => {
   await runGuidedCapture(page);
   await expect(page.locator("#result-summary")).toContainText(
-    "10 encounter biomarkers"
+    "11 encounter biomarkers"
   );
   await expect(page.getByRole("heading", {
     name: "Clinician encounter summary"
@@ -293,7 +354,7 @@ test("prefetches synthesis and exposes measured evidence during service latency"
         draft: {
           headline: "Two encounter signals are ready for review",
           summary:
-            "Pitch variability and facial movement were measured during technically usable portions of the encounter.",
+            "Pitch variability and bilateral facial task measurements were captured during technically usable portions of the encounter.",
           claims: payload.outcomes.map((outcome) => ({
             claimId: outcome.outcomeId,
             modality: outcome.modality,
@@ -333,7 +394,7 @@ test("prefetches synthesis and exposes measured evidence during service latency"
     "data-event-id",
     /coordinator\.decision\.recorded/
   );
-  await expect(page.locator(".aggregate-card")).toHaveCount(10);
+  await expect(page.locator(".aggregate-card")).toHaveCount(11);
   await expect(page.locator("#evidence-loading")).toBeVisible();
   await expect(page.locator("#evidence-loading")).toHaveAttribute(
     "data-event-id",
@@ -351,7 +412,7 @@ test("prefetches synthesis and exposes measured evidence during service latency"
     "data-event-id",
     /evidence-card\.drafted/
   );
-  await expect(page.locator(".report-metric")).toHaveCount(10);
+  await expect(page.locator(".report-metric")).toHaveCount(11);
 });
 
 test("shows facial analysis pausing while speech continues", async ({ page }) => {

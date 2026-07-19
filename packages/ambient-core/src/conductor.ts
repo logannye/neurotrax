@@ -6,21 +6,27 @@ import type {
   Measurement,
   MeasurementContext,
   MeasurableWindow,
-  Modality
+  Modality,
+  VisualQualityReasonCode,
+  VisualTaskContext
 } from "@phenometric/contracts";
 import type {
   AudioFeatureFrame,
-  FaceLandmarkFrame,
+  FacialKinematicsFrameV1,
   FrameStream
 } from "./primitives.js";
-import { detectMeasurableWindows, MAX_SPEECH_PAUSE_MS } from "./windowing.js";
+import { detectMeasurableWindows } from "./windowing.js";
 import {
   extractSpeechAcoustic,
   SPEECH_ACOUSTIC_VERSION
 } from "./speech-acoustic.js";
-import { extractFacialExpressivity, FACE_FRAMING_FLOOR } from "./facial-expressivity.js";
+import { extractFacialTaskMeasurements } from "./facial-task.js";
 import { aggregateMeasurements } from "./aggregate.js";
 import { createEventFactory, type EventFactory } from "./events.js";
+import {
+  DEFAULT_CAPTURE_QUALITY_POLICY,
+  evaluateVisualQuality
+} from "./visual-quality.js";
 
 const LABELS = new Map<string, { label: string; unit: string }>([
   ["prototype.speech.voiced_time_fraction", { label: "Voiced-time fraction", unit: "ratio" }],
@@ -28,25 +34,17 @@ const LABELS = new Map<string, { label: string; unit: string }>([
   ["prototype.speech.onset_latency", { label: "Speech initiation latency", unit: "seconds" }],
   ["prototype.speech.pitch_center", { label: "Pitch center", unit: "hertz" }],
   ["prototype.speech.pitch_variability", { label: "Pitch variability", unit: "semitone-stddev" }],
-  ["prototype.face.expressivity", { label: "Facial movement", unit: "motion-index" }],
-  ["prototype.face.blink_rate", { label: "Blink rate", unit: "blinks-per-minute" }],
-  ["prototype.face.brow_amplitude", { label: "Brow amplitude", unit: "normalized-range" }],
-  ["prototype.face.mouth_amplitude", { label: "Mouth aperture range", unit: "normalized-range" }],
-  ["prototype.face.eye_aperture_range", { label: "Eye aperture range", unit: "normalized-range" }]
+  ["prototype.face.smile_excursion.left", { label: "Left smile excursion", unit: "inter-eye-normalized-distance" }],
+  ["prototype.face.smile_excursion.right", { label: "Right smile excursion", unit: "inter-eye-normalized-distance" }],
+  ["prototype.face.smile_excursion.asymmetry", { label: "Smile-excursion asymmetry", unit: "inter-eye-normalized-distance" }],
+  ["prototype.face.eye_closure_fraction.left", { label: "Left eye-closure fraction", unit: "fraction" }],
+  ["prototype.face.eye_closure_fraction.right", { label: "Right eye-closure fraction", unit: "fraction" }],
+  ["prototype.face.eye_closure_fraction.asymmetry", { label: "Eye-closure fraction asymmetry", unit: "fraction" }]
 ]);
 
-const FACE_QUALITY_DEBOUNCE_MS = 750;
-const SPEECH_OPEN_DEBOUNCE_MS = 300;
-export const MAX_FACE_YAW_DEGREES = 30;
-
-export const DEFAULT_CAPTURE_QUALITY_POLICY: CaptureQualityPolicy = {
-  id: "guided-live-v0.1",
-  speechOpenDebounceMs: SPEECH_OPEN_DEBOUNCE_MS,
-  maximumSpeechPauseMs: MAX_SPEECH_PAUSE_MS,
-  faceQualityDebounceMs: FACE_QUALITY_DEBOUNCE_MS,
-  faceFramingFloor: FACE_FRAMING_FLOOR,
-  maximumFaceYawDegrees: MAX_FACE_YAW_DEGREES
-};
+export const MAX_FACE_YAW_DEGREES =
+  DEFAULT_CAPTURE_QUALITY_POLICY.maximumFaceYawDegrees;
+export { DEFAULT_CAPTURE_QUALITY_POLICY };
 
 type LaneQuality = "unknown" | "measurable" | "withheld";
 
@@ -63,7 +61,13 @@ interface LaneState {
 
 export interface ConductorSession {
   ingestAudio(frame: AudioFeatureFrame): void;
-  ingestFace(frame: FaceLandmarkFrame): void;
+  ingestFace(frame: FacialKinematicsFrameV1): void;
+  ingestVisualWithholding(input: {
+    tMs: number;
+    reasonCode: VisualQualityReasonCode;
+    taskContext: VisualTaskContext;
+    processorRef?: string;
+  }): void;
   complete(): { observation: EncounterObservation; events: EventEnvelope[] };
   getEvents(): EventEnvelope[];
 }
@@ -95,12 +99,15 @@ function processObservation(
   events: EventEnvelope[],
   emit: (event: EventEnvelope) => void,
   qualityTransitionCount: number,
-  liveAbstentions: Abstention[]
+  liveAbstentions: Abstention[],
+  faceSplitPointsMs: readonly number[]
 ): EncounterObservation {
   const measurements: Measurement[] = [];
   const abstentions: Abstention[] = [...liveAbstentions];
   const contextByWindowId = new Map<string, MeasurementContext>();
-  const windows = detectMeasurableWindows(stream);
+  const windows = detectMeasurableWindows(stream, {
+    faceSplitPointsMs
+  });
 
   for (const window of windows) {
     contextByWindowId.set(window.windowId, window.context);
@@ -134,17 +141,11 @@ function processObservation(
       )
     );
 
-    const result: Measurement[] | Abstention =
-      window.modality === "speech"
-        ? extractSpeechAcoustic(
-            window,
-            slice(stream.audio as AudioFeatureFrame[], window)
-          )
-        : extractFacialExpressivity(
-            window,
-            slice(stream.face as FaceLandmarkFrame[], window)
-          );
-
+    if (window.modality === "face") continue;
+    const result = extractSpeechAcoustic(
+      window,
+      slice(stream.audio, window)
+    );
     if (isAbstention(result)) {
       abstentions.push(result);
       emit(
@@ -159,7 +160,6 @@ function processObservation(
       );
       continue;
     }
-
     for (const measurement of result) {
       measurements.push(measurement);
       emit(
@@ -180,6 +180,44 @@ function processObservation(
     }
   }
 
+  const faceResult = extractFacialTaskMeasurements(windows, stream.face);
+  for (const facialAbstention of faceResult.abstentions) {
+    abstentions.push(facialAbstention);
+    emit(
+      factory.next(
+        "facial-expressivity",
+        "measurement.abstained",
+        "ambient-capture",
+        `Withheld face measurement: ${facialAbstention.reasonCode}.`,
+        facialAbstention.windowEndMs,
+        {
+          windowId: facialAbstention.sourceWindowRefs?.at(-1),
+          reasonCode: facialAbstention.reasonCode,
+          measurementCodes: facialAbstention.measurementCodes
+        },
+        facialAbstention.sourceWindowRefs ?? []
+      )
+    );
+  }
+  for (const measurement of faceResult.measurements) {
+    measurements.push(measurement);
+    emit(
+      factory.next(
+        "facial-expressivity",
+        "measurement.recorded",
+        "ambient-capture",
+        `Recorded ${measurement.label}.`,
+        measurement.windowEndMs,
+        {
+          windowId: measurement.contextRef,
+          code: measurement.code,
+          value: measurement.value
+        },
+        measurement.sourceWindowRefs
+      )
+    );
+  }
+
   const firstSpeechWindow = windows.find(
     (window) => window.modality === "speech"
   );
@@ -194,14 +232,23 @@ function processObservation(
       label: "Speech initiation latency",
       value: firstSpeechWindow.startMs / 1000,
       unit: "seconds",
-      confidence: Math.min(
-        1,
-        Math.max(0, firstSpeechWindow.context.confounds.snrDb / 24)
-      ),
-      uncertainty: "placeholder",
+      confidence:
+        firstSpeechWindow.context.confounds.kind === "speech"
+          ? Math.min(
+              1,
+              Math.max(0, firstSpeechWindow.context.confounds.snrDb / 24)
+            )
+          : 0,
+      uncertainty: {
+        kind: "not-estimated",
+        reason:
+          "Speech uncertainty is not estimated by this prototype extractor."
+      },
       algorithmVersion: SPEECH_ACOUSTIC_VERSION,
+      processorRef: SPEECH_ACOUSTIC_VERSION,
       clinicalValidation: "none",
       contextRef: firstSpeechWindow.windowId,
+      sourceWindowRefs: [firstSpeechWindow.windowId],
       windowStartMs: 0,
       windowEndMs: firstSpeechWindow.startMs,
       evidenceSnippetRef: null
@@ -234,8 +281,19 @@ function processObservation(
     new Date(
       events.length > 0 ? Date.parse(events[0].occurredAt) : 0
     ).toISOString();
+  const usableFaceFrameCount = stream.face.filter(
+    (frame) =>
+      evaluateVisualQuality(
+        frame,
+        stream.calibration?.face ?? null,
+        DEFAULT_CAPTURE_QUALITY_POLICY
+      ).usable
+  ).length;
   const observation: EncounterObservation = {
+    schemaVersion: "phenometric.encounter-observation.v1",
     containsPHI: stream.containsPHI,
+    rawMediaRetained: false,
+    nativeVisualObservationsRetained: false,
     captureMode: stream.captureMode,
     visitId: stream.visitId,
     participantId: stream.participantId,
@@ -244,6 +302,8 @@ function processObservation(
       id: "fixture-replay",
       version: "0.2.0"
     },
+    visualPipeline: stream.visualPipeline,
+    videoCaptureSettings: stream.videoCaptureSettings,
     windows,
     measurements,
     aggregates,
@@ -275,22 +335,12 @@ function processObservation(
               ).length /
             stream.audio.filter((frame) => frame.voiced).length,
       faceFrameCount: stream.face.length,
-      usableFaceFrameCount: stream.face.filter(
-        (frame) =>
-          frame.faceVisible &&
-          frame.framingFraction >= FACE_FRAMING_FLOOR &&
-          Math.abs(frame.yawDegrees ?? 0) <= MAX_FACE_YAW_DEGREES
-      ).length,
+      usableFaceFrameCount,
       usableFaceFraction:
         stream.face.length === 0
           ? 0
-          : stream.face.filter(
-                (frame) =>
-                  frame.faceVisible &&
-                  frame.framingFraction >= FACE_FRAMING_FLOOR &&
-                  Math.abs(frame.yawDegrees ?? 0) <= MAX_FACE_YAW_DEGREES
-              ).length / stream.face.length,
-      faceWithholdingDurationMs: abstentions
+          : usableFaceFrameCount / stream.face.length,
+      faceWithholdingDurationMs: liveAbstentions
         .filter((abstention) => abstention.modality === "face")
         .reduce(
           (total, abstention) =>
@@ -299,7 +349,9 @@ function processObservation(
         ),
       faceRecoveryObserved:
         windows.filter((window) => window.modality === "face").length >= 2 &&
-        abstentions.some((abstention) => abstention.modality === "face"),
+        liveAbstentions.some(
+          (abstention) => abstention.modality === "face"
+        ),
       postRecoveryFaceWindowCount: Math.max(
         0,
         windows.filter((window) => window.modality === "face").length - 1
@@ -359,61 +411,24 @@ export function createConductorSession(
   });
   const events: EventEnvelope[] = [];
   const audio: AudioFeatureFrame[] = [];
-  const face: FaceLandmarkFrame[] = [];
+  const face: FacialKinematicsFrameV1[] = [];
   const speechState = freshLaneState();
   const faceState = freshLaneState();
   const liveAbstentions: Abstention[] = [];
+  const faceSplitPointsMs: number[] = [];
   const qualityPolicy =
     options.qualityPolicy ?? DEFAULT_CAPTURE_QUALITY_POLICY;
   let completed = false;
   let qualityTransitionCount = 0;
 
   const faceQualityReason = (
-    frame: FaceLandmarkFrame
-  ): string | null => {
-    if (!frame.faceVisible) return "face-not-visible";
-    if (
-      Math.abs(frame.yawDegrees ?? 0) >
-      qualityPolicy.maximumFaceYawDegrees
-    ) {
-      return "face-off-axis";
-    }
-    const faceCalibration = identity.calibration?.face;
-    if (
-      faceCalibration &&
-      frame.faceBoxWidth !== undefined &&
-      frame.faceBoxHeight !== undefined
-    ) {
-      const widthRatio =
-        frame.faceBoxWidth /
-        Math.max(0.001, faceCalibration.baselineBoxWidth);
-      const heightRatio =
-        frame.faceBoxHeight /
-        Math.max(0.001, faceCalibration.baselineBoxHeight);
-      if (widthRatio < 0.6 || heightRatio < 0.6) {
-        return "face-too-small";
-      }
-      if (widthRatio > 1.7 || heightRatio > 1.7) {
-        return "face-too-large";
-      }
-    }
-    if (frame.edgeMargin !== undefined && frame.edgeMargin < 0.01) {
-      return "face-off-center";
-    }
-    if (
-      frame.illumination < 0.1 ||
-      (faceCalibration &&
-        Math.abs(
-          frame.illumination - faceCalibration.baselineIllumination
-        ) > 0.3)
-    ) {
-      return "illumination-out-of-range";
-    }
-    if (frame.framingFraction < qualityPolicy.faceFramingFloor) {
-      return "face-not-framed";
-    }
-    return null;
-  };
+    frame: FacialKinematicsFrameV1
+  ): string | null =>
+    evaluateVisualQuality(
+      frame,
+      identity.calibration?.face ?? null,
+      qualityPolicy
+    ).reasonCodes[0] ?? null;
 
   const emit = (event: EventEnvelope): void => {
     events.push(event);
@@ -660,6 +675,28 @@ export function createConductorSession(
       }
     },
 
+    ingestVisualWithholding(input) {
+      if (completed) throw new Error("Cannot ingest after session completion.");
+      if (faceState.quality !== "withheld") {
+        faceSplitPointsMs.push(input.tMs);
+      }
+      faceState.candidateSinceMs = null;
+      faceState.adverseSinceMs = input.tMs;
+      closeWindow(
+        "face",
+        faceState,
+        faceState.lastGoodMs ?? input.tMs,
+        input.reasonCode
+      );
+      changeQuality(
+        "face",
+        faceState,
+        "withheld",
+        input.tMs,
+        input.reasonCode
+      );
+    },
+
     complete() {
       if (completed) throw new Error("Session has already completed.");
       completed = true;
@@ -717,7 +754,8 @@ export function createConductorSession(
         events,
         emit,
         qualityTransitionCount,
-        liveAbstentions
+        liveAbstentions,
+        faceSplitPointsMs
       );
       return { observation, events: [...events] };
     },

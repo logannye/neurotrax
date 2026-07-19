@@ -60,6 +60,12 @@ function confoundReasons(
   const reasons: string[] = [];
   if (current.code.startsWith("prototype.speech.")) {
     if (
+      current.confounds.kind !== "speech" ||
+      prior.confounds.kind !== "speech"
+    ) {
+      return ["confound-envelope-kind-mismatch"];
+    }
+    if (
       Math.abs(current.confounds.snrDb - prior.confounds.snrDb) >
       policy.speechSnrToleranceDb
     ) {
@@ -68,21 +74,33 @@ function confoundReasons(
   }
   if (current.code.startsWith("prototype.face.")) {
     if (
-      Math.abs(
-        current.confounds.faceFramingFraction -
-          prior.confounds.faceFramingFraction
+      current.confounds.kind !== "visual" ||
+      prior.confounds.kind !== "visual"
+    ) {
+      return ["confound-envelope-kind-mismatch"];
+    }
+    if (
+      Math.max(
+        Math.abs(
+          current.confounds.faceWidthFraction -
+            prior.confounds.faceWidthFraction
+        ),
+        Math.abs(
+          current.confounds.faceHeightFraction -
+            prior.confounds.faceHeightFraction
+        )
       ) > policy.faceFramingTolerance
     ) {
       reasons.push("face-framing-out-of-tolerance");
     }
     const baselineFrameRate = Math.max(
       1,
-      prior.confounds.observedFrameRate
+      prior.confounds.analyzedFrameRate
     );
     if (
       Math.abs(
-        current.confounds.observedFrameRate -
-          prior.confounds.observedFrameRate
+        current.confounds.analyzedFrameRate -
+          prior.confounds.analyzedFrameRate
       ) /
         baselineFrameRate >
       policy.frameRateToleranceFraction
@@ -91,8 +109,8 @@ function confoundReasons(
     }
     if (
       Math.abs(
-        current.confounds.illuminationRelative -
-          prior.confounds.illuminationRelative
+        current.confounds.illuminationMean -
+          prior.confounds.illuminationMean
       ) > policy.illuminationTolerance
     ) {
       reasons.push("illumination-out-of-tolerance");
@@ -114,6 +132,12 @@ function compatibleAggregate(
   if (!sameCode) return { aggregate: null, reasons: [] };
   if (sameCode.algorithmVersion !== current.algorithmVersion) {
     return { aggregate: null, reasons: ["algorithm-version-mismatch"] };
+  }
+  if (
+    current.code.startsWith("prototype.face.") &&
+    sameCode.processorRef !== current.processorRef
+  ) {
+    return { aggregate: null, reasons: ["visual-processor-mismatch"] };
   }
   const reasons = confoundReasons(current, sameCode, policy);
   return { aggregate: reasons.length === 0 ? sameCode : null, reasons };
@@ -225,6 +249,7 @@ export function compareTrajectory(
       unit: currentAggregate.unit,
       contextKind: currentAggregate.contextKind,
       algorithmVersion: currentAggregate.algorithmVersion,
+      processorRef: currentAggregate.processorRef,
       currentValue: currentAggregate.value,
       priorValues: matches.map(({ record, aggregate }) => ({
         encounterId: record.visitId,
@@ -245,7 +270,7 @@ export function compareTrajectory(
       ),
       currentEvidenceRefs: current.measurements
         .filter((measurement) => measurement.code === currentAggregate.code)
-        .map((measurement) => measurement.contextRef),
+        .flatMap((measurement) => measurement.sourceWindowRefs),
       referenceMeasurementRefs: matches.map(
         ({ record }) => `${record.visitId}:${currentAggregate.code}`
       )

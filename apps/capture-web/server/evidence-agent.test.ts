@@ -24,22 +24,29 @@ const outcomes = [
   {
     outcomeId: "outcome-face-measured",
     status: "measured",
-    measurementCode: "prototype.face.expressivity",
-    label: "Facial movement",
+    measurementCode: "prototype.face.smile_excursion.asymmetry",
+    label: "Smile-excursion asymmetry",
     modality: "face",
     statement:
-      "Facial movement was measured before and after a quality-withheld interval.",
+      "Smile-excursion asymmetry was measured across accepted neutral and smile task windows.",
     currentValue: 0.04,
-    unit: "motion-index",
-    qualityFacts: { usableWindows: 2, recoveryConfirmed: true },
-    supportRefs: ["face-0", "face-1"],
-    eventIds: ["measurement-face", "face-restored"],
+    unit: "inter-eye-normalized-distance",
+    qualityFacts: {
+      usableWindows: 2,
+      usableFraction: 0.8,
+      processorRef:
+        "mediapipe-face-landmarker:0.10.35:64184e229b26:bilateral-geometry-v1:gpu"
+    },
+    supportRefs: ["face-neutral", "face-smile"],
+    eventIds: ["measurement-face", "measurement-smile"],
     allowedNumbers: ["0.04"]
   }
 ] as const;
 
 const request = {
   containsPHI: false,
+  rawMediaRetained: false,
+  nativeVisualObservationsRetained: false,
   visitId: "visit-test",
   qualitySummary: {
     speechWindowCount: 1,
@@ -64,7 +71,7 @@ function validNarrative() {
   return {
     headline: "Two encounter signals are ready for review",
     summary:
-      "Pitch variability and facial movement were measured during technically usable portions of the encounter."
+      "Pitch variability and smile-excursion asymmetry were measured during technically usable portions of the encounter."
   };
 }
 
@@ -105,6 +112,12 @@ describe("runEvidenceAgent", () => {
         max_output_tokens: 96,
         reasoning: { effort: "none" }
       })
+    );
+    const serializedModelInput = JSON.stringify(
+      parse.mock.calls[0][0].input
+    ).toLowerCase();
+    expect(serializedModelInput).not.toMatch(
+      /landmark|blendshape|transformationmatrix|deviceid|devicelabel|rawmedia/
     );
   });
 
@@ -156,6 +169,35 @@ describe("runEvidenceAgent", () => {
         { responses: { parse: vi.fn() as never } }
       )
     ).rejects.toThrow();
+  });
+
+  it("rejects evidence requests that do not assert ephemeral visual processing", async () => {
+    const client = { responses: { parse: vi.fn() as never } };
+
+    await expect(
+      runEvidenceAgent(
+        { ...request, rawMediaRetained: true },
+        client
+      )
+    ).rejects.toThrow();
+    await expect(
+      runEvidenceAgent(
+        { ...request, nativeVisualObservationsRetained: true },
+        client
+      )
+    ).rejects.toThrow();
+    await expect(
+      runEvidenceAgent(
+        {
+          containsPHI: false,
+          visitId: request.visitId,
+          qualitySummary: request.qualitySummary,
+          outcomes: request.outcomes
+        },
+        client
+      )
+    ).rejects.toThrow();
+    expect(client.responses.parse).not.toHaveBeenCalled();
   });
 
   it("treats a refusal or missing parsed output as blocking", async () => {

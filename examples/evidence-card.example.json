@@ -1,104 +1,61 @@
 {
   "exampleOnly": true,
   "containsPHI": false,
+  "rawMediaRetained": false,
+  "nativeVisualObservationsRetained": false,
   "cardId": "demo-card-002",
-  "encounterId": "demo-encounter-002",
-  "currentCaptureMode": "live",
-  "historyMode": "synthetic-fixture",
-  "comparisonEncounterIds": [
-    "demo-encounter-history-003",
-    "demo-encounter-history-002",
-    "demo-encounter-001"
-  ],
-  "trajectoryComparisonId": "demo-comparison-002",
+  "visitId": "demo-encounter-002",
+  "captureMode": "live",
   "status": "reviewed",
-  "observationStatus": "provisional",
-  "headline": "One provisional technical change; one stable observation",
-  "headlineClaimIds": [
-    "claim-tap-higher",
-    "claim-speech-stable"
-  ],
-  "summary": "Both prototype tasks passed after one bounded hand-framing correction. Tapping count was higher than the three-encounter synthetic personal reference; speech duration remained stable.",
-  "summarySupport": {
-    "claimIds": [
-      "claim-tap-higher",
-      "claim-speech-stable"
-    ],
-    "eventIds": [
-      "evt-006-hand-framing-failed",
-      "evt-008-recovery-verified",
-      "evt-012-compatibility-assessed"
-    ]
-  },
-  "captureQuality": {
-    "status": "pass",
-    "correctionCount": 1,
-    "correction": "hand-framing-recovered",
-    "sourceEventIds": [
-      "evt-006-hand-framing-failed",
-      "evt-007-action-requested",
-      "evt-008-recovery-verified"
-    ]
-  },
-  "compatibility": {
-    "includedEncounterCount": 3,
-    "excludedEncounterCount": 1,
-    "sourceEventId": "evt-012-compatibility-assessed",
-    "exclusions": [
-      {
-        "encounterId": "demo-encounter-history-004",
-        "reasonCode": "prompt-version-mismatch"
-      }
-    ]
-  },
-  "items": [
+  "headline": "Two encounter signals are ready for review",
+  "summary": "Pitch variability and smile-excursion asymmetry were measured during technically usable portions of the encounter.",
+  "claims": [
     {
-      "claimId": "claim-speech-stable",
-      "statement": "Speech duration remained stable relative to compatible synthetic personal history.",
-      "measurementCode": "prototype.speech.duration",
-      "direction": "stable",
-      "uncertainty": "placeholder",
-      "evidence": [
-        "current-standard-speech-clip",
-        "prior-standard-speech-clip"
+      "claimId": "outcome-speech-measured",
+      "modality": "speech",
+      "status": "measured",
+      "statement": "Pitch variability: 1.9 semitone-stddev, measured across accepted speech analysis windows.",
+      "measurementCode": "prototype.speech.pitch_variability",
+      "sourceWindowRefs": [
+        "speech-0"
       ],
-      "referenceMeasurementRefs": [
-        "demo-encounter-history-003:prototype.speech.duration",
-        "demo-encounter-history-002:prototype.speech.duration",
-        "demo-encounter-001:prototype.speech.duration"
-      ],
-      "groundingStatus": "pass",
-      "groundingEventId": "evt-015-speech-claim-grounded",
-      "clinicalInterpretation": null
+      "processorRef": "speech-acoustic-0.4"
     },
     {
-      "claimId": "claim-tap-higher",
-      "statement": "Tapping count was higher than the compatible synthetic personal reference.",
-      "measurementCode": "prototype.tap.count",
-      "direction": "higher",
-      "uncertainty": "placeholder",
-      "warning": "Engineering demonstration only; not a clinical change.",
-      "evidence": [
-        "current-finger-tap-clip",
-        "prior-finger-tap-clip"
+      "claimId": "outcome-face-measured",
+      "modality": "face",
+      "status": "measured",
+      "statement": "Smile-excursion asymmetry: 0.01 inter-eye-normalized-distance, measured across accepted neutral and active-task facial windows.",
+      "measurementCode": "prototype.face.smile_excursion.asymmetry",
+      "sourceWindowRefs": [
+        "face-1",
+        "face-2"
       ],
-      "referenceMeasurementRefs": [
-        "demo-encounter-history-003:prototype.tap.count",
-        "demo-encounter-history-002:prototype.tap.count",
-        "demo-encounter-001:prototype.tap.count"
-      ],
-      "groundingStatus": "pass",
-      "groundingEventId": "evt-016-tap-claim-grounded",
-      "clinicalInterpretation": null
+      "processorRef": "mediapipe-face-landmarker:0.10.35:64184e229b26:bilateral-geometry-v1:gpu"
     }
   ],
-  "claimBoundary": "No disease progression, diagnosis, cause, or treatment inference was made.",
+  "qualitySummary": {
+    "speechWindowCount": 1,
+    "faceWindowCount": 4,
+    "abstentionCount": 1,
+    "qualityTransitionCount": 4,
+    "audioFrameCount": 190,
+    "speechActiveFrameCount": 98,
+    "pitchedFrameCount": 88,
+    "pitchCoverage": 0.898,
+    "faceFrameCount": 570,
+    "usableFaceFrameCount": 478,
+    "usableFaceFraction": 0.839,
+    "faceWithholdingDurationMs": 3000,
+    "faceRecoveryObserved": true,
+    "postRecoveryFaceWindowCount": 3
+  },
+  "boundaryStatement": "For clinician review. This summary does not provide a diagnosis or treatment recommendation.",
   "review": {
-    "decision": "accepted",
-    "annotation": "Demo review complete.",
+    "decision": "approved",
+    "approvedForSession": true,
+    "annotation": "Synthetic demo review complete.",
     "reviewer": "synthetic-clinician-001",
-    "reviewedAt": "2026-07-18T16:00:48Z",
-    "acceptedIntoHistory": true,
-    "sourceEventId": "evt-019-human-review-accepted"
+    "decidedAt": "2026-07-18T16:00:24.000Z"
   }
 }
