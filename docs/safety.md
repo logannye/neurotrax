@@ -6,6 +6,12 @@ Neurotrax is an engineering and hackathon demonstration, not a medical device.
 Use only the presenter's explicitly consented self-demo data. Do not use PHI or
 make clinical decisions from its output.
 
+The project is expanding from a neurological demonstration toward a general
+telehealth face-and-voice measurement platform. That broader vision does not
+broaden the claims of the current software. Every future clinical use requires
+an explicit target population, intended use, validation plan, and human
+workflow defined in a versioned protocol pack.
+
 ## Required behavior
 
 - Consent is required before device access or analysis.
@@ -20,6 +26,11 @@ make clinical decisions from its output.
 - Every displayed outcome resolves to a current-encounter measurement or
   abstention, accepted or withheld window, quality conditions, and originating
   events.
+- Every durable measurement preserves protocol, algorithm, capture-adapter,
+  context, quality, uncertainty, and validation status.
+- A modality or task may fail independently without forcing another modality
+  to fail or producing a substitute value.
+- Clinical meaning must not be inferred from a prototype measurement code.
 
 ## Model boundary
 
@@ -35,6 +46,22 @@ a narrative.
 
 `OPENAI_API_KEY` is server-side only. It must never use a `VITE_` prefix or be
 committed.
+
+Conversation content, transcripts, images, media, and external documents are
+untrusted data. They may never act as instructions to an agent or silently
+change the intended use, protocol, evidence set, or clinical boundary.
+
+## Context-of-use ladder
+
+Clinical development must distinguish:
+
+1. **measurement and documentation;**
+2. **within-patient monitoring;**
+3. **screening or clinician decision support;** and
+4. **diagnosis, triage, treatment, or another consequential action.**
+
+Evidence at one level does not authorize the next. The current prototype is
+limited to nonclinical engineering demonstration of level 1.
 
 ## Forbidden MVP behavior
 
@@ -53,9 +80,55 @@ committed.
 The report copy control is a local formatting/export affordance only. It does
 not authenticate to, connect with, or write into an EHR.
 
+## Sensitive inference boundaries
+
+The platform must not be repurposed for:
+
+- identity, ancestry, attractiveness, or demographic classification;
+- covert or secondary analysis outside the consented clinical purpose;
+- emotion, deception, truthfulness, intent, capacity, or pain-validity claims;
+- employee, insurance, credit, education, or law-enforcement decisions;
+- universal health, disease, or risk scores; or
+- transfer of a claim across ages, languages, cultures, devices, conditions, or
+  care settings without appropriate validation.
+
+Mental-health, cognitive, developmental, pediatric, genetic, pain, and
+emergency applications require heightened consent, bias, human-factors, and
+misuse review.
+
+## Research-media boundary
+
+The current application has no raw-media retention path. That must remain true
+for this prototype.
+
+Future analytical or clinical validation may require an independently deployed
+research environment with explicitly consented media retention. Such a system
+must define:
+
+- research purpose, participants, and reference standard;
+- consent, withdrawal, retention, deletion, and future-use rules;
+- encryption, access control, audit, and export restrictions;
+- separation of identity from research data;
+- annotation quality and adjudication;
+- institutional and regulatory review as applicable; and
+- a hard boundary preventing research media from silently entering production.
+
 ## Deployment deferrals
 
 Before research or production use, complete technical verification, analytical
 repeatability, clinical validation for an intended population, privacy and
 security review, consent design, threat modeling, model governance, regulatory
 analysis, and institutional review as applicable.
+
+At minimum, a production protocol pack also needs:
+
+- external and subgroup validation;
+- device and environment compatibility evidence;
+- calibrated uncertainty and missingness behavior;
+- clinician and patient usability testing;
+- defined correction, escalation, and downtime workflows;
+- authentication, authorization, audit, retention, and incident response;
+- algorithm and protocol version change control;
+- post-deployment drift and safety monitoring; and
+- proof that the result improves the intended workflow without unacceptable
+  false-positive, false-negative, or alert burden.

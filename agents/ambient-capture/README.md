@@ -3,12 +3,13 @@
 ## Goal
 
 Create one consented, versioned audiovisual observation from technically
-measurable moments in a routine encounter without prompting or interrupting
-the participant.
+measurable moments in a routine encounter. A protocol may use natural
+conversation, brief prompted microtasks, or both.
 
 ## Agentic behavior
 
 - ingest derived audio and face primitives incrementally;
+- apply a versioned protocol and capture context without interpreting disease;
 - open and close independent modality windows;
 - route eligible windows to versioned deterministic extractors;
 - publish quality transitions and reason-coded abstentions;
@@ -17,6 +18,9 @@ the participant.
 
 The hero behavior is modality independence: the face lane withholds during a
 turn-away while the speech lane continues, then face measurement recovers.
+
+Prompted tasks remain inside Ambient Capture. They do not bypass quality gates,
+make a modality mandatory at the platform level, or create clinical meaning.
 
 ## Hard boundary
 

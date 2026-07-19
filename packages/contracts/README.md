@@ -3,6 +3,12 @@
 `@neurotrax/contracts` defines the boundaries among the three implemented
 capabilities. These are research-prototype contracts, not clinical schemas.
 
+The generalized platform will add a versioned `ClinicalProtocolPack` and
+measurement registry before any condition-specific interpretation is connected
+to these contracts. Planned fields and validation responsibilities are defined
+in
+[`../../docs/telehealth-platform-vision.md`](../../docs/telehealth-platform-vision.md).
+
 ## Ambient Capture
 
 - `MeasurableWindow` carries modality, time range, detected context, and
@@ -33,8 +39,7 @@ capabilities. These are research-prototype contracts, not clinical schemas.
 - `EvidenceSynthesisTiming` records total, service, and validation latency for
   operator diagnostics.
 - `GroundingResult` records deterministic pass/fail and errors.
-- `ReviewDecision` records human Accept or Reject and whether page-session
-  history changed.
+- `ReviewDecision` records human approval or dismissal for the current session.
 
 ## Workflow events
 
