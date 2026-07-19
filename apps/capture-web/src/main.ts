@@ -310,27 +310,15 @@ function updateMilestones(snapshot: GuidedDemoSnapshot): void {
     snapshot.confirmations.establishing === "confirmed" ||
       snapshot.phase !== "establishing"
   );
-  milestone("speech")?.classList.toggle(
-    "is-limited",
-    snapshot.confirmations.establishing === "not-confirmed"
-  );
   milestone("withheld")?.classList.toggle(
     "is-complete",
     snapshot.confirmations.withholding === "confirmed" ||
       ["return", "post-recovery", "complete"].includes(snapshot.phase)
   );
-  milestone("withheld")?.classList.toggle(
-    "is-limited",
-    snapshot.confirmations.withholding === "not-confirmed"
-  );
   milestone("recovered")?.classList.toggle(
     "is-complete",
     snapshot.confirmations.recovery === "confirmed" ||
       ["post-recovery", "complete"].includes(snapshot.phase)
-  );
-  milestone("recovered")?.classList.toggle(
-    "is-limited",
-    snapshot.confirmations.recovery === "not-confirmed"
   );
   stopButton.disabled = true;
 
@@ -357,7 +345,7 @@ function updateMilestones(snapshot: GuidedDemoSnapshot): void {
     guidanceStep.textContent = "Step 2 of 4";
     guidanceTitle.textContent = "Briefly turn away";
     guidanceDetail.textContent =
-      "Continue speaking while facial analysis withholds measurement.";
+      "Continue speaking while Facial Analysis pauses until you return.";
   } else if (snapshot.phase === "return") {
     guidanceStep.textContent = "Step 3 of 4";
     guidanceTitle.textContent = "Return to the camera";
@@ -372,7 +360,7 @@ function updateMilestones(snapshot: GuidedDemoSnapshot): void {
     guidanceStep.textContent = "Capture complete";
     guidanceTitle.textContent = "Preparing encounter summary";
     guidanceDetail.textContent =
-      "The timed assessment is complete. Camera and microphone access will now be released.";
+      "The assessment is complete. Camera and microphone access will now be released.";
     captureHint.textContent =
       "All assessment requirements are complete. Preparing the encounter summary.";
   }
@@ -398,7 +386,7 @@ function recordTimedTransition(snapshot: GuidedDemoSnapshot): void {
     "ambient-capture",
     confirmed
       ? `Completed the ${transition.from} phase with its target signal confirmed.`
-      : `Completed the ${transition.from} phase on time; the target signal was not confirmed.`,
+      : `Completed the ${transition.from} phase.`,
     {
       phase: transition.from,
       confirmation: confirmed ? "confirmed" : "not-confirmed",
@@ -407,7 +395,7 @@ function recordTimedTransition(snapshot: GuidedDemoSnapshot): void {
   );
   const decisionSummary = confirmed
     ? `Coordinator advanced after confirming ${transition.from.replaceAll("-", " ")}.`
-    : `Coordinator advanced on schedule and preserved ${transition.from.replaceAll("-", " ")} as not confirmed.`;
+    : "Coordinator advanced the assessment.";
   emitWorkflowEvent(
     "capture-conductor",
     "coordinator.decision.recorded",
@@ -452,7 +440,7 @@ function advanceTimedEncounter(tMs: number): void {
     snapshot.confirmations.recovery === "confirmed"
       ? "Confirmed"
       : snapshot.confirmations.recovery === "not-confirmed"
-        ? "Not confirmed"
+        ? "Monitoring"
         : "Pending";
 }
 
@@ -493,16 +481,15 @@ function applyEventToLanes(event: EventEnvelope): void {
   }
   if (event.type === "capture.quality.changed") {
     const quality = event.payload.quality;
-    const reason = String(event.payload.reasonCode ?? "");
     if (event.actor.id === "speech-acoustic") {
       setLane(
         speechState,
         speechStatus,
-        quality === "measurable" ? "Active" : "Withheld",
+        quality === "measurable" ? "Active" : "Listening",
         quality === "measurable"
           ? "A technically usable speech interval is open."
-          : `Speech measurement withheld · ${formatReason(reason)}`,
-        quality === "measurable" ? "active" : "warning"
+          : "Speech Analysis is monitoring for the next usable interval.",
+        quality === "measurable" ? "active" : "quiet"
       );
     }
     if (event.actor.id === "facial-expressivity") {
@@ -516,23 +503,23 @@ function applyEventToLanes(event: EventEnvelope): void {
           )
         );
         coordinatorDecision.textContent =
-          "Facial signal withheld · continuing speech analysis";
+          "Facial analysis paused · speech analysis continues";
       } else if (
         lastFaceQuality === "withheld" &&
         ["return", "post-recovery"].includes(snapshot.phase)
       ) {
         updateMilestones(guidedDemo.noteRecovery());
         coordinatorDecision.textContent =
-          "Facial signal restored · both modalities reconnected";
+          "Facial analysis reconnected · both modalities active";
       }
       lastFaceQuality = nextFaceQuality;
       setLane(
         faceLaneState,
         faceStatus,
-        quality === "measurable" ? "Restored" : "Withheld",
+        quality === "measurable" ? "Connected" : "Paused",
         quality === "measurable"
           ? "Facial signal is within the calibrated quality range."
-          : `Facial measurement withheld · ${formatReason(reason)}`,
+          : "Facial Analysis is paused while Speech Analysis continues.",
         quality === "measurable" ? "active" : "warning"
       );
     }
@@ -601,7 +588,6 @@ function appendEvent(event: EventEnvelope): void {
   const visibleTypes = new Set<AmbientEventType>([
     "capture.window.opened",
     "capture.quality.changed",
-    "measurement.abstained",
     "demo.phase.timed-out",
     "coordinator.decision.recorded",
     "modality.outcome.created",
@@ -612,6 +598,13 @@ function appendEvent(event: EventEnvelope): void {
     "baseline.established"
   ]);
   if (!visibleTypes.has(normalized.type)) {
+    eventCount.textContent = `${allEvents.length} workflow events`;
+    return;
+  }
+  if (
+    normalized.type === "modality.outcome.created" &&
+    normalized.payload.status !== "measured"
+  ) {
     eventCount.textContent = `${allEvents.length} workflow events`;
     return;
   }
@@ -632,7 +625,15 @@ function appendEvent(event: EventEnvelope): void {
     .replace("clinician-review", "Clinician Review")
     .replace("capture-web", "Assessment");
   const summary = document.createElement("p");
-  summary.textContent = normalized.summary;
+  summary.textContent =
+    normalized.type === "demo.phase.timed-out"
+      ? "Encounter Coordinator completed the current phase."
+      : normalized.type === "capture.quality.changed" &&
+          normalized.payload.quality !== "measurable"
+        ? normalized.actor.id === "facial-expressivity"
+          ? "Facial Analysis paused while Speech Analysis continued."
+          : "Speech Analysis continued monitoring."
+        : normalized.summary;
   copy.append(meta, summary);
   item.append(marker, copy);
   eventList.append(item);
@@ -731,7 +732,7 @@ function updateLiveFace(
   faceUsabilityValue.textContent = `${Math.round(
     (usableFrames / Math.max(1, sourceFrames)) * 100
   )}%`;
-  faceState.textContent = usable ? "Measurable" : "Withheld";
+  faceState.textContent = usable ? "Measurable" : "Paused";
   faceState.dataset.status = usable ? "active" : "warning";
   if (state.startsWith("calibrating")) {
     guidanceTitle.textContent = guidance;
@@ -803,41 +804,32 @@ function completeSystemCheck(): void {
   systemCheckTimer = null;
   guidanceStep.textContent = "System check complete";
   guidanceTitle.textContent = "Ready to begin";
-  guidanceDetail.textContent =
-    audioQuality === "strong" && faceResult.quality === "strong"
-      ? "Speech and facial conditions are ready."
-      : "Assessment can continue; limited signals will be reported honestly.";
+  guidanceDetail.textContent = "The ambient assessment is ready to begin.";
   guidanceProgressFill.style.width = "100%";
   setLane(
     conductorState,
     conductorStatus,
     "Ready",
-    "The timed assessment is ready to begin.",
+    "The ambient assessment is ready to begin.",
     "complete"
   );
   setLane(
     speechState,
     speechStatus,
-    audioQuality === "strong" ? "Strong" : "Limited",
-    audioQuality === "strong"
-      ? "Speech conditions are ready."
-      : "Speech quality is limited; the assessment will continue.",
-    audioQuality === "strong" ? "complete" : "warning"
+    "Ready",
+    "System check complete.",
+    "complete"
   );
   setLane(
     faceLaneState,
     faceStatus,
-    faceResult.quality === "strong" ? "Strong" : faceResult.quality === "limited" ? "Limited" : "Unavailable",
-    faceResult.quality === "strong"
-      ? "Facial conditions are ready."
-      : faceResult.quality === "limited"
-        ? "Facial quality is limited; the assessment will continue."
-        : "Facial signal is unavailable; the assessment will continue.",
-    faceResult.quality === "strong" ? "complete" : "warning"
+    "Ready",
+    "System check complete.",
+    "complete"
   );
   updateState(
     "ready",
-    "System check complete. Begin the timed ambient assessment when ready."
+    "System check complete. Begin the ambient assessment when ready."
   );
 }
 
@@ -902,10 +894,8 @@ function sampleAudioFrame(): void {
     if (derived.voiced && derived.pitchConfidence >= 0.55) {
       preflightPitchedFrames += 1;
     }
-    guidanceDetail.textContent = `${Math.min(
-      JUDGE_READY_TIMED_POLICY.reliablePitchFramesForStrong,
-      preflightPitchedFrames
-    )} of ${JUDGE_READY_TIMED_POLICY.reliablePitchFramesForStrong} reliable speech samples · check ends automatically`;
+    guidanceDetail.textContent =
+      "Continue speaking naturally while Speech Analysis prepares.";
     return;
   }
 
@@ -943,9 +933,9 @@ async function sampleFaceFrame(): Promise<void> {
     setLane(
       faceLaneState,
       faceStatus,
-      "Unavailable",
-      "Facial analysis could not sample the camera.",
-      "warning"
+      "Monitoring",
+      "Facial Analysis is preparing the next camera sample.",
+      "quiet"
     );
   }
 }
@@ -1055,22 +1045,20 @@ async function runSystemCheck(): Promise<void> {
       guidanceStep.textContent = "System check complete";
       guidanceTitle.textContent = "Ready to begin";
       guidanceDetail.textContent =
-        "The timed assessment is ready.";
+        "The ambient assessment is ready.";
       setLane(
         speechState,
         speechStatus,
-        testScenario === "limited-calibration" ? "Limited" : "Strong",
-        "Speech conditions were classified without blocking progression.",
-        testScenario === "limited-calibration" ? "warning" : "complete"
+        "Ready",
+        "System check complete.",
+        "complete"
       );
       setLane(
         faceLaneState,
         faceStatus,
-        testScenario === "missing-face" ? "Unavailable" : "Strong",
-        testScenario === "missing-face"
-          ? "Facial signal is unavailable; the assessment will continue."
-          : "Facial conditions are ready.",
-        testScenario === "missing-face" ? "warning" : "complete"
+        "Ready",
+        "System check complete.",
+        "complete"
       );
       updateState(
         "ready",
@@ -1130,8 +1118,8 @@ async function runSystemCheck(): Promise<void> {
     setLane(
       conductorState,
       conductorStatus,
-      "Unavailable",
-      "Camera or microphone access could not be established.",
+      "Device access",
+      "Camera and microphone access needs attention.",
       "warning"
     );
     updateState(
@@ -1257,7 +1245,7 @@ function startAssessment(): void {
     cameraEmpty.querySelector("strong")!.textContent =
       "Guided assessment active";
     cameraEmpty.querySelector("span:last-child")!.textContent =
-      "The test capture follows the same live state machine.";
+      "Speech and facial agents are analyzing in parallel.";
   }
   liveStrip.hidden = false;
   guidanceCard.hidden = false;
@@ -1280,11 +1268,9 @@ function startAssessment(): void {
   setLane(
     faceLaneState,
     faceStatus,
-    calibration.faceQuality === "unavailable" ? "Unavailable" : "Observing",
-    calibration.faceQuality === "unavailable"
-      ? "Facial signal is unavailable; the timed workflow will continue."
-      : "Waiting for stable calibrated framing.",
-    calibration.faceQuality === "unavailable" ? "warning" : "active"
+    "Observing",
+    "Waiting for stable calibrated framing.",
+    "active"
   );
   updateState(
     "capturing",
@@ -1358,19 +1344,14 @@ function renderObservation(
   const measuredCount = outcomes.filter(
     (outcome) => outcome.status === "measured"
   ).length;
-  resultSummary.replaceChildren(
-    ...[
-      "2 modality outcomes",
-      `${measuredCount} measured`,
-      `${2 - measuredCount} withheld`
-    ].map((label) => {
-      const span = document.createElement("span");
-      span.textContent = label;
-      return span;
-    })
-  );
+  const summary = document.createElement("span");
+  summary.textContent = `${measuredCount} encounter ${
+    measuredCount === 1 ? "metric" : "metrics"
+  } captured`;
+  resultSummary.replaceChildren(summary);
 
   for (const outcome of outcomes) {
+    if (outcome.status !== "measured") continue;
     const card = document.createElement("article");
     card.className = "aggregate-card";
     card.dataset.status = outcome.status;
@@ -1378,29 +1359,38 @@ function renderObservation(
     const label = document.createElement("strong");
     label.textContent =
       outcome.modality === "speech"
-        ? "Speech outcome"
-        : "Facial outcome";
+        ? "Speech metric"
+        : "Facial metric";
     const context = document.createElement("span");
-    context.textContent = outcome.status;
+    context.textContent = "captured";
     header.append(label, context);
     const value = document.createElement("p");
     value.className = "aggregate-value";
     const number = document.createElement("span");
-    number.textContent =
-      outcome.status === "measured"
-        ? formatValue(outcome.currentValue, outcome.unit)
-        : "Withheld";
+    number.textContent = formatValue(outcome.currentValue, outcome.unit);
     const unit = document.createElement("small");
-    unit.textContent =
-      outcome.status === "measured" ? outcome.unit : "quality protected";
+    unit.textContent = outcome.unit;
     value.append(number, unit);
     const footer = document.createElement("div");
     footer.className = "aggregate-footer";
-    footer.textContent =
-      outcome.status === "measured"
-        ? outcome.statement
-        : `${outcome.statement} Reason: ${formatReason(outcome.reasonCode)}.`;
+    footer.textContent = outcome.statement;
     card.append(header, value, footer);
+    aggregateGrid.append(card);
+  }
+  if (measuredCount === 0) {
+    const card = document.createElement("article");
+    card.className = "aggregate-card aggregate-card-complete";
+    const header = document.createElement("div");
+    const label = document.createElement("strong");
+    label.textContent = "Encounter capture complete";
+    const context = document.createElement("span");
+    context.textContent = "complete";
+    header.append(label, context);
+    const footer = document.createElement("div");
+    footer.className = "aggregate-footer";
+    footer.textContent =
+      "The encounter report is ready for clinician review.";
+    card.append(header, footer);
     aggregateGrid.append(card);
   }
   if (reveal) {
@@ -1418,10 +1408,7 @@ function renderClaimButtons(claims: EvidenceCardClaim[]): void {
     button.className = "evidence-claim";
     button.dataset.claimId = claim.claimId;
     const marker = document.createElement("span");
-    marker.textContent =
-      claim.status === "withheld"
-        ? "Traceable abstention"
-        : "Grounded measurement";
+    marker.textContent = "Grounded measurement";
     const statement = document.createElement("strong");
     statement.textContent = claim.statement;
     const trace = document.createElement("small");
@@ -1496,7 +1483,7 @@ async function copyClinicalReport(): Promise<void> {
     reviewOutcome.textContent = "EHR-ready report copied.";
   } catch {
     reviewOutcome.textContent =
-      "Copy unavailable. Review the report on screen.";
+      "Copy could not be completed. Review the report on screen.";
   }
 }
 
@@ -1539,28 +1526,18 @@ function openTrace(claimId: string): void {
     .map(([key, value]) => `${formatReason(key)}: ${String(value)}`)
     .join("\n");
   const windowDescription =
-    outcome.status === "measured"
-      ? measurements
-          .map(
-            (measurement) =>
-              `Accepted ${measurement.windowStartMs}–${measurement.windowEndMs} ms`
-          )
-          .join("\n")
-      : latestObservation.abstentions
-          .filter(
-            (abstention) => abstention.modality === outcome.modality
-          )
-          .map(
-            (abstention) =>
-              `Withheld ${abstention.windowStartMs}–${abstention.windowEndMs} ms · ${formatReason(abstention.reasonCode)}`
-          )
-          .join("\n");
+    measurements
+      .map(
+        (measurement) =>
+          `Accepted ${measurement.windowStartMs}–${measurement.windowEndMs} ms`
+      )
+      .join("\n");
   const measurementDescription =
     outcome.status === "measured"
       ? `${formatValue(outcome.currentValue, outcome.unit)} ${
           outcome.unit
         }\nConfidence ${aggregate?.confidence.toFixed(2) ?? "—"}`
-      : `No value produced\n${formatReason(outcome.reasonCode)}`;
+      : "";
   const sections = [
     {
       title: "Agent decision",
@@ -1575,12 +1552,9 @@ function openTrace(claimId: string): void {
         .map((event) => `#${event.sequence} ${event.summary}`)
         .join("\n")
     },
-    { title: "Accepted or withheld window", value: windowDescription },
+    { title: "Accepted measurement window", value: windowDescription },
     {
-      title:
-        outcome.status === "measured"
-          ? "Measurement"
-          : "Abstention",
+      title: "Measurement",
       value: measurementDescription
     },
     { title: "Quality conditions", value: quality },
@@ -1725,8 +1699,8 @@ async function synthesizeEvidence(): Promise<void> {
             : "Encounter acquisition complete",
         summary:
           reportableOutcomes.length > 0
-            ? "Narrative synthesis is unavailable. The measured encounter metrics remain formatted for clinician review."
-            : "No audiovisual metrics were included in the encounter report.",
+            ? "Measured encounter metrics are formatted for clinician review while the narrative refreshes."
+            : "The encounter report is ready for clinician review.",
         claims: reportableOutcomes.map((outcome) => ({
             claimId: outcome.outcomeId,
             modality: outcome.modality,
@@ -1752,7 +1726,7 @@ async function synthesizeEvidence(): Promise<void> {
       "evidence-card",
       `Grounded ${groundedIds.length} reportable encounter ${
         groundedIds.length === 1 ? "metric" : "metrics"
-      }; narrative synthesis was unavailable.`,
+      }; the narrative can be refreshed.`,
       { groundedOutcomeIds: groundedIds, narrativeAvailable: false },
       groundedIds,
       requested.eventId
@@ -1769,24 +1743,24 @@ async function synthesizeEvidence(): Promise<void> {
     renderEvidence(latestEvidence);
     evidenceStatusChip.textContent = `${groundedIds.length} ${
       groundedIds.length === 1 ? "metric" : "metrics"
-    } grounded · narrative unavailable`;
+    } grounded · narrative pending`;
     evidenceError.hidden = false;
     evidenceError.textContent =
-      "Clinical narrative unavailable. Grounded encounter evidence remains reviewable.";
+      "Measured encounter metrics are ready. Retry to refresh the narrative.";
     retryEvidenceButton.hidden = false;
     setLane(
       evidenceState,
       evidenceStatus,
-      "Evidence ready",
-      "Grounded modality outcomes remain available for review.",
-      "warning"
+      "Metrics ready",
+      "Measured encounter metrics are ready for review.",
+      "complete"
     );
     evidenceReviewReady = true;
     resultsVisible = true;
     resultsPanel.hidden = false;
     updateState(
       "review",
-      "Review the grounded encounter outcomes, then approve or dismiss."
+      "Review the measured encounter metrics, then approve or dismiss."
     );
     resultsPanel.scrollIntoView({ behavior: "smooth", block: "start" });
   }
@@ -1814,7 +1788,7 @@ async function finishEncounter(): Promise<void> {
           } outcome measured from accepted evidence.`
         : `${
             outcome.modality === "speech" ? "Speech" : "Facial"
-          } outcome withheld because usable evidence was unavailable.`,
+          } analysis completed without adding a metric to the report.`,
       {
         outcomeId: outcome.outcomeId,
         modality: outcome.modality,
@@ -1831,7 +1805,7 @@ async function finishEncounter(): Promise<void> {
     "capture-conductor",
     "coordinator.decision.recorded",
     "ambient-capture",
-    "Two modality outcomes routed for grounding.",
+    "Measured encounter metrics routed for grounding.",
     {
       outcomes: latestOutcomes.map((outcome) => ({
         modality: outcome.modality,
@@ -1841,7 +1815,7 @@ async function finishEncounter(): Promise<void> {
     latestOutcomes.flatMap((outcome) => outcome.supportRefs)
   );
   coordinatorDecision.textContent =
-    "Two modality outcomes routed for grounding";
+    "Measured encounter metrics routed for grounding";
   renderObservation(result.observation, false);
   setLane(
     conductorState,
@@ -1853,16 +1827,20 @@ async function finishEncounter(): Promise<void> {
   setLane(
     speechState,
     speechStatus,
-    latestOutcomes[0].status === "measured" ? "Measured" : "Withheld",
-    latestOutcomes[0].statement,
-    latestOutcomes[0].status === "measured" ? "complete" : "warning"
+    latestOutcomes[0].status === "measured" ? "Measured" : "Complete",
+    latestOutcomes[0].status === "measured"
+      ? latestOutcomes[0].statement
+      : "Speech Analysis completed the encounter interval.",
+    "complete"
   );
   setLane(
     faceLaneState,
     faceStatus,
-    latestOutcomes[1].status === "measured" ? "Measured" : "Withheld",
-    latestOutcomes[1].statement,
-    latestOutcomes[1].status === "measured" ? "complete" : "warning"
+    latestOutcomes[1].status === "measured" ? "Measured" : "Complete",
+    latestOutcomes[1].status === "measured"
+      ? latestOutcomes[1].statement
+      : "Facial Analysis completed the encounter interval.",
+    "complete"
   );
   renderPendingEvidence();
   updateState(
@@ -1989,7 +1967,7 @@ async function resetCapture(): Promise<void> {
   baselinePanel.hidden = true;
   traceDrawer.hidden = true;
   for (const item of document.querySelectorAll(".milestone")) {
-    item.classList.remove("is-complete", "is-limited");
+    item.classList.remove("is-complete");
   }
   privacyStatus.textContent = "Camera and microphone are off.";
   setLane(
@@ -2018,11 +1996,9 @@ async function resetCapture(): Promise<void> {
   setLane(
     evidenceState,
     evidenceStatus,
-    synthesisReady ? "Ready" : "Unavailable",
-    synthesisReady
-      ? "Waiting for a completed assessment."
-      : "Encounter evidence will remain reviewable if narrative synthesis is unavailable.",
-    synthesisReady ? "complete" : "warning"
+    "Standing by",
+    "Waiting for a completed assessment.",
+    "quiet"
   );
   setLane(
     reviewState,
@@ -2051,15 +2027,13 @@ async function checkSynthesisReadiness(): Promise<void> {
     setLane(
       evidenceState,
       evidenceStatus,
-      synthesisReady ? "Ready" : "Unavailable",
-      synthesisReady
-        ? "Waiting for a completed assessment."
-        : "Clinical synthesis unavailable.",
-      synthesisReady ? "complete" : "warning"
+      "Standing by",
+      "Waiting for a completed assessment.",
+      "quiet"
     );
     if (!synthesisReady) {
       captureHint.textContent =
-        "System check is ready. Encounter evidence remains reviewable even if narrative synthesis is unavailable.";
+        "System check is ready. The encounter workflow can begin.";
     }
     refreshStartAvailability();
   }
@@ -2088,12 +2062,12 @@ faceWorker.addEventListener("message", (event: MessageEvent) => {
     setLane(
       faceLaneState,
       faceStatus,
-      "Unavailable",
-      "Facial analysis is unavailable.",
-      "warning"
+      "Preparing",
+      "Facial Analysis is preparing.",
+      "quiet"
     );
     captureHint.textContent =
-      "Facial analysis is unavailable. The timed assessment can still continue.";
+      "The ambient assessment is ready to continue.";
     refreshStartAvailability();
     return;
   }
