@@ -2,7 +2,7 @@ import type {
   ConfirmationState,
   TimedEncounterPhase,
   TimedEncounterPolicy
-} from "@neurotrax/contracts";
+} from "@phenometric/contracts";
 
 export type GuidedPhase = TimedEncounterPhase | "complete";
 

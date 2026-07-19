@@ -1,4 +1,4 @@
-# Neurotrax operator guide
+# PhenoMetric operator guide
 
 This document contains implementation and credential details that are
 intentionally absent from the presentation interface and public product
@@ -6,13 +6,13 @@ overview.
 
 ## Environment
 
-Neurotrax uses a server-side OpenAI Responses API call for Clinical Synthesis.
+PhenoMetric uses a server-side OpenAI Responses API call for Clinical Synthesis.
 The presentation application never receives the credential.
 
-Create `/Users/logannye/Projects/neurotrax/.env.local`:
+Create `/Users/logannye/Projects/phenometric/.env.local`:
 
 ```bash
-cd /Users/logannye/Projects/neurotrax
+cd /Users/logannye/Projects/phenometric
 read -s "OPENAI_API_KEY?OpenAI API key: "
 printf '\n'
 umask 077
@@ -25,7 +25,7 @@ Never use a `VITE_` prefix for this value.
 ## Start and smoke test
 
 ```bash
-cd /Users/logannye/Projects/neurotrax
+cd /Users/logannye/Projects/phenometric
 pnpm install
 pnpm demo:smoke
 pnpm dev
@@ -37,7 +37,7 @@ grounding contracts. Application readiness also performs one cached warm-up
 request when the page first loads, moving connection and service initialization
 before the encounter begins.
 
-Automated browser tests set `NEUROTRAX_SKIP_SYNTHESIS_WARMUP=1` because their
+Automated browser tests set `PHENOMETRIC_SKIP_SYNTHESIS_WARMUP=1` because their
 synthesis endpoint is intercepted with a deterministic response. Do not set
 that variable for a live presentation.
 

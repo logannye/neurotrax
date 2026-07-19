@@ -2,13 +2,13 @@
 
 ## Canonical checkout
 
-The canonical local checkout is `/Users/logannye/Projects/neurotrax`. Use that
-path for all Neurotrax work. Do not treat generated Codex output directories as
-working copies.
+The canonical local checkout is `/Users/logannye/Projects/phenometric`. Use that
+path for all PhenoMetric work. Do not treat generated Codex output directories
+as working copies.
 
 ## Project posture
 
-Neurotrax is a research and hackathon prototype, not a medical device.
+PhenoMetric is a research and hackathon prototype, not a medical device.
 Preserve the boundary among measurement, clinical interpretation, and action.
 
 The original demo is neurological, but the project direction is a general

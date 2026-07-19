@@ -2,7 +2,7 @@ import type {
   CaptureAdapter,
   CaptureCalibration,
   CaptureMode
-} from "@neurotrax/contracts";
+} from "@phenometric/contracts";
 
 export interface AudioFeatureFrame {
   tMs: number;

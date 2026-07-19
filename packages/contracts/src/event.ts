@@ -52,7 +52,7 @@ export type WorkflowStage =
   | "human-review";
 
 export interface EventEnvelope {
-  schemaVersion: "neurotrax.workflow-event.v0.2";
+  schemaVersion: "phenometric.workflow-event.v0.2";
   eventId: string;
   sequence: number;
   occurredAt: string;

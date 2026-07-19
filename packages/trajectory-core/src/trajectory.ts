@@ -8,8 +8,8 @@ import type {
   TrajectoryDirection,
   TrajectoryHistoryRecord,
   TrajectoryPolicy
-} from "@neurotrax/contracts";
-import { createEventFactory } from "@neurotrax/ambient-core";
+} from "@phenometric/contracts";
+import { createEventFactory } from "@phenometric/ambient-core";
 
 export const DEFAULT_TRAJECTORY_POLICY: TrajectoryPolicy = {
   id: "ambient-context-and-confounds.v0.1",

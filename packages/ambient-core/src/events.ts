@@ -3,7 +3,7 @@ import type {
   AmbientEventType,
   EventEnvelope,
   WorkflowStage
-} from "@neurotrax/contracts";
+} from "@phenometric/contracts";
 
 export interface EventFactory {
   next(
@@ -56,7 +56,7 @@ export function createEventFactory(input: {
             ? "human-interface"
             : "agent";
       const event: EventEnvelope = {
-        schemaVersion: "neurotrax.workflow-event.v0.2",
+        schemaVersion: "phenometric.workflow-event.v0.2",
         eventId: `${sequence}-${type}`,
         sequence,
         occurredAt: new Date(input.baseTimeMs + lastOffsetMs).toISOString(),

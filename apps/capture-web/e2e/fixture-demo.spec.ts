@@ -140,7 +140,7 @@ test("loads the local facial analysis and keeps presentation copy clean", async 
     timeout: 15_000
   });
   await expect(page.locator("#page-title")).toHaveText(
-    "Ambient telehealth neuro assessment"
+    "Ambient face and voice measurement"
   );
   await expectCleanPresentationCopy(page);
 });

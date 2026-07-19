@@ -1,5 +1,5 @@
 {
-  "name": "@neurotrax/evidence-core",
+  "name": "@phenometric/evidence-core",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -13,7 +13,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@neurotrax/contracts": "workspace:*"
+    "@phenometric/contracts": "workspace:*"
   },
   "devDependencies": {
     "typescript": "5.6.3",

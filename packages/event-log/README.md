@@ -1,11 +1,11 @@
 # Append-only encounter event log
 
 > **Legacy demo-spine taxonomy.** This package documents the earlier scripted
-> `neurotrax.event-envelope.v0.1` lifecycle. The implemented ambient core uses
-> the separate `neurotrax.ambient-event.v0.1` contract in
-> `@neurotrax/contracts`.
+> `phenometric.event-envelope.v0.1` lifecycle. The implemented ambient core uses
+> the separate `phenometric.ambient-event.v0.1` contract in
+> `@phenometric/contracts`.
 
-This package will hold the small event-store abstraction behind Neurotrax's
+This package will hold the small event-store abstraction behind PhenoMetric's
 agent flight recorder. The first implementation can persist newline-delimited
 JSON locally in the browser or demo server; the contract is intentionally
 portable to a durable event store later.
@@ -25,7 +25,7 @@ Each line is one immutable `EventEnvelope`:
 
 ```json
 {
-  "schemaVersion": "neurotrax.event-envelope.v0.1",
+  "schemaVersion": "phenometric.event-envelope.v0.1",
   "eventId": "evt-007-action-requested",
   "sequence": 7,
   "occurredAt": "2026-07-18T16:00:23.200Z",

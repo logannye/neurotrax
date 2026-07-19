@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { extractFacialExpressivity, FACIAL_EXPRESSIVITY_VERSION } from "./facial-expressivity.js";
 import type { FaceLandmarkFrame } from "./primitives.js";
-import type { Abstention, MeasurableWindow, Measurement } from "@neurotrax/contracts";
+import type { Abstention, MeasurableWindow, Measurement } from "@phenometric/contracts";
 
 const window: MeasurableWindow = {
   windowId: "w-face-1",

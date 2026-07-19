@@ -13,13 +13,13 @@ importers:
       '@mediapipe/tasks-vision':
         specifier: 0.10.35
         version: 0.10.35
-      '@neurotrax/ambient-core':
+      '@phenometric/ambient-core':
         specifier: workspace:*
         version: link:../../packages/ambient-core
-      '@neurotrax/contracts':
+      '@phenometric/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
-      '@neurotrax/evidence-core':
+      '@phenometric/evidence-core':
         specifier: workspace:*
         version: link:../../packages/evidence-core
       openai:
@@ -50,7 +50,7 @@ importers:
 
   packages/ambient-core:
     dependencies:
-      '@neurotrax/contracts':
+      '@phenometric/contracts':
         specifier: workspace:*
         version: link:../contracts
     devDependencies:
@@ -68,7 +68,7 @@ importers:
 
   packages/evidence-core:
     dependencies:
-      '@neurotrax/contracts':
+      '@phenometric/contracts':
         specifier: workspace:*
         version: link:../contracts
     devDependencies:
@@ -81,10 +81,10 @@ importers:
 
   packages/trajectory-core:
     dependencies:
-      '@neurotrax/ambient-core':
+      '@phenometric/ambient-core':
         specifier: workspace:*
         version: link:../ambient-core
-      '@neurotrax/contracts':
+      '@phenometric/contracts':
         specifier: workspace:*
         version: link:../contracts
     devDependencies:

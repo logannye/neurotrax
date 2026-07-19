@@ -4,7 +4,7 @@ import type {
   EvidenceCardDraft,
   EvidenceClaimFact,
   EventEnvelope
-} from "@neurotrax/contracts";
+} from "@phenometric/contracts";
 import {
   assembleEvidenceCardDraft,
   createModalityOutcomes,
@@ -172,7 +172,7 @@ describe("validateEvidenceCardDraft", () => {
     } satisfies EncounterObservation;
     const events = [
       {
-        schemaVersion: "neurotrax.workflow-event.v0.2",
+        schemaVersion: "phenometric.workflow-event.v0.2",
         eventId: "1-encounter-observation.created",
         sequence: 1,
         occurredAt: observation.occurredAt,

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { aggregateMeasurements } from "./aggregate.js";
-import type { Measurement, MeasurementContext } from "@neurotrax/contracts";
+import type { Measurement, MeasurementContext } from "@phenometric/contracts";
 
 function measurementContext(kind: MeasurementContext["kind"]): MeasurementContext {
   return {

@@ -2,7 +2,7 @@
   "id": "macbook-check-in.v0.1",
   "status": "non-clinical-prototype",
   "captureAdapter": "macbook-browser",
-  "description": "A seated Neurotrax demo check-in used to test capture, bounded correction, comparison, and review infrastructure.",
+  "description": "A seated PhenoMetric demo check-in used to test capture, bounded correction, comparison, and review infrastructure.",
   "consentRequired": true,
   "maxRetriesPerTask": 1,
   "tasks": [

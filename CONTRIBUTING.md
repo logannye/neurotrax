@@ -1,6 +1,6 @@
 # Contributing
 
-Thank you for contributing to Neurotrax.
+Thank you for contributing to PhenoMetric.
 
 ## Before opening a change
 

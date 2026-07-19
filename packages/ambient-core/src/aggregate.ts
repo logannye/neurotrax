@@ -3,7 +3,7 @@ import type {
   ConfoundEnvelope,
   Measurement,
   MeasurementContext
-} from "@neurotrax/contracts";
+} from "@phenometric/contracts";
 import { median, medianAbsoluteDeviation } from "./stats.js";
 
 function aggregateConfounds(confounds: ConfoundEnvelope[]): ConfoundEnvelope {

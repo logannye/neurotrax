@@ -1,4 +1,4 @@
-# Neurotrax architecture
+# PhenoMetric architecture
 
 ## Product capabilities
 
@@ -98,7 +98,7 @@ be developed without coupling disease interpretation to the capture kernel.
 
 ## Personal trajectory
 
-`@neurotrax/trajectory-core` currently matches prior observations by
+`@phenometric/trajectory-core` currently matches prior observations by
 participant, review state, measurement code, detected context, algorithm
 version, and explicit environmental tolerances. It computes robust
 personal-reference statistics and preserves exact exclusion reasons.

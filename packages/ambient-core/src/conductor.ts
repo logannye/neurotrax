@@ -7,7 +7,7 @@ import type {
   MeasurementContext,
   MeasurableWindow,
   Modality
-} from "@neurotrax/contracts";
+} from "@phenometric/contracts";
 import type {
   AudioFeatureFrame,
   FaceLandmarkFrame,

@@ -357,8 +357,8 @@ node <<'NODE'
     fs.readFileSync("examples/evidence-card.example.json", "utf8")
   );
 
-  if (packageManifest.name !== "neurotrax") {
-    throw new Error("The package name must be neurotrax.");
+  if (packageManifest.name !== "phenometric") {
+    throw new Error("The package name must be phenometric.");
   }
 
   const consentEvent = events.find(
@@ -605,4 +605,4 @@ if [[ "$actual_model_hash" != "$expected_model_hash" ]]; then
   exit 1
 fi
 
-echo "Neurotrax structure, assets, fixtures, and event stream are valid."
+echo "PhenoMetric structure, assets, fixtures, and event stream are valid."

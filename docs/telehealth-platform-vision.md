@@ -1,11 +1,11 @@
-# Telehealth face and voice platform vision
+# PhenoMetric platform vision
 
 ## Purpose
 
-This document defines the long-term direction for Neurotrax beyond its original
-neurological hackathon demonstration.
+This document defines the long-term direction for PhenoMetric, which began as
+the NeuroTrax neurological hackathon demonstration.
 
-Neurotrax is intended to become a reusable clinical observability layer for
+PhenoMetric is intended to become a reusable clinical observability layer for
 telehealth: a system that converts consented audiovisual signals into
 quality-controlled, versioned, longitudinal measurements and presents those
 measurements as inspectable evidence for a clinician.
@@ -474,7 +474,7 @@ context has its own evidence and governance owner.
 
 ## Near-term success criteria
 
-Before describing Neurotrax as a platform ready for clinical research, it
+Before describing PhenoMetric as a platform ready for clinical research, it
 should be possible to demonstrate:
 
 - repeatable measurements across multiple sessions and supported devices;

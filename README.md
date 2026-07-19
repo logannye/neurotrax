@@ -1,15 +1,17 @@
-# Neurotrax
+# PhenoMetric
 
 **A clinical observability layer for telehealth**
 
-Neurotrax is a research prototype for turning consented face and voice signals
+PhenoMetric is a research prototype for turning consented face and voice signals
 from an ordinary remote encounter into quality-controlled, traceable, and
 longitudinal clinical observations.
 
-The current implementation is a neurological hackathon demonstration. The
-long-term vision is broader: a reusable audiovisual measurement platform that
-can support carefully validated screening, assessment, monitoring, trending,
-and treatment-response workflows across medical specialties.
+The name combines **phenotype**—the observable expression of health and
+disease—with **metric**—a bounded, reproducible measurement. PhenoMetric began
+as NeuroTrax, a neurological hackathon demonstration. The platform vision is
+broader: a reusable audiovisual measurement system that can support carefully
+validated screening, assessment, monitoring, trending, and treatment-response
+workflows across medical specialties.
 
 > **Current status: research and engineering prototype. Not a medical device.
 > Not for clinical decisions.**
@@ -22,7 +24,7 @@ eyelid movement, oral aperture, articulatory coordination, respiratory effort,
 and other visible or audible features may be noticed during a visit but are
 rarely measured consistently. Most disappear when the call ends.
 
-Neurotrax explores a different care model:
+PhenoMetric explores a different care model:
 
 1. use the camera and microphone already present in a telehealth encounter;
 2. identify technically valid moments without assuming every moment is usable;
@@ -257,10 +259,11 @@ The ten current features are:
 They are engineering features, not validated biomarkers. Measurements
 explicitly carry placeholder uncertainty and `clinicalValidation: "none"`.
 
-The live demonstration still runs a fixed 24-second neurological presentation
-workflow. Personal Trajectory exists as a tested internal package but is not
-connected to persistent patient history. No authentication, clinical data
-store, FHIR integration, EHR write, or production deployment is implemented.
+The live demonstration still uses the original NeuroTrax 24-second
+neurological presentation workflow as its first protocol-shaped example.
+Personal Trajectory exists as a tested internal package but is not connected
+to persistent patient history. No authentication, clinical data store, FHIR
+integration, EHR write, or production deployment is implemented.
 
 ## Privacy, safety, and trust
 

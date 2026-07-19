@@ -1,5 +1,5 @@
 {
-  "name": "@neurotrax/capture-web",
+  "name": "@phenometric/capture-web",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -13,9 +13,9 @@
   },
   "dependencies": {
     "@mediapipe/tasks-vision": "0.10.35",
-    "@neurotrax/ambient-core": "workspace:*",
-    "@neurotrax/contracts": "workspace:*",
-    "@neurotrax/evidence-core": "workspace:*",
+    "@phenometric/ambient-core": "workspace:*",
+    "@phenometric/contracts": "workspace:*",
+    "@phenometric/evidence-core": "workspace:*",
     "openai": "6.48.0",
     "zod": "4.4.3"
   },
