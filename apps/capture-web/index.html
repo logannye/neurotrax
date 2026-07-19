@@ -20,9 +20,9 @@
           </span>
         </a>
         <div class="header-status">
-          <span class="privacy-pill">
+          <span class="privacy-pill" id="header-privacy-state">
             <span aria-hidden="true">●</span>
-            In-session processing
+            Devices off
           </span>
           <span class="encounter-status" id="header-mode">Ready</span>
         </div>
@@ -64,6 +64,10 @@
                 <span class="live-dot" aria-hidden="true"></span>
                 Ambient assessment active
               </div>
+              <div class="camera-callout" id="camera-callout" hidden>
+                <span aria-hidden="true"></span>
+                <strong id="camera-callout-text"></strong>
+              </div>
               <div class="session-clock" id="session-clock">00:00</div>
               <div class="guidance-card" id="guidance-card" hidden>
                 <span id="guidance-step">System check</span>
@@ -96,6 +100,9 @@
                   <span><strong id="speech-duration-value">0.0 s</strong> usable</span>
                   <span><strong id="pitch-coverage-value">0%</strong> pitch coverage</span>
                 </div>
+                <p class="signal-standby" id="speech-signal-caption">
+                  Analysis standing by
+                </p>
               </section>
 
               <section class="signal-card" aria-label="Facial signal">
@@ -110,6 +117,9 @@
                   <span><strong id="face-usability-value">0%</strong> usable</span>
                   <span><strong id="face-recovery-value">Pending</strong> recovery</span>
                 </div>
+                <p class="signal-standby" id="face-signal-caption">
+                  Analysis preparing
+                </p>
               </section>
             </div>
 
@@ -125,13 +135,13 @@
                 <button class="button button-primary" id="start-button" disabled>
                   Run system check
                 </button>
-                <button class="button button-primary" id="stop-button" disabled>
-                  Complete assessment
-                </button>
                 <button class="button button-quiet" id="reset-button" hidden>
                   New assessment
                 </button>
               </div>
+              <button id="stop-button" hidden aria-hidden="true" tabindex="-1">
+                Complete assessment
+              </button>
               <p class="capture-hint" id="capture-hint">
                 The system check verifies framing, room conditions, and speech.
               </p>
@@ -144,7 +154,7 @@
                 <p class="eyebrow">Live orchestration</p>
                 <h2 id="activity-heading">Agent coordination</h2>
               </div>
-              <span class="event-count" id="event-count">Standby</span>
+              <span class="event-count" id="event-count">Agents ready</span>
             </div>
 
             <div class="milestone-rail" id="milestone-rail">
@@ -191,7 +201,7 @@
                 </article>
               </div>
               <div class="evidence-packet" id="evidence-packet" hidden>
-                Evidence routed
+                Window accepted
               </div>
               <p class="coordinator-decision" id="coordinator-decision">
                 Waiting to coordinate the assessment.
@@ -288,7 +298,7 @@
           <div class="result-section">
             <div class="section-heading">
               <span class="section-number">01</span>
-              <h3>Measured signals</h3>
+              <h3>Digital biomarker profile</h3>
             </div>
             <div class="aggregate-grid" id="aggregate-grid"></div>
           </div>
@@ -316,6 +326,13 @@
               <p class="eyebrow">For clinician review</p>
               <h3 id="evidence-headline"></h3>
               <p id="evidence-summary"></p>
+              <section class="report-metrics" aria-labelledby="report-metrics-title">
+                <div class="report-metrics-heading">
+                  <strong id="report-metrics-title">Quantitative encounter profile</strong>
+                  <span>Captured during this visit</span>
+                </div>
+                <div class="report-metric-grid" id="report-metric-grid"></div>
+              </section>
               <div class="evidence-claims" id="evidence-claims"></div>
               <p class="boundary-statement" id="boundary-statement"></p>
               <div class="review-controls" id="review-controls">
@@ -328,6 +345,14 @@
                 <button class="button button-quiet" id="reject-button">
                   Dismiss
                 </button>
+              </div>
+              <div
+                class="approval-confirmation"
+                id="approval-confirmation"
+                hidden
+              >
+                <span aria-hidden="true">✓</span>
+                <strong>Approved for this encounter · Visit 1 established</strong>
               </div>
               <p class="review-outcome" id="review-outcome"></p>
             </article>
@@ -359,7 +384,13 @@
             </div>
           </section>
 
-          <aside class="trace-drawer" id="trace-drawer" hidden>
+          <div class="trace-backdrop" id="trace-backdrop" hidden></div>
+          <aside
+            class="trace-drawer"
+            id="trace-drawer"
+            hidden
+            aria-label="Grounding trace"
+          >
             <button
               class="trace-close"
               id="trace-close-button"

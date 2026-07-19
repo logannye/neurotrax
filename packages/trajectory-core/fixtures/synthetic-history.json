@@ -19,7 +19,7 @@
         "spread": 0.1,
         "confidence": 0.72,
         "windowCount": 2,
-        "algorithmVersion": "speech-acoustic-0.3",
+        "algorithmVersion": "speech-acoustic-0.4",
         "confounds": { "snrDb": 17, "faceFramingFraction": 0, "observedFrameRate": 0, "illuminationRelative": 0, "yawDegrees": 0 },
         "uncertainty": "placeholder",
         "clinicalValidation": "none"
@@ -33,7 +33,7 @@
         "spread": 0.004,
         "confidence": 0.82,
         "windowCount": 2,
-        "algorithmVersion": "facial-expressivity-0.2",
+        "algorithmVersion": "facial-expressivity-0.3",
         "confounds": { "snrDb": 0, "faceFramingFraction": 0.84, "observedFrameRate": 10, "illuminationRelative": 0.58, "yawDegrees": 8 },
         "uncertainty": "placeholder",
         "clinicalValidation": "none"
@@ -60,7 +60,7 @@
         "spread": 0.1,
         "confidence": 0.74,
         "windowCount": 2,
-        "algorithmVersion": "speech-acoustic-0.3",
+        "algorithmVersion": "speech-acoustic-0.4",
         "confounds": { "snrDb": 16, "faceFramingFraction": 0, "observedFrameRate": 0, "illuminationRelative": 0, "yawDegrees": 0 },
         "uncertainty": "placeholder",
         "clinicalValidation": "none"
@@ -74,7 +74,7 @@
         "spread": 0.004,
         "confidence": 0.84,
         "windowCount": 2,
-        "algorithmVersion": "facial-expressivity-0.2",
+        "algorithmVersion": "facial-expressivity-0.3",
         "confounds": { "snrDb": 0, "faceFramingFraction": 0.86, "observedFrameRate": 10, "illuminationRelative": 0.6, "yawDegrees": 7 },
         "uncertainty": "placeholder",
         "clinicalValidation": "none"
@@ -101,7 +101,7 @@
         "spread": 0.1,
         "confidence": 0.76,
         "windowCount": 2,
-        "algorithmVersion": "speech-acoustic-0.3",
+        "algorithmVersion": "speech-acoustic-0.4",
         "confounds": { "snrDb": 18, "faceFramingFraction": 0, "observedFrameRate": 0, "illuminationRelative": 0, "yawDegrees": 0 },
         "uncertainty": "placeholder",
         "clinicalValidation": "none"
@@ -115,7 +115,7 @@
         "spread": 0.004,
         "confidence": 0.85,
         "windowCount": 2,
-        "algorithmVersion": "facial-expressivity-0.2",
+        "algorithmVersion": "facial-expressivity-0.3",
         "confounds": { "snrDb": 0, "faceFramingFraction": 0.85, "observedFrameRate": 10, "illuminationRelative": 0.59, "yawDegrees": 8 },
         "uncertainty": "placeholder",
         "clinicalValidation": "none"

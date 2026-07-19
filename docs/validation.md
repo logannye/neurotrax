@@ -7,10 +7,12 @@ The unit suite covers:
 - quiet-room calibration and voice hysteresis;
 - rejection of unpitched room energy;
 - bounded pause detection;
-- pitch coverage and normalized pitch variability;
+- speech initiation latency, voiced-time fraction, pause rate, pitch coverage,
+  pitch center, and normalized pitch variability;
 - adaptive facial baseline creation;
 - face visibility, geometry, pose, and illumination guidance;
-- facial withholding and recovery;
+- facial movement, blink proxy, brow excursion, mouth-aperture range,
+  eye-aperture range, withholding, and recovery;
 - fixed-duration phase progression and timeout ordering;
 - eight-frame strong voice calibration and limited calibration;
 - missed turn-away and missed recovery handling;
@@ -28,8 +30,9 @@ The browser suite covers:
 - speech continuity through facial withholding;
 - facial recovery and a second window;
 - automatic results reveal while synthesis is still pending;
-- two current-encounter statements;
-- measurement trace opening;
+- a ten-feature quantitative encounter profile;
+- two primary current-encounter statements;
+- primary-claim and quantitative-profile trace opening;
 - summary approval and dismissal.
 - synthesis failure with evidence-only review;
 - approval establishing Visit 1 with empty future placeholders.

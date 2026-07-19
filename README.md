@@ -54,9 +54,10 @@ camera and microphone. During the assessment, Speech Analysis and Facial
 Analysis operate independently.
 
 Speech Analysis identifies useful speech intervals and calculates features
-such as voiced-time fraction, bounded pause rate, and pitch variability.
+related to speech initiation, continuity, pausing, and vocal modulation.
 Facial Analysis evaluates facial visibility, position, pose, illumination, and
-movement before calculating facial metrics.
+movement before calculating facial motor features from normalized landmark
+relationships.
 
 The two paths remain independent. When the participant turns away, the facial
 path can pause while speech analysis continues. When the participant returns,
@@ -70,7 +71,7 @@ When capture ends, Neurotrax routes the measured speech and facial metrics to
 Clinical Synthesis. The resulting **Clinician Encounter Summary** contains:
 
 - a short, generalist-readable narrative;
-- the reportable current-encounter metrics;
+- a quantitative profile spanning speech timing, voice, and facial movement;
 - a trace from each statement to its measurement window and quality context;
 - a copyable format for clinician-reviewed EHR documentation; and
 - explicit **Approve summary** and **Dismiss** actions.
@@ -168,15 +169,20 @@ within-patient trajectory—without presenting invented prior patient data.
 
 ## Measurement scope
 
-The current system derives bounded measurements such as:
+The current system derives ten encounter-level features from accepted
+measurement windows:
 
-- voiced-time fraction;
-- pauses within a defined duration range;
-- pitch variability;
-- facial movement;
-- blink-rate proxy;
-- brow-movement amplitude; and
-- measurement context including illumination, pose, and frame rate.
+- **speech timing and fluency components:** speech initiation latency,
+  voiced-time fraction, and pauses within a defined duration range;
+- **voice modulation:** pitch center and pitch variability;
+- **facial motor function:** overall facial movement, blink-rate proxy, brow
+  excursion, mouth-aperture range, and eye-aperture range; and
+- **measurement context:** signal quality, illumination, pose, framing, and
+  frame rate.
+
+These are functionally relevant digital features, not diagnostic scores or
+clinically validated endpoints. Neurotrax reports the measured values and their
+provenance so a clinician can review them in context.
 
 Neurotrax does not interpret the content of the conversation, infer emotion or
 intent, diagnose a condition, recommend treatment, contact a patient, or alter

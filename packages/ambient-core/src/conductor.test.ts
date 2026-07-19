@@ -16,16 +16,20 @@ describe("runConductor", () => {
 
     expect(observation.containsPHI).toBe(false);
     expect(observation.visitId).toBe(stream.visitId);
-    expect(observation.aggregates).toHaveLength(6);
-    expect(observation.measurementCount).toBe(6);
+    expect(observation.aggregates).toHaveLength(10);
+    expect(observation.measurementCount).toBe(10);
     expect(observation.windows).toHaveLength(2);
-    expect(observation.measurements).toHaveLength(6);
+    expect(observation.measurements).toHaveLength(10);
     expect(observation.abstentions).toEqual([]);
     expect(observation.aggregates.map((aggregate) => aggregate.code)).toEqual([
       "prototype.face.blink_rate",
       "prototype.face.brow_amplitude",
       "prototype.face.expressivity",
+      "prototype.face.eye_aperture_range",
+      "prototype.face.mouth_amplitude",
+      "prototype.speech.onset_latency",
       "prototype.speech.pause_rate",
+      "prototype.speech.pitch_center",
       "prototype.speech.pitch_variability",
       "prototype.speech.voiced_time_fraction"
     ]);
