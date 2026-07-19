@@ -31,12 +31,12 @@ windows, and emits append-only workflow events.
 ## Guided workflow
 
 The browser-level guided controller does not create measurements. It runs a
-fixed fourteen-second policy:
+fixed twenty-four-second policy:
 
-1. four seconds centered and speaking;
-2. three seconds turning away while speaking;
-3. four seconds returning to center;
-4. three seconds for the final measurement window.
+1. seven seconds centered and speaking;
+2. four seconds turning away while speaking;
+3. seven seconds returning to center;
+4. six seconds for the final measurement window.
 
 Each phase records `confirmed`, `not-confirmed`, or `pending`. The coordinator
 always advances at the phase deadline, while the conductor remains responsible

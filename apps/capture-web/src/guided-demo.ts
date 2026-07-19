@@ -55,29 +55,29 @@ export const JUDGE_READY_TIMED_POLICY: TimedEncounterPolicy = {
   phases: [
     {
       phase: "establishing",
-      minimumDurationMs: 4_000,
-      maximumDurationMs: 4_000,
+      minimumDurationMs: 7_000,
+      maximumDurationMs: 7_000,
       successCondition: "speech-and-initial-face-window",
       timeoutBehavior: "advance-and-record-not-confirmed"
     },
     {
       phase: "turn-away",
-      minimumDurationMs: 3_000,
-      maximumDurationMs: 3_000,
+      minimumDurationMs: 4_000,
+      maximumDurationMs: 4_000,
       successCondition: "facial-withholding-while-speech-continues",
       timeoutBehavior: "advance-and-record-not-confirmed"
     },
     {
       phase: "return",
-      minimumDurationMs: 4_000,
-      maximumDurationMs: 4_000,
+      minimumDurationMs: 7_000,
+      maximumDurationMs: 7_000,
       successCondition: "facial-quality-restored",
       timeoutBehavior: "advance-and-record-not-confirmed"
     },
     {
       phase: "post-recovery",
-      minimumDurationMs: 3_000,
-      maximumDurationMs: 3_000,
+      minimumDurationMs: 6_000,
+      maximumDurationMs: 6_000,
       successCondition: "post-recovery-face-window",
       timeoutBehavior: "advance-and-record-not-confirmed"
     }

@@ -49,11 +49,11 @@ that variable for a live presentation.
 4. Use soft, even front lighting.
 5. Run the five-second system check. Limited or unavailable quality will not
    prevent the timed assessment from starting.
-6. During the first four seconds, remain centered and speak naturally.
-7. Turn away while continuing to speak for three seconds.
+6. During the first seven seconds, remain centered and speak naturally.
+7. Turn away while continuing to speak for four seconds.
 8. Return to the original position and continue speaking through the remaining
-   seven seconds.
-9. Confirm that capture closes automatically at fourteen seconds and that the
+   thirteen seconds.
+9. Confirm that capture closes automatically at twenty-four seconds and that the
    camera and microphone are released.
 10. Confirm that the results workspace opens automatically. Grounded evidence
    appears immediately while the short narrative is prepared in place.

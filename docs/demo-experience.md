@@ -19,8 +19,12 @@
 - A live orchestration graph shows the coordinator, parallel measurement
   agents, synthesis, and review.
 - Only four concise agent decisions remain visible.
-- Results show the captured encounter metrics and the clinician encounter
-  summary.
+- Capture transitions into a dedicated clinician summary workspace rather than
+  leaving the video interface partially visible.
+- An event-backed handoff shows Signals analyzed → Evidence grounding →
+  Clinician review.
+- Measured signals sit beside the clinician note so the complete deliverable is
+  understandable at a glance.
 - Detailed provenance appears only when a statement is selected.
 
 ## Presentation behavior

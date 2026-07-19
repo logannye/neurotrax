@@ -131,6 +131,9 @@ const coordinatorDecision =
 const evidencePacket = element<HTMLDivElement>("evidence-packet");
 const resultsPanel = element<HTMLElement>("results-panel");
 const resultSummary = element<HTMLDivElement>("result-summary");
+const captureHandoff = element<HTMLElement>("capture-handoff");
+const groundingHandoff = element<HTMLElement>("grounding-handoff");
+const reviewHandoff = element<HTMLElement>("review-handoff");
 const aggregateGrid = element<HTMLDivElement>("aggregate-grid");
 const evidenceLoading = element<HTMLDivElement>("evidence-loading");
 const evidenceError = element<HTMLDivElement>("evidence-error");
@@ -208,6 +211,28 @@ let faceWindowOpen = false;
 let packetTimer: number | null = null;
 const voiceTracker = createVoiceActivityTracker();
 const guidedDemo = createGuidedDemoController();
+
+type HandoffState = "pending" | "active" | "complete";
+
+function setHandoffStep(
+  step: HTMLElement,
+  nextState: HandoffState,
+  label: string,
+  eventId?: string
+): void {
+  step.classList.remove("is-pending", "is-active", "is-complete");
+  step.classList.add(`is-${nextState}`);
+  const stateLabel = step.querySelector<HTMLElement>(".handoff-state");
+  if (stateLabel) stateLabel.textContent = label;
+  if (eventId) step.dataset.eventId = eventId;
+  else delete step.dataset.eventId;
+}
+
+function resetHandoff(): void {
+  setHandoffStep(captureHandoff, "pending", "Next");
+  setHandoffStep(groundingHandoff, "pending", "Next");
+  setHandoffStep(reviewHandoff, "pending", "Next");
+}
 
 const faceWorker = new Worker(new URL("./face-worker.ts", import.meta.url), {
   type: "module"
@@ -525,6 +550,12 @@ function applyEventToLanes(event: EventEnvelope): void {
     }
   }
   if (event.type === "evidence-card.requested") {
+    setHandoffStep(
+      groundingHandoff,
+      "active",
+      "Working",
+      event.eventId
+    );
     setLane(
       evidenceState,
       evidenceStatus,
@@ -533,7 +564,21 @@ function applyEventToLanes(event: EventEnvelope): void {
       "active"
     );
   }
+  if (event.type === "evidence.grounding.completed") {
+    setHandoffStep(
+      groundingHandoff,
+      "complete",
+      "Grounded",
+      event.eventId
+    );
+  }
   if (event.type === "human-review.pending") {
+    setHandoffStep(
+      reviewHandoff,
+      "complete",
+      "Ready",
+      event.eventId
+    );
     setLane(
       evidenceState,
       evidenceStatus,
@@ -547,6 +592,17 @@ function applyEventToLanes(event: EventEnvelope): void {
       "Pending",
       "The encounter summary is ready for review.",
       "active"
+    );
+  }
+  if (
+    event.type === "human-review.accepted" ||
+    event.type === "human-review.rejected"
+  ) {
+    setHandoffStep(
+      reviewHandoff,
+      "complete",
+      event.type === "human-review.accepted" ? "Approved" : "Dismissed",
+      event.eventId
     );
   }
   if (event.type === "coordinator.decision.recorded") {
@@ -1172,6 +1228,15 @@ function prepareConductor(): void {
 
 function startTestCapture(): void {
   let fixtureTimeMs = 0;
+  const establishingEndMs =
+    JUDGE_READY_TIMED_POLICY.phases[0].maximumDurationMs;
+  const turnAwayEndMs =
+    establishingEndMs +
+    JUDGE_READY_TIMED_POLICY.phases[1].maximumDurationMs;
+  const encounterEndMs = JUDGE_READY_TIMED_POLICY.phases.reduce(
+    (total, phase) => total + phase.maximumDurationMs,
+    0
+  );
   const intervalMs = observeTestTransitions
     ? 30
     : fastTestCapture
@@ -1201,10 +1266,11 @@ function startTestCapture(): void {
 
     const turnedAway =
       testScenario === "missing-face" ||
-      (testScenario === "missed-recovery" && fixtureTimeMs >= 4_200) ||
+      (testScenario === "missed-recovery" &&
+        fixtureTimeMs >= establishingEndMs + 200) ||
       (testScenario !== "missed-turn" &&
-        fixtureTimeMs >= 4_200 &&
-        fixtureTimeMs <= 6_400);
+        fixtureTimeMs >= establishingEndMs + 200 &&
+        fixtureTimeMs <= turnAwayEndMs - 600);
     const unavailableFace = testScenario === "missing-face";
     const faceWithheld = turnedAway || unavailableFace;
     const face: FaceLandmarkFrame = {
@@ -1229,7 +1295,7 @@ function startTestCapture(): void {
     sessionClock.textContent = formatElapsed(fixtureTimeMs);
     advanceTimedEncounter(fixtureTimeMs);
     fixtureTimeMs += 100;
-    if (fixtureTimeMs > 14_100 && sampleInterval !== null) {
+    if (fixtureTimeMs > encounterEndMs + 100 && sampleInterval !== null) {
       window.clearInterval(sampleInterval);
       sampleInterval = null;
     }
@@ -1801,7 +1867,7 @@ async function finishEncounter(): Promise<void> {
     );
     outcome.eventIds.push(created.eventId);
   }
-  emitWorkflowEvent(
+  const routed = emitWorkflowEvent(
     "capture-conductor",
     "coordinator.decision.recorded",
     "ambient-capture",
@@ -1814,6 +1880,14 @@ async function finishEncounter(): Promise<void> {
     },
     latestOutcomes.flatMap((outcome) => outcome.supportRefs)
   );
+  setHandoffStep(
+    captureHandoff,
+    "complete",
+    "Complete",
+    routed.eventId
+  );
+  setHandoffStep(groundingHandoff, "active", "Preparing");
+  setHandoffStep(reviewHandoff, "pending", "Next");
   coordinatorDecision.textContent =
     "Measured encounter metrics routed for grounding";
   renderObservation(result.observation, false);
@@ -1966,6 +2040,7 @@ async function resetCapture(): Promise<void> {
   resultsPanel.hidden = true;
   baselinePanel.hidden = true;
   traceDrawer.hidden = true;
+  resetHandoff();
   for (const item of document.querySelectorAll(".milestone")) {
     item.classList.remove("is-complete");
   }
@@ -2140,5 +2215,6 @@ if (testCaptureMode) {
   faceWorker.postMessage({ type: "initialize" });
 }
 operatorDiagnostics.hidden = !operatorMode;
+resetHandoff();
 void checkSynthesisReadiness();
 updateState("idle");
