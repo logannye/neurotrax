@@ -6,15 +6,15 @@ demo.
 
 It renders:
 
-- at most two compatible personal-trajectory claims;
-- visible `SYNTHETIC` labels and exact exclusion reasons;
-- the required GPT-5.6 Evidence Card;
+- a quantitative current-encounter profile;
+- two selected, precomputed face and voice outcomes;
+- a bounded GPT-5.6 narrative when synthesis is available;
 - a claim trace through aggregate, measurement window, quality/confounds, and
   workflow events; and
-- human Accept or Reject.
+- human approval or dismissal.
 
-Accept adds the current structured observation to page-session history. Reject
-does not. Neither action persists across reload, writes an EHR, or makes a
-clinical determination.
+Approval establishes a visible Visit 1 baseline concept. It does not persist
+the observation or connect the internal trajectory package. Neither decision
+persists across reload, writes an EHR, or makes a clinical determination.
 
 No retained clips are part of this MVP.
