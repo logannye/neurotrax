@@ -1,5 +1,6 @@
 import type {
   AudioCalibration,
+  CalibrationQuality,
   CaptureCalibration,
   FaceCalibration
 } from "@neurotrax/contracts";
@@ -21,6 +22,21 @@ export interface CalibratedFaceFrame {
   frame: FaceLandmarkFrame;
   usable: boolean;
   guidance: FaceGuidance;
+}
+
+export interface FaceCalibrationResult {
+  quality: CalibrationQuality;
+  calibration: FaceCalibration | null;
+  usableFrameCount: number;
+}
+
+export function classifyAudioCalibration(
+  reliablePitchFrames: number,
+  speechEnergyFrames: number
+): CalibrationQuality {
+  if (reliablePitchFrames >= 8) return "strong";
+  if (speechEnergyFrames > 0) return "limited";
+  return "unavailable";
 }
 
 function median(values: number[]): number {
@@ -85,6 +101,45 @@ export function createFaceCalibration(
     baselineIllumination: median(
       usable.map((frame) => frame.illumination)
     )
+  };
+}
+
+export function classifyFaceCalibration(
+  frames: FaceLandmarkFrame[]
+): FaceCalibrationResult {
+  const recent = frames.slice(-PREFLIGHT_FACE_WINDOW);
+  const usable = recent.filter(
+    (frame) => preflightFaceGuidance(frame) === "Face ready"
+  );
+  const visible = recent.filter(
+    (frame) =>
+      frame.faceVisible &&
+      (frame.faceBoxWidth ?? 0) > 0 &&
+      (frame.faceBoxHeight ?? 0) > 0
+  );
+  const baselineFrames = usable.length >= 3 ? usable : visible;
+  if (baselineFrames.length === 0) {
+    return {
+      quality: "unavailable",
+      calibration: null,
+      usableFrameCount: 0
+    };
+  }
+  return {
+    quality:
+      usable.length >= PREFLIGHT_FACE_REQUIRED ? "strong" : "limited",
+    calibration: {
+      baselineBoxWidth: median(
+        baselineFrames.map((frame) => frame.faceBoxWidth ?? 0)
+      ),
+      baselineBoxHeight: median(
+        baselineFrames.map((frame) => frame.faceBoxHeight ?? 0)
+      ),
+      baselineIllumination: median(
+        baselineFrames.map((frame) => frame.illumination)
+      )
+    },
+    usableFrameCount: usable.length
   };
 }
 
@@ -158,12 +213,15 @@ export function calibrateFaceFrame(
 
 export function createCaptureCalibration(
   audio: AudioCalibration,
-  face: FaceCalibration
+  audioQuality: CalibrationQuality,
+  faceResult: FaceCalibrationResult
 ): CaptureCalibration {
   return {
-    profileId: "macbook-guided-v0.1",
+    profileId: "macbook-timed-v0.2",
     calibratedAt: new Date().toISOString(),
     audio,
-    face
+    audioQuality,
+    face: faceResult.calibration,
+    faceQuality: faceResult.quality
   };
 }

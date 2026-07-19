@@ -65,6 +65,10 @@ After consent, the application runs a short system check to calibrate the
 participant’s environment, voice, facial position, and lighting. During the
 assessment, speech and facial signals are evaluated independently.
 
+The system check ends after five seconds, and the encounter follows a fixed
+fourteen-second sequence. Signal quality determines whether an agent measures
+or abstains; it never determines whether the workflow is allowed to finish.
+
 If the participant briefly turns away, Facial Analysis stops producing
 measurements rather than inventing a value. Speech Analysis can continue
 operating at the same time. When the participant returns to an acceptable
@@ -74,16 +78,18 @@ This independent **measure, withhold, and recover** behavior is central to the
 system: missing or unreliable information should be visible, not silently
 converted into false precision.
 
-### 2. Clinician encounter summary
+### 2. EHR-ready encounter report
 
-At the end of the encounter, Neurotrax selects one supported speech finding and
-one supported facial finding. Clinical Synthesis prepares a short summary from
-those facts.
+At the end of the encounter, Neurotrax creates exactly one acquisition outcome
+for speech and one for facial analysis. Clinical Synthesis includes only
+successfully measured metrics in a short, copyable encounter report. A
+modality without a usable metric is omitted from the clinical narrative rather
+than described as a finding.
 
 Before anything is displayed, a grounding layer checks that:
 
-- each statement refers to a real current-encounter measurement;
-- the supporting measurement window exists;
+- each statement refers to a real current-encounter measurement or abstention;
+- the supporting accepted or withheld window exists;
 - relevant quality conditions are preserved;
 - no unsupported number or clinical conclusion was added; and
 - one statement is supported by each modality.
@@ -100,10 +106,10 @@ rules, and an auditable output.
 
 | Workflow role | What it does | What it produces |
 | --- | --- | --- |
-| **Encounter Coordinator** | Confirms readiness, coordinates the assessment, opens and closes measurement windows, and records workflow events. | A structured current-encounter observation. |
+| **Encounter Coordinator** | Runs the timed workflow, coordinates parallel analysis, opens and closes measurement windows, and advances on schedule while recording whether each target moment was confirmed. | A structured current-encounter observation and auditable decisions. |
 | **Speech Analysis** | Detects technically usable speech and measures features such as voiced-time fraction, bounded pauses, and pitch variability. | Speech measurements or an explicit abstention. |
 | **Facial Analysis** | Evaluates visibility, position, pose, illumination, frame rate, and facial movement. It withholds output when quality is inadequate and resumes after recovery. | Facial measurements or an explicit abstention. |
-| **Clinical Synthesis** | Converts two supported encounter facts into concise, generalist-readable language. | A draft clinician encounter summary. |
+| **Clinical Synthesis** | Converts successfully measured speech and facial metrics into concise, generalist-readable language without changing the underlying evidence. | A copyable, EHR-ready encounter report. |
 | **Clinician Review** | Gives a person the final decision over whether the summary should be used for the session. | An approval or dismissal event. |
 
 The agents communicate through structured events rather than hidden narrative
@@ -120,7 +126,7 @@ flowchart LR
     COORDINATOR --> FACE["Facial Analysis"]
     SPEECH --> OBSERVATION["Current-encounter observation"]
     FACE --> OBSERVATION
-    OBSERVATION --> FACTS["Supported speech + facial facts"]
+    OBSERVATION --> FACTS["Measured or withheld modality outcomes"]
     FACTS --> SYNTHESIS["Clinical Synthesis"]
     SYNTHESIS --> GROUNDING["Deterministic grounding"]
     GROUNDING --> REVIEW["Clinician Review"]
@@ -131,22 +137,27 @@ In the live experience:
 1. The participant provides consent.
 2. Neurotrax requests camera and microphone access.
 3. The system measures quiet-room conditions.
-4. The participant speaks while facial framing and lighting are calibrated.
-5. The assessment begins once the system check succeeds.
+4. The participant speaks while facial framing and lighting are assessed.
+5. After no more than five seconds, the system labels each calibration as
+   strong, limited, or unavailable and enables the assessment.
 6. Speech and facial agents establish independent usable windows.
 7. The participant briefly turns away while continuing to speak.
 8. Facial Analysis visibly withholds measurement while Speech Analysis
    continues.
 9. The participant returns, and Facial Analysis confirms recovery.
-10. Neurotrax closes capture automatically and begins preparing the summary in
-    the background.
+10. Neurotrax closes capture automatically after fourteen seconds and begins
+    preparing the summary in the background.
 11. Two grounded encounter statements are available immediately while a short
     clinician-readable narrative is synthesized.
-12. The clinician opens the prepared summary, inspects the evidence, and
-    approves or dismisses it.
+12. The results workspace opens automatically; the clinician inspects the
+    evidence, can copy the formatted report into an authorized documentation
+    workflow, and approves or dismisses it.
+13. Approval establishes today as Visit 1 and shows how future routine visits
+    could form a within-patient trajectory without inventing prior history.
 
-The guided assessment is designed to complete in approximately 20–30 seconds
-after the system check.
+The system check and guided assessment complete in approximately nineteen
+seconds. Narrative availability cannot delay access to the two grounded
+modality outcomes.
 
 ## How this could make care better, faster, and less expensive
 
@@ -176,8 +187,8 @@ benefits rather than claims of demonstrated clinical performance.
   manually.
 - **Concise handoff:** the clinician receives two bounded statements rather
   than an unstructured stream of technical output.
-- **Prefetched synthesis:** summary preparation begins as soon as the required
-  measurement windows are complete, reducing the visible wait after capture.
+- **Immediate evidence:** measured or withheld modality outcomes appear as soon
+  as capture ends, without waiting for narrative synthesis.
 - **Faster verification:** selecting a statement opens its supporting evidence
   immediately.
 
@@ -235,11 +246,11 @@ These measurements are exploratory engineering outputs. Neurotrax does not:
 Every summary statement can be followed back through the system:
 
 ```text
-statement
-  → measurement
-  → audiovisual window
+agent decision
+  → accepted or withheld window
+  → measurement or abstention
   → quality conditions
-  → originating agent events
+  → grounded statement
 ```
 
 This trace separates three responsibilities that should not be collapsed:
@@ -247,6 +258,10 @@ This trace separates three responsibilities that should not be collapsed:
 1. measuring a signal;
 2. describing what was measured; and
 3. deciding what, if anything, to do clinically.
+
+“EHR-ready” means the report is formatted for clinician-reviewed copy or
+export. This demonstration does not connect to or write into an electronic
+health record.
 
 ## Running Neurotrax locally
 

@@ -11,11 +11,15 @@ export interface FaceCalibration {
   baselineIllumination: number;
 }
 
+export type CalibrationQuality = "strong" | "limited" | "unavailable";
+
 export interface CaptureCalibration {
-  profileId: "macbook-guided-v0.1";
+  profileId: "macbook-timed-v0.2";
   calibratedAt: string;
   audio: AudioCalibration;
-  face: FaceCalibration;
+  audioQuality: CalibrationQuality;
+  face: FaceCalibration | null;
+  faceQuality: CalibrationQuality;
 }
 
 export interface CaptureQualityPolicy {
@@ -25,4 +29,34 @@ export interface CaptureQualityPolicy {
   faceQualityDebounceMs: number;
   faceFramingFloor: number;
   maximumFaceYawDegrees: number;
+}
+
+export type TimedEncounterPhase =
+  | "establishing"
+  | "turn-away"
+  | "return"
+  | "post-recovery";
+
+export type ConfirmationState =
+  | "pending"
+  | "confirmed"
+  | "not-confirmed";
+
+export interface TimedEncounterPhasePolicy {
+  phase: TimedEncounterPhase;
+  minimumDurationMs: number;
+  maximumDurationMs: number;
+  successCondition: string;
+  timeoutBehavior: "advance-and-record-not-confirmed";
+}
+
+export interface TimedEncounterPolicy {
+  id: "judge-ready-timed-v0.1";
+  systemCheckMaximumMs: number;
+  quietCalibrationMs: number;
+  reliablePitchFramesForStrong: number;
+  minimumSpeechEnergyFrames: number;
+  faceFramesForStrong: number;
+  faceFramesForLimited: number;
+  phases: readonly TimedEncounterPhasePolicy[];
 }

@@ -30,16 +30,18 @@ windows, and emits append-only workflow events.
 
 ## Guided workflow
 
-The browser-level guided controller does not create measurements. It observes
-real capture state and closes capture automatically only after:
+The browser-level guided controller does not create measurements. It runs a
+fixed fourteen-second policy:
 
-1. a speech window and initial facial window;
-2. facial withholding while speech continues;
-3. facial recovery;
-4. a post-recovery facial window.
+1. four seconds centered and speaking;
+2. three seconds turning away while speaking;
+3. four seconds returning to center;
+4. three seconds for the final measurement window.
 
-The conductor remains responsible for the authoritative observation and
-abstentions.
+Each phase records `confirmed`, `not-confirmed`, or `pending`. The coordinator
+always advances at the phase deadline, while the conductor remains responsible
+for authoritative measurements and abstentions. Only missing consent or denied
+device access can prevent the encounter from starting.
 
 ## Signal extraction
 
@@ -51,20 +53,25 @@ Facial Analysis derives landmarks, blendshape proxies, pose, geometry,
 illumination, and normalized movement in an isolated browser thread. Framing
 is evaluated relative to the system-check baseline.
 
-## Clinical synthesis
+## Clinical synthesis and report export
 
-The evidence layer selects exactly one supported speech aggregate and one
-supported facial aggregate from the current encounter. It creates immutable
-claim facts with measurement, window, quality, and event references.
+The evidence layer creates exactly one speech outcome and one facial outcome.
+Each is either measured, with immutable measurement and provenance, or
+withheld, with a reason, quality facts, and evidence references.
 
 As soon as the final valid window closes, the application assembles both
 grounded statements and starts server-side synthesis in the background. The
 synthesis service returns only a short headline and one-sentence narrative.
-Application code attaches the exact claim statements and review boundary,
+Application code attaches the exact outcome statements and review boundary,
 then a deterministic validator rejects unsupported numbers or clinical
 interpretation. This smaller generation contract reduces latency and prevents
-claim drift. The user may inspect the measured evidence while synthesis is in
-progress, then approve or dismiss the completed summary.
+claim drift. If narrative synthesis is unavailable, the two deterministic
+outcomes remain reviewable and the interface never waits indefinitely.
+
+Only measured outcomes appear in the EHR-ready report. Unavailable modalities
+remain part of acquisition provenance but are omitted from the clinical
+narrative. The copy action places the clinician-reviewed report on the local
+clipboard; no EHR connection or write is implemented.
 
 ## Data flow
 
@@ -77,10 +84,11 @@ flowchart TD
     SESSION --> FACE["Facial Analysis"]
     AUDIO --> OBS["EncounterObservation"]
     FACE --> OBS
-    OBS --> FACTS["Two current-encounter facts"]
+    OBS --> FACTS["Speech + facial outcomes"]
     FACTS --> CLAIMS["Exact claims attached by code"]
     FACTS --> NARRATIVE["Short narrative synthesis"]
     CLAIMS --> GROUND["Deterministic grounding"]
     NARRATIVE --> GROUND
     GROUND --> REVIEW["Human review"]
+    REVIEW --> BASELINE["Approved Visit 1 baseline"]
 ```

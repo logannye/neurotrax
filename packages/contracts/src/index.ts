@@ -2,8 +2,13 @@ export type { CaptureMode } from "./capture-mode.js";
 export type {
   AudioCalibration,
   FaceCalibration,
+  CalibrationQuality,
   CaptureCalibration,
-  CaptureQualityPolicy
+  CaptureQualityPolicy,
+  TimedEncounterPhase,
+  ConfirmationState,
+  TimedEncounterPhasePolicy,
+  TimedEncounterPolicy
 } from "./calibration.js";
 export type {
   Modality,
@@ -38,6 +43,9 @@ export type {
 } from "./trajectory.js";
 export type {
   EvidenceClaimFact,
+  MeasuredModalityOutcome,
+  WithheldModalityOutcome,
+  ModalityOutcome,
   EvidenceCardClaim,
   EvidenceNarrativeDraft,
   EvidenceCardDraft,

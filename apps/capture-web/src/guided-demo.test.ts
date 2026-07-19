@@ -1,45 +1,103 @@
 import { describe, expect, it } from "vitest";
 import { createGuidedDemoController } from "./guided-demo.js";
 
-describe("guided demo controller", () => {
-  it("requires speech, initial face, withholding, recovery, and a final window", () => {
+describe("timed guided demo controller", () => {
+  it("holds each phase for its fixed duration while preserving confirmations", () => {
     const controller = createGuidedDemoController();
     controller.noteSpeechWindow();
-    for (let tMs = 0; tMs <= 1600; tMs += 100) {
-      controller.ingest({ tMs, speechActive: true, faceUsable: true });
-    }
-    expect(controller.snapshot().phase).toBe("turn-away");
+    controller.noteInitialFaceWindow();
+    expect(controller.tick(3_999).phase).toBe("establishing");
+    expect(controller.tick(4_000)).toMatchObject({
+      phase: "turn-away",
+      confirmations: { establishing: "confirmed" }
+    });
 
-    for (let tMs = 1700; tMs <= 2600; tMs += 100) {
-      controller.ingest({ tMs, speechActive: true, faceUsable: false });
-    }
-    expect(controller.snapshot().withholdingObserved).toBe(true);
-    expect(controller.snapshot().phase).toBe("return");
+    controller.noteWithholding(true);
+    expect(controller.tick(6_999).phase).toBe("turn-away");
+    expect(controller.tick(7_000)).toMatchObject({
+      phase: "return",
+      confirmations: { withholding: "confirmed" }
+    });
 
-    for (let tMs = 2700; tMs <= 3600; tMs += 100) {
-      controller.ingest({ tMs, speechActive: true, faceUsable: true });
-    }
-    expect(controller.snapshot().recoveryObserved).toBe(true);
+    controller.noteRecovery();
+    expect(controller.tick(11_000)).toMatchObject({
+      phase: "post-recovery",
+      confirmations: { recovery: "confirmed" }
+    });
 
-    for (let tMs = 3700; tMs <= 5300; tMs += 100) {
-      controller.ingest({ tMs, speechActive: true, faceUsable: true });
-    }
-    expect(controller.snapshot()).toMatchObject({
+    controller.notePostRecoveryWindow();
+    expect(controller.tick(14_000)).toMatchObject({
       phase: "complete",
-      postRecoveryWindowObserved: true,
+      confirmations: { postRecovery: "confirmed" },
       canComplete: true
     });
   });
 
-  it("does not count a turn-away when speech is not continuing", () => {
+  it("cannot stall when turn-away and recovery are not confirmed", () => {
     const controller = createGuidedDemoController();
     controller.noteSpeechWindow();
-    for (let tMs = 0; tMs <= 1600; tMs += 100) {
-      controller.ingest({ tMs, speechActive: true, faceUsable: true });
+    controller.tick(14_000);
+    expect(controller.snapshot()).toMatchObject({
+      phase: "complete",
+      confirmations: {
+        establishing: "not-confirmed",
+        withholding: "not-confirmed",
+        recovery: "not-confirmed",
+        postRecovery: "not-confirmed"
+      },
+      canComplete: true
+    });
+    expect(controller.snapshot().lastTransition).toMatchObject({
+      from: "post-recovery",
+      to: "complete",
+      outcome: "timed-out"
+    });
+  });
+
+  it("does not confirm withholding unless speech continued", () => {
+    const controller = createGuidedDemoController();
+    controller.tick(4_000);
+    controller.noteWithholding(false);
+    expect(controller.tick(7_000).confirmations.withholding).toBe(
+      "not-confirmed"
+    );
+  });
+
+  it("completes twenty varied deterministic replays within the timed budget", () => {
+    const scenarios = [
+      "hero",
+      "missed-turn",
+      "missed-recovery",
+      "missing-face",
+      "missing-speech"
+    ] as const;
+    for (let replay = 0; replay < 20; replay += 1) {
+      const scenario = scenarios[replay % scenarios.length];
+      const controller = createGuidedDemoController();
+      if (scenario !== "missing-speech") controller.noteSpeechWindow();
+      if (scenario !== "missing-face") controller.noteInitialFaceWindow();
+      controller.tick(4_000);
+      if (scenario !== "missed-turn" && scenario !== "missing-speech") {
+        controller.noteWithholding(true);
+      }
+      controller.tick(7_000);
+      if (
+        scenario !== "missed-recovery" &&
+        scenario !== "missing-face"
+      ) {
+        controller.noteRecovery();
+      }
+      controller.tick(11_000);
+      if (
+        scenario !== "missed-recovery" &&
+        scenario !== "missing-face"
+      ) {
+        controller.notePostRecoveryWindow();
+      }
+      const result = controller.tick(14_000);
+      expect(result.phase).toBe("complete");
+      expect(result.canComplete).toBe(true);
+      expect(14_000).toBeLessThan(25_000);
     }
-    for (let tMs = 1700; tMs <= 2800; tMs += 100) {
-      controller.ingest({ tMs, speechActive: false, faceUsable: false });
-    }
-    expect(controller.snapshot().withholdingObserved).toBe(false);
   });
 });

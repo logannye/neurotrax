@@ -69,6 +69,9 @@
                 <span id="guidance-step">System check</span>
                 <strong id="guidance-title">Calibrating environment</strong>
                 <p id="guidance-detail">Remain centered and follow the prompts.</p>
+                <div class="guidance-progress" aria-hidden="true">
+                  <span id="guidance-progress-fill"></span>
+                </div>
               </div>
             </div>
 
@@ -90,9 +93,8 @@
                   <span id="mic-meter-fill"></span>
                 </div>
                 <div class="signal-meta">
-                  <span><strong id="frame-count">0</strong> frames</span>
-                  <span><strong id="voiced-count">0</strong> active</span>
-                  <span><strong id="pitch-value">—</strong> pitch</span>
+                  <span><strong id="speech-duration-value">0.0 s</strong> usable</span>
+                  <span><strong id="pitch-coverage-value">0%</strong> pitch coverage</span>
                 </div>
               </section>
 
@@ -105,9 +107,8 @@
                   <span id="face-quality-fill"></span>
                 </div>
                 <div class="signal-meta">
-                  <span><strong id="face-frame-count">0</strong> frames</span>
-                  <span><strong id="face-yaw-value">—</strong> yaw</span>
-                  <span><strong id="face-fps-value">—</strong> FPS</span>
+                  <span><strong id="face-usability-value">0%</strong> usable</span>
+                  <span><strong id="face-recovery-value">Pending</strong> recovery</span>
                 </div>
               </section>
             </div>
@@ -141,7 +142,7 @@
             <div class="panel-heading">
               <div>
                 <p class="eyebrow">Live orchestration</p>
-                <h2 id="activity-heading">Assessment activity</h2>
+                <h2 id="activity-heading">Agent coordination</h2>
               </div>
               <span class="event-count" id="event-count">Standby</span>
             </div>
@@ -161,41 +162,52 @@
               </div>
             </div>
 
-            <div class="lane-stack">
-              <article class="lane-card" data-lane="capture-conductor">
-                <span class="lane-index">01</span>
+            <div class="agent-graph" id="agent-graph">
+              <article class="agent-node coordinator-node" data-lane="capture-conductor">
+                <span class="node-icon" aria-hidden="true">C</span>
                 <div>
                   <strong>Encounter Coordinator</strong>
                   <p id="conductor-status">Ready for a consented system check.</p>
                 </div>
                 <span class="lane-state" id="conductor-state">Ready</span>
               </article>
-              <article class="lane-card" data-lane="speech-acoustic">
-                <span class="lane-index">02</span>
-                <div>
-                  <strong>Speech Analysis</strong>
-                  <p id="speech-status">Waiting for room calibration.</p>
-                </div>
-                <span class="lane-state" id="speech-state">Waiting</span>
-              </article>
-              <article class="lane-card" data-lane="facial-expressivity">
-                <span class="lane-index">03</span>
-                <div>
-                  <strong>Facial Analysis</strong>
-                  <p id="face-status">Preparing local facial analysis.</p>
-                </div>
-                <span class="lane-state" id="face-lane-state">Preparing</span>
-              </article>
-              <article class="lane-card" data-lane="evidence-card">
-                <span class="lane-index">04</span>
+              <div class="graph-connector graph-split" aria-hidden="true"></div>
+              <div class="parallel-nodes">
+                <article class="agent-node" data-lane="speech-acoustic">
+                  <span class="node-icon" aria-hidden="true">S</span>
+                  <div>
+                    <strong>Speech Analysis</strong>
+                    <p id="speech-status">Waiting for room calibration.</p>
+                  </div>
+                  <span class="lane-state" id="speech-state">Waiting</span>
+                </article>
+                <article class="agent-node" data-lane="facial-expressivity">
+                  <span class="node-icon" aria-hidden="true">F</span>
+                  <div>
+                    <strong>Facial Analysis</strong>
+                    <p id="face-status">Preparing facial analysis.</p>
+                  </div>
+                  <span class="lane-state" id="face-lane-state">Preparing</span>
+                </article>
+              </div>
+              <div class="evidence-packet" id="evidence-packet" hidden>
+                Evidence routed
+              </div>
+              <p class="coordinator-decision" id="coordinator-decision">
+                Waiting to coordinate the assessment.
+              </p>
+              <div class="graph-connector" aria-hidden="true"></div>
+              <article class="agent-node synthesis-node" data-lane="evidence-card">
+                <span class="node-icon" aria-hidden="true">G</span>
                 <div>
                   <strong>Clinical Synthesis</strong>
                   <p id="evidence-status">Waiting for a completed assessment.</p>
                 </div>
                 <span class="lane-state" id="evidence-state">Waiting</span>
               </article>
-              <article class="lane-card" data-lane="clinician-review">
-                <span class="lane-index">05</span>
+              <div class="graph-connector" aria-hidden="true"></div>
+              <article class="agent-node review-node" data-lane="clinician-review">
+                <span class="node-icon" aria-hidden="true">R</span>
                 <div>
                   <strong>Clinician Review</strong>
                   <p id="review-status">No summary awaiting review.</p>
@@ -206,8 +218,8 @@
 
             <div class="activity-stream">
               <div class="activity-heading">
-                <h3>Recent activity</h3>
-                <span>Derived from live workflow events</span>
+                <h3>Agent decisions</h3>
+                <span>Observable workflow events</span>
               </div>
               <ol class="event-list" id="event-list">
                 <li class="event-placeholder">
@@ -215,6 +227,10 @@
                 </li>
               </ol>
             </div>
+            <details class="operator-diagnostics" id="operator-diagnostics" hidden>
+              <summary>Operator diagnostics</summary>
+              <pre id="operator-output"></pre>
+            </details>
           </aside>
         </section>
 
@@ -230,7 +246,7 @@
           <div class="result-section">
             <div class="section-heading">
               <span class="section-number">01</span>
-              <h3>Measured signals</h3>
+              <h3>Modality outcomes</h3>
             </div>
             <div class="aggregate-grid" id="aggregate-grid"></div>
           </div>
@@ -238,7 +254,7 @@
           <div class="result-section evidence-section" id="evidence-panel">
             <div class="section-heading">
               <span class="section-number">02</span>
-              <h3>Clinician Encounter Summary</h3>
+              <h3>EHR-ready encounter report</h3>
               <span class="summary-status" id="evidence-status-chip"
                 >Preparing</span
               >
@@ -261,6 +277,9 @@
               <div class="evidence-claims" id="evidence-claims"></div>
               <p class="boundary-statement" id="boundary-statement"></p>
               <div class="review-controls" id="review-controls">
+                <button class="button button-quiet" id="copy-report-button">
+                  Copy EHR-ready report
+                </button>
                 <button class="button button-primary" id="accept-button">
                   Approve summary
                 </button>
@@ -271,6 +290,32 @@
               <p class="review-outcome" id="review-outcome"></p>
             </article>
           </div>
+
+          <section class="baseline-panel" id="baseline-panel" hidden>
+            <div>
+              <p class="eyebrow">Patient-specific trajectory</p>
+              <h3>Today establishes Visit 1</h3>
+              <p>
+                Repeated routine visits can build a within-patient trajectory of
+                speech and facial function, helping clinicians recognize subtle
+                functional change remotely without extra hardware or a separate
+                testing session.
+              </p>
+            </div>
+            <div class="visit-timeline" aria-label="Future visit timeline">
+              <div class="visit-point visit-current">
+                <span>1</span><strong>Visit 1</strong><small>Established today</small>
+              </div>
+              <div class="visit-line" aria-hidden="true"></div>
+              <div class="visit-point visit-future">
+                <span>2</span><strong>Future visit</strong><small>Awaiting encounter</small>
+              </div>
+              <div class="visit-line" aria-hidden="true"></div>
+              <div class="visit-point visit-future">
+                <span>3</span><strong>Future visit</strong><small>Awaiting encounter</small>
+              </div>
+            </div>
+          </section>
 
           <aside class="trace-drawer" id="trace-drawer" hidden>
             <button

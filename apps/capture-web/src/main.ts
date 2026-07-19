@@ -7,20 +7,21 @@ import {
   type FaceLandmarkFrame
 } from "@neurotrax/ambient-core";
 import {
-  createEncounterClaimFacts,
+  createModalityOutcomes,
   EVIDENCE_BOUNDARY
 } from "@neurotrax/evidence-core";
 import type {
   AmbientActorId,
   AmbientEventType,
+  CalibrationQuality,
   CaptureCalibration,
   EncounterObservation,
   EvidenceCardClaim,
   EvidenceCardDraft,
-  EvidenceClaimFact,
   EvidenceSynthesisTiming,
   EventEnvelope,
   GroundingResult,
+  ModalityOutcome,
   ReviewDecision,
   WorkflowStage
 } from "@neurotrax/contracts";
@@ -31,13 +32,14 @@ import {
 } from "./audio-features.js";
 import {
   calibrateFaceFrame,
+  classifyAudioCalibration,
+  classifyFaceCalibration,
   createCaptureCalibration,
-  createFaceCalibration,
-  facePreflightPassed,
   preflightFaceGuidance
 } from "./capture-calibration.js";
 import {
   createGuidedDemoController,
+  JUDGE_READY_TIMED_POLICY,
   type GuidedDemoSnapshot
 } from "./guided-demo.js";
 
@@ -49,7 +51,6 @@ type CaptureState =
   | "ready"
   | "capturing"
   | "analyzing"
-  | "summary-ready"
   | "review"
   | "reviewed"
   | "error";
@@ -91,6 +92,8 @@ const guidanceCard = element<HTMLDivElement>("guidance-card");
 const guidanceStep = element<HTMLElement>("guidance-step");
 const guidanceTitle = element<HTMLElement>("guidance-title");
 const guidanceDetail = element<HTMLElement>("guidance-detail");
+const guidanceProgressFill =
+  element<HTMLSpanElement>("guidance-progress-fill");
 const consentCheckbox = element<HTMLInputElement>("consent-checkbox");
 const startButton = element<HTMLButtonElement>("start-button");
 const stopButton = element<HTMLButtonElement>("stop-button");
@@ -99,16 +102,18 @@ const captureHint = element<HTMLParagraphElement>("capture-hint");
 const headerMode = element<HTMLSpanElement>("header-mode");
 const privacyStatus = element<HTMLSpanElement>("privacy-status");
 const voiceState = element<HTMLElement>("voice-state");
-const frameCount = element<HTMLElement>("frame-count");
-const voicedCount = element<HTMLElement>("voiced-count");
-const pitchValue = element<HTMLElement>("pitch-value");
+const speechDurationValue =
+  element<HTMLElement>("speech-duration-value");
+const pitchCoverageValue =
+  element<HTMLElement>("pitch-coverage-value");
 const micMeter = element<HTMLDivElement>("mic-meter");
 const micMeterFill = element<HTMLSpanElement>("mic-meter-fill");
 const faceState = element<HTMLElement>("face-state");
 const faceQualityFill = element<HTMLSpanElement>("face-quality-fill");
-const faceFrameCount = element<HTMLElement>("face-frame-count");
-const faceYawValue = element<HTMLElement>("face-yaw-value");
-const faceFpsValue = element<HTMLElement>("face-fps-value");
+const faceUsabilityValue =
+  element<HTMLElement>("face-usability-value");
+const faceRecoveryValue =
+  element<HTMLElement>("face-recovery-value");
 const conductorStatus = element<HTMLParagraphElement>("conductor-status");
 const conductorState = element<HTMLSpanElement>("conductor-state");
 const speechStatus = element<HTMLParagraphElement>("speech-status");
@@ -121,6 +126,9 @@ const reviewStatus = element<HTMLParagraphElement>("review-status");
 const reviewState = element<HTMLSpanElement>("review-state");
 const eventCount = element<HTMLSpanElement>("event-count");
 const eventList = element<HTMLOListElement>("event-list");
+const coordinatorDecision =
+  element<HTMLParagraphElement>("coordinator-decision");
+const evidencePacket = element<HTMLDivElement>("evidence-packet");
 const resultsPanel = element<HTMLElement>("results-panel");
 const resultSummary = element<HTMLDivElement>("result-summary");
 const aggregateGrid = element<HTMLDivElement>("aggregate-grid");
@@ -134,6 +142,8 @@ const evidenceSummary = element<HTMLElement>("evidence-summary");
 const evidenceClaims = element<HTMLDivElement>("evidence-claims");
 const evidenceStatusChip = element<HTMLElement>("evidence-status-chip");
 const boundaryStatement = element<HTMLElement>("boundary-statement");
+const copyReportButton =
+  element<HTMLButtonElement>("copy-report-button");
 const acceptButton = element<HTMLButtonElement>("accept-button");
 const rejectButton = element<HTMLButtonElement>("reject-button");
 const reviewOutcome = element<HTMLParagraphElement>("review-outcome");
@@ -141,11 +151,18 @@ const traceDrawer = element<HTMLElement>("trace-drawer");
 const traceCloseButton = element<HTMLButtonElement>("trace-close-button");
 const traceTitle = element<HTMLElement>("trace-title");
 const traceContent = element<HTMLDivElement>("trace-content");
+const baselinePanel = element<HTMLElement>("baseline-panel");
+const operatorDiagnostics =
+  element<HTMLDetailsElement>("operator-diagnostics");
+const operatorOutput = element<HTMLPreElement>("operator-output");
 
 const query = new URLSearchParams(window.location.search);
 const testCaptureMode =
   import.meta.env.DEV && query.get("testCapture") === "1";
 const fastTestCapture = query.get("fast") === "1";
+const observeTestTransitions = query.get("observe") === "1";
+const testScenario = query.get("scenario") ?? "hero";
+const operatorMode = query.get("operator") === "1";
 
 let state: CaptureState = "idle";
 let mediaStream: MediaStream | null = null;
@@ -158,14 +175,17 @@ let faceInterval: number | null = null;
 let clockInterval: number | null = null;
 let preflightStartedAt = 0;
 let voiceCalibrationStartedAt = 0;
+let systemCheckTimer: number | null = null;
 let sessionStartedAtPerformance = 0;
 let sessionStartedAtEpoch = 0;
 let quietRmsSamples: number[] = [];
 let preflightFaceFrames: FaceLandmarkFrame[] = [];
 let preflightPitchedFrames = 0;
+let preflightSpeechEnergyFrames = 0;
 let calibration: CaptureCalibration | null = null;
 let audioFrames: AudioFeatureFrame[] = [];
 let receivedFaceFrameCount = 0;
+let usableFaceFrameCount = 0;
 let latestAudioFeature: DerivedAudioFeature | null = null;
 let latestFaceUsable = false;
 let faceWorkerBusy = false;
@@ -175,10 +195,17 @@ let readinessChecked = false;
 let conductorSession: ConductorSession | null = null;
 let allEvents: EventEnvelope[] = [];
 let latestObservation: EncounterObservation | null = null;
-let latestClaimFacts: EvidenceClaimFact[] = [];
+let latestOutcomes: [ModalityOutcome, ModalityOutcome] | null = null;
 let latestEvidence: EvidenceApiResult | null = null;
+let evidenceReviewReady = false;
 let captureFinalizationScheduled = false;
 let resultsVisible = false;
+let captureVisitId = "";
+let captureParticipantId = "developer-self-demo";
+let lastGuidedTransitionId = 0;
+let lastFaceQuality: "unknown" | "measurable" | "withheld" = "unknown";
+let faceWindowOpen = false;
+let packetTimer: number | null = null;
 const voiceTracker = createVoiceActivityTracker();
 const guidedDemo = createGuidedDemoController();
 
@@ -215,16 +242,15 @@ function setLane(
   stateElement.textContent = label;
   stateElement.dataset.status = status;
   statusElement.textContent = detail;
+  const node = stateElement.closest<HTMLElement>(".agent-node");
+  node?.classList.toggle("is-processing", status === "active");
+  node?.classList.toggle("is-warning", status === "warning");
 }
 
 function refreshStartAvailability(): void {
   if (state === "idle") {
     startButton.textContent = "Run system check";
-    startButton.disabled =
-      !consentCheckbox.checked ||
-      !faceWorkerReady ||
-      !synthesisReady ||
-      !readinessChecked;
+    startButton.disabled = !consentCheckbox.checked;
   } else if (state === "ready") {
     startButton.textContent = "Begin assessment";
     startButton.disabled = false;
@@ -242,7 +268,6 @@ function updateState(nextState: CaptureState, detail?: string): void {
     ready: "Check complete",
     capturing: "Assessment live",
     analyzing: "Preparing summary",
-    "summary-ready": "Summary ready",
     review: "Review ready",
     reviewed: "Complete",
     error: "Needs attention"
@@ -262,14 +287,8 @@ function updateState(nextState: CaptureState, detail?: string): void {
     stopButton.disabled = true;
   }
   if (nextState === "analyzing") {
-    stopButton.textContent = latestObservation
-      ? "View measured evidence"
-      : "Preparing summary";
-    stopButton.disabled = !latestObservation || resultsVisible;
-  }
-  if (nextState === "summary-ready") {
-    stopButton.textContent = "View encounter summary";
-    stopButton.disabled = false;
+    stopButton.textContent = "Summary in progress";
+    stopButton.disabled = true;
   }
   if (detail) captureHint.textContent = detail;
 }
@@ -277,6 +296,8 @@ function updateState(nextState: CaptureState, detail?: string): void {
 function clearEventList(): void {
   eventList.replaceChildren();
   eventCount.textContent = "Standby";
+  coordinatorDecision.textContent =
+    "Waiting to coordinate the assessment.";
 }
 
 function milestone(name: string): HTMLElement | null {
@@ -286,17 +307,46 @@ function milestone(name: string): HTMLElement | null {
 function updateMilestones(snapshot: GuidedDemoSnapshot): void {
   milestone("speech")?.classList.toggle(
     "is-complete",
-    snapshot.speechWindowObserved && snapshot.initialFaceWindowObserved
+    snapshot.confirmations.establishing === "confirmed" ||
+      snapshot.phase !== "establishing"
+  );
+  milestone("speech")?.classList.toggle(
+    "is-limited",
+    snapshot.confirmations.establishing === "not-confirmed"
   );
   milestone("withheld")?.classList.toggle(
     "is-complete",
-    snapshot.withholdingObserved
+    snapshot.confirmations.withholding === "confirmed" ||
+      ["return", "post-recovery", "complete"].includes(snapshot.phase)
+  );
+  milestone("withheld")?.classList.toggle(
+    "is-limited",
+    snapshot.confirmations.withholding === "not-confirmed"
   );
   milestone("recovered")?.classList.toggle(
     "is-complete",
-    snapshot.recoveryObserved && snapshot.postRecoveryWindowObserved
+    snapshot.confirmations.recovery === "confirmed" ||
+      ["post-recovery", "complete"].includes(snapshot.phase)
+  );
+  milestone("recovered")?.classList.toggle(
+    "is-limited",
+    snapshot.confirmations.recovery === "not-confirmed"
   );
   stopButton.disabled = true;
+
+  const phaseDuration =
+    snapshot.phase === "complete"
+      ? 1
+      : JUDGE_READY_TIMED_POLICY.phases.find(
+          (phase) => phase.phase === snapshot.phase
+        )?.maximumDurationMs ?? 1;
+  guidanceProgressFill.style.width = `${
+    snapshot.phase === "complete"
+      ? 100
+      : Math.round(
+          ((phaseDuration - snapshot.remainingMs) / phaseDuration) * 100
+        )
+  }%`;
 
   if (snapshot.phase === "establishing") {
     guidanceStep.textContent = "Step 1 of 4";
@@ -322,7 +372,7 @@ function updateMilestones(snapshot: GuidedDemoSnapshot): void {
     guidanceStep.textContent = "Capture complete";
     guidanceTitle.textContent = "Preparing encounter summary";
     guidanceDetail.textContent =
-      "Both signal lanes are complete. The camera and microphone will now be released.";
+      "The timed assessment is complete. Camera and microphone access will now be released.";
     captureHint.textContent =
       "All assessment requirements are complete. Preparing the encounter summary.";
   }
@@ -337,9 +387,109 @@ function updateMilestones(snapshot: GuidedDemoSnapshot): void {
   }
 }
 
+function recordTimedTransition(snapshot: GuidedDemoSnapshot): void {
+  const transition = snapshot.lastTransition;
+  if (!transition || transition.id <= lastGuidedTransitionId) return;
+  lastGuidedTransitionId = transition.id;
+  const confirmed = transition.outcome === "confirmed";
+  const completion = emitWorkflowEvent(
+    "capture-conductor",
+    confirmed ? "demo.phase.completed" : "demo.phase.timed-out",
+    "ambient-capture",
+    confirmed
+      ? `Completed the ${transition.from} phase with its target signal confirmed.`
+      : `Completed the ${transition.from} phase on time; the target signal was not confirmed.`,
+    {
+      phase: transition.from,
+      confirmation: confirmed ? "confirmed" : "not-confirmed",
+      transitionAtMs: transition.atMs
+    }
+  );
+  const decisionSummary = confirmed
+    ? `Coordinator advanced after confirming ${transition.from.replaceAll("-", " ")}.`
+    : `Coordinator advanced on schedule and preserved ${transition.from.replaceAll("-", " ")} as not confirmed.`;
+  emitWorkflowEvent(
+    "capture-conductor",
+    "coordinator.decision.recorded",
+    "ambient-capture",
+    decisionSummary,
+    {
+      phase: transition.from,
+      decision: "advance",
+      confirmation: confirmed ? "confirmed" : "not-confirmed"
+    },
+    [],
+    completion.eventId
+  );
+  coordinatorDecision.textContent = decisionSummary;
+  if (transition.to !== "complete") {
+    emitWorkflowEvent(
+      "capture-conductor",
+      "demo.phase.started",
+      "ambient-capture",
+      `Started the ${transition.to} phase.`,
+      { phase: transition.to },
+      [],
+      completion.eventId
+    );
+  }
+}
+
+function advanceTimedEncounter(tMs: number): void {
+  if (state !== "capturing") return;
+  let snapshot = guidedDemo.tick(tMs);
+  recordTimedTransition(snapshot);
+  if (
+    snapshot.phase === "post-recovery" &&
+    faceWindowOpen &&
+    latestFaceUsable &&
+    tMs - snapshot.phaseStartedAt >= 1_500
+  ) {
+    snapshot = guidedDemo.notePostRecoveryWindow();
+  }
+  updateMilestones(snapshot);
+  faceRecoveryValue.textContent =
+    snapshot.confirmations.recovery === "confirmed"
+      ? "Confirmed"
+      : snapshot.confirmations.recovery === "not-confirmed"
+        ? "Not confirmed"
+        : "Pending";
+}
+
 function applyEventToLanes(event: EventEnvelope): void {
+  const actorNode = document.querySelector<HTMLElement>(
+    `[data-lane="${event.actor.id}"]`
+  );
+  if (actorNode) actorNode.dataset.eventId = event.eventId;
+  if (event.type === "capture.window.opened") {
+    evidencePacket.dataset.eventId = event.eventId;
+    evidencePacket.hidden = true;
+    window.clearTimeout(packetTimer ?? undefined);
+    requestAnimationFrame(() => {
+      evidencePacket.hidden = false;
+      packetTimer = window.setTimeout(() => {
+        evidencePacket.hidden = true;
+      }, 1_100);
+    });
+  }
   if (event.type === "capture.window.opened" && event.payload.modality === "speech") {
     updateMilestones(guidedDemo.noteSpeechWindow());
+  }
+  if (
+    event.type === "capture.window.opened" &&
+    event.payload.modality === "face"
+  ) {
+    faceWindowOpen = true;
+    const snapshot = guidedDemo.snapshot();
+    if (snapshot.phase === "establishing") {
+      updateMilestones(guidedDemo.noteInitialFaceWindow());
+    }
+  }
+  if (
+    event.type === "capture.window.closed" &&
+    event.payload.modality === "face"
+  ) {
+    faceWindowOpen = false;
   }
   if (event.type === "capture.quality.changed") {
     const quality = event.payload.quality;
@@ -356,13 +506,33 @@ function applyEventToLanes(event: EventEnvelope): void {
       );
     }
     if (event.actor.id === "facial-expressivity") {
+      const nextFaceQuality =
+        quality === "measurable" ? "measurable" : "withheld";
+      const snapshot = guidedDemo.snapshot();
+      if (nextFaceQuality === "withheld") {
+        updateMilestones(
+          guidedDemo.noteWithholding(
+            latestAudioFeature?.voiced ?? false
+          )
+        );
+        coordinatorDecision.textContent =
+          "Facial signal withheld · continuing speech analysis";
+      } else if (
+        lastFaceQuality === "withheld" &&
+        ["return", "post-recovery"].includes(snapshot.phase)
+      ) {
+        updateMilestones(guidedDemo.noteRecovery());
+        coordinatorDecision.textContent =
+          "Facial signal restored · both modalities reconnected";
+      }
+      lastFaceQuality = nextFaceQuality;
       setLane(
         faceLaneState,
         faceStatus,
         quality === "measurable" ? "Restored" : "Withheld",
         quality === "measurable"
           ? "Facial signal is within the calibrated quality range."
-          : "Facial signal withheld until framing recovers.",
+          : `Facial measurement withheld · ${formatReason(reason)}`,
         quality === "measurable" ? "active" : "warning"
       );
     }
@@ -392,12 +562,59 @@ function applyEventToLanes(event: EventEnvelope): void {
       "active"
     );
   }
+  if (event.type === "coordinator.decision.recorded") {
+    coordinatorDecision.dataset.eventId = event.eventId;
+  }
 }
 
 function appendEvent(event: EventEnvelope): void {
-  allEvents.push(event);
-  applyEventToLanes(event);
+  const sequence = allEvents.length + 1;
+  const priorOccurredAt = allEvents.at(-1)?.occurredAt;
+  const occurredAt = new Date(
+    Math.max(
+      priorOccurredAt ? Date.parse(priorOccurredAt) : 0,
+      Date.parse(event.occurredAt)
+    )
+  ).toISOString();
+  const normalized: EventEnvelope = {
+    ...event,
+    sequence,
+    eventId: `${sequence}-${event.type}`,
+    occurredAt
+  };
+  allEvents.push(normalized);
+  if (operatorMode) {
+    operatorOutput.textContent = JSON.stringify(
+      {
+        policy: JUDGE_READY_TIMED_POLICY,
+        calibration,
+        latestEvent: normalized,
+        eventCount: allEvents.length
+      },
+      null,
+      2
+    );
+  }
+  applyEventToLanes(normalized);
   eventList.querySelector(".event-placeholder")?.remove();
+
+  const visibleTypes = new Set<AmbientEventType>([
+    "capture.window.opened",
+    "capture.quality.changed",
+    "measurement.abstained",
+    "demo.phase.timed-out",
+    "coordinator.decision.recorded",
+    "modality.outcome.created",
+    "evidence.grounding.completed",
+    "human-review.pending",
+    "human-review.accepted",
+    "human-review.rejected",
+    "baseline.established"
+  ]);
+  if (!visibleTypes.has(normalized.type)) {
+    eventCount.textContent = `${allEvents.length} workflow events`;
+    return;
+  }
 
   const item = document.createElement("li");
   item.className = "event-item";
@@ -407,7 +624,7 @@ function appendEvent(event: EventEnvelope): void {
   const copy = document.createElement("div");
   const meta = document.createElement("span");
   meta.className = "event-meta";
-  meta.textContent = event.actor.lane
+  meta.textContent = normalized.actor.lane
     .replace("capture-conductor", "Encounter Coordinator")
     .replace("speech-acoustic", "Speech Analysis")
     .replace("facial-expressivity", "Facial Analysis")
@@ -415,23 +632,23 @@ function appendEvent(event: EventEnvelope): void {
     .replace("clinician-review", "Clinician Review")
     .replace("capture-web", "Assessment");
   const summary = document.createElement("p");
-  summary.textContent = event.summary;
+  summary.textContent = normalized.summary;
   copy.append(meta, summary);
   item.append(marker, copy);
   eventList.append(item);
-  while (eventList.children.length > 6) {
+  while (eventList.children.length > 4) {
     eventList.firstElementChild?.remove();
   }
-  eventCount.textContent = `${allEvents.length} live events`;
+  eventCount.textContent = `${allEvents.length} workflow events`;
 }
 
 function workflowFactory() {
-  if (!latestObservation) {
-    throw new Error("A completed observation is required.");
+  if (!captureVisitId) {
+    throw new Error("An active encounter is required.");
   }
   return createEventFactory({
-    visitId: latestObservation.visitId,
-    participantId: latestObservation.participantId,
+    visitId: captureVisitId,
+    participantId: captureParticipantId,
     baseTimeMs: sessionStartedAtEpoch,
     initialSequence: allEvents.length
   });
@@ -457,7 +674,7 @@ function emitWorkflowEvent(
     causedByEventId
   );
   appendEvent(event);
-  return event;
+  return allEvents.at(-1)!;
 }
 
 function updateLiveAudio(feature: DerivedAudioFeature): void {
@@ -474,14 +691,20 @@ function updateLiveAudio(feature: DerivedAudioFeature): void {
     : feature.voiced
       ? "active"
       : "quiet";
-  frameCount.textContent =
-    state === "capturing" ? audioFrames.length.toString() : "—";
-  voicedCount.textContent =
+  const activeFrames =
     state === "capturing"
-      ? audioFrames.filter((frame) => frame.voiced).length.toString()
-      : "—";
-  pitchValue.textContent =
-    feature.pitchHz === null ? "—" : `${Math.round(feature.pitchHz)} Hz`;
+      ? audioFrames.filter((frame) => frame.voiced).length
+      : preflightSpeechEnergyFrames;
+  const pitchedFrames =
+    state === "capturing"
+      ? audioFrames.filter((frame) => frame.pitchHz !== null).length
+      : preflightPitchedFrames;
+  speechDurationValue.textContent = `${(activeFrames / 10).toFixed(1)} s`;
+  pitchCoverageValue.textContent = `${
+    activeFrames === 0
+      ? 0
+      : Math.round((pitchedFrames / activeFrames) * 100)
+  }%`;
 }
 
 function updateLiveFace(
@@ -490,12 +713,23 @@ function updateLiveFace(
   guidance: string
 ): void {
   receivedFaceFrameCount += 1;
-  faceFrameCount.textContent =
-    state === "capturing" ? receivedFaceFrameCount.toString() : "—";
-  faceYawValue.textContent = `${Math.round(frame.yawDegrees ?? 0)}°`;
-  faceFpsValue.textContent = frame.observedFrameRate.toFixed(0);
+  if (state === "capturing" && usable) usableFaceFrameCount += 1;
   faceQualityFill.style.width = `${Math.round(
     frame.framingFraction * 100
+  )}%`;
+  const sourceFrames =
+    state === "capturing"
+      ? receivedFaceFrameCount
+      : Math.max(1, preflightFaceFrames.length);
+  const usableFrames =
+    state === "capturing"
+      ? usableFaceFrameCount
+      : preflightFaceFrames.filter(
+          (candidate) =>
+            preflightFaceGuidance(candidate) === "Face ready"
+        ).length;
+  faceUsabilityValue.textContent = `${Math.round(
+    (usableFrames / Math.max(1, sourceFrames)) * 100
   )}%`;
   faceState.textContent = usable ? "Measurable" : "Withheld";
   faceState.dataset.status = usable ? "active" : "warning";
@@ -539,50 +773,71 @@ function drawFaceOverlay(
   }
 }
 
-function checkPreflightReady(): void {
-  if (
-    calibration ||
-    preflightPitchedFrames < 10 ||
-    !facePreflightPassed(preflightFaceFrames)
-  ) {
-    return;
+function completeSystemCheck(): void {
+  if (calibration) return;
+  if (quietRmsSamples.length === 0) {
+    quietRmsSamples = [0.002, 0.002, 0.002];
   }
+  voiceTracker.calibrate(quietRmsSamples);
+  const audioQuality: CalibrationQuality = classifyAudioCalibration(
+    preflightPitchedFrames,
+    preflightSpeechEnergyFrames
+  );
+  const faceResult = faceWorkerReady
+    ? classifyFaceCalibration(preflightFaceFrames)
+    : {
+        quality: "unavailable" as const,
+        calibration: null,
+        usableFrameCount: 0
+      };
   calibration = createCaptureCalibration(
     voiceTracker.getCalibration(),
-    createFaceCalibration(preflightFaceFrames)
+    audioQuality,
+    faceResult
   );
   window.clearInterval(sampleInterval ?? undefined);
   window.clearInterval(faceInterval ?? undefined);
+  window.clearTimeout(systemCheckTimer ?? undefined);
   sampleInterval = null;
   faceInterval = null;
+  systemCheckTimer = null;
   guidanceStep.textContent = "System check complete";
   guidanceTitle.textContent = "Ready to begin";
   guidanceDetail.textContent =
-    "Framing, room conditions, and speech signal are calibrated.";
+    audioQuality === "strong" && faceResult.quality === "strong"
+      ? "Speech and facial conditions are ready."
+      : "Assessment can continue; limited signals will be reported honestly.";
+  guidanceProgressFill.style.width = "100%";
   setLane(
     conductorState,
     conductorStatus,
     "Ready",
-    "The calibrated assessment can begin.",
+    "The timed assessment is ready to begin.",
     "complete"
   );
   setLane(
     speechState,
     speechStatus,
-    "Ready",
-    "Room conditions and speech signal verified.",
-    "complete"
+    audioQuality === "strong" ? "Strong" : "Limited",
+    audioQuality === "strong"
+      ? "Speech conditions are ready."
+      : "Speech quality is limited; the assessment will continue.",
+    audioQuality === "strong" ? "complete" : "warning"
   );
   setLane(
     faceLaneState,
     faceStatus,
-    "Ready",
-    "Facial position and illumination verified.",
-    "complete"
+    faceResult.quality === "strong" ? "Strong" : faceResult.quality === "limited" ? "Limited" : "Unavailable",
+    faceResult.quality === "strong"
+      ? "Facial conditions are ready."
+      : faceResult.quality === "limited"
+        ? "Facial quality is limited; the assessment will continue."
+        : "Facial signal is unavailable; the assessment will continue.",
+    faceResult.quality === "strong" ? "complete" : "warning"
   );
   updateState(
     "ready",
-    "System check complete. Begin the ambient assessment when ready."
+    "System check complete. Begin the timed ambient assessment when ready."
   );
 }
 
@@ -597,12 +852,26 @@ function sampleAudioFrame(): void {
   }
   analyser.getFloatTimeDomainData(sampleBuffer);
   const now = performance.now();
+  if (state === "calibrating-quiet" || state === "calibrating-voice") {
+    guidanceProgressFill.style.width = `${Math.min(
+      100,
+      Math.round(
+        ((now - preflightStartedAt) /
+          JUDGE_READY_TIMED_POLICY.systemCheckMaximumMs) *
+          100
+      )
+    )}%`;
+  }
 
   if (state === "calibrating-quiet") {
     const rms = calculateRms(sampleBuffer);
     quietRmsSamples.push(rms);
     micMeterFill.style.width = `${Math.min(100, Math.round(rms * 900))}%`;
-    if (now - preflightStartedAt >= 1500 && quietRmsSamples.length >= 12) {
+    if (
+      now - preflightStartedAt >=
+        JUDGE_READY_TIMED_POLICY.quietCalibrationMs &&
+      quietRmsSamples.length >= 8
+    ) {
       voiceTracker.calibrate(quietRmsSamples);
       voiceCalibrationStartedAt = now;
       state = "calibrating-voice";
@@ -627,19 +896,16 @@ function sampleAudioFrame(): void {
   updateLiveAudio(derived);
 
   if (state === "calibrating-voice") {
+    if (derived.rms >= voiceTracker.getCalibration().entryThresholdRms) {
+      preflightSpeechEnergyFrames += 1;
+    }
     if (derived.voiced && derived.pitchConfidence >= 0.55) {
       preflightPitchedFrames += 1;
     }
     guidanceDetail.textContent = `${Math.min(
-      10,
+      JUDGE_READY_TIMED_POLICY.reliablePitchFramesForStrong,
       preflightPitchedFrames
-    )} of 10 speech samples verified`;
-    if (
-      performance.now() - voiceCalibrationStartedAt >= 2000 &&
-      preflightPitchedFrames >= 10
-    ) {
-      checkPreflightReady();
-    }
+    )} of ${JUDGE_READY_TIMED_POLICY.reliablePitchFramesForStrong} reliable speech samples · check ends automatically`;
     return;
   }
 
@@ -655,6 +921,7 @@ function sampleAudioFrame(): void {
 async function sampleFaceFrame(): Promise<void> {
   if (
     !["calibrating-quiet", "calibrating-voice", "capturing"].includes(state) ||
+    !faceWorkerReady ||
     faceWorkerBusy ||
     cameraPreview.readyState < HTMLMediaElement.HAVE_CURRENT_DATA
   ) {
@@ -695,10 +962,13 @@ function processCapturedFace(
 ): void {
   if (!calibration || !conductorSession) return;
   const tMs = Math.round(performance.now() - sessionStartedAtPerformance);
-  const calibrated = calibrateFaceFrame(
-    { ...rawFrame, tMs },
-    calibration.face
-  );
+  const calibrated = calibration.face
+    ? calibrateFaceFrame({ ...rawFrame, tMs }, calibration.face)
+    : {
+        frame: { ...rawFrame, tMs, framingFraction: 0 },
+        usable: false,
+        guidance: "Move into view" as const
+      };
   latestFaceUsable = calibrated.usable;
   conductorSession.ingestFace(calibrated.frame);
   updateLiveFace(
@@ -707,20 +977,13 @@ function processCapturedFace(
     calibrated.guidance
   );
   drawFaceOverlay(overlayPoints, boundingBox, calibrated.usable);
-  updateMilestones(
-    guidedDemo.ingest({
-      tMs,
-      speechActive: latestAudioFeature?.voiced ?? false,
-      faceUsable: calibrated.usable
-    })
-  );
 }
 
 function updateClock(): void {
   if (state !== "capturing") return;
-  sessionClock.textContent = formatElapsed(
-    performance.now() - sessionStartedAtPerformance
-  );
+  const elapsed = performance.now() - sessionStartedAtPerformance;
+  sessionClock.textContent = formatElapsed(elapsed);
+  advanceTimedEncounter(elapsed);
 }
 
 async function initializeMedia(): Promise<void> {
@@ -749,12 +1012,7 @@ async function initializeMedia(): Promise<void> {
 }
 
 async function runSystemCheck(): Promise<void> {
-  if (
-    state !== "idle" ||
-    !consentCheckbox.checked ||
-    !faceWorkerReady ||
-    !synthesisReady
-  ) {
+  if (state !== "idle" || !consentCheckbox.checked) {
     return;
   }
   updateState("requesting", "Allow camera and microphone access to continue.");
@@ -769,10 +1027,24 @@ async function runSystemCheck(): Promise<void> {
       ]);
       calibration = createCaptureCalibration(
         voiceTracker.getCalibration(),
+        testScenario === "limited-calibration" ? "limited" : "strong",
         {
-          baselineBoxWidth: 0.24,
-          baselineBoxHeight: 0.4,
-          baselineIllumination: 0.58
+          quality:
+            testScenario === "missing-face"
+              ? "unavailable"
+              : testScenario === "limited-calibration"
+                ? "limited"
+                : "strong",
+          calibration:
+            testScenario === "missing-face"
+              ? null
+              : {
+                  baselineBoxWidth: 0.24,
+                  baselineBoxHeight: 0.4,
+                  baselineIllumination: 0.58
+                },
+          usableFrameCount:
+            testScenario === "missing-face" ? 0 : 12
         }
       );
       cameraEmpty.querySelector("strong")!.textContent =
@@ -783,20 +1055,22 @@ async function runSystemCheck(): Promise<void> {
       guidanceStep.textContent = "System check complete";
       guidanceTitle.textContent = "Ready to begin";
       guidanceDetail.textContent =
-        "Framing, room conditions, and speech signal are calibrated.";
+        "The timed assessment is ready.";
       setLane(
         speechState,
         speechStatus,
-        "Ready",
-        "Room conditions and speech signal verified.",
-        "complete"
+        testScenario === "limited-calibration" ? "Limited" : "Strong",
+        "Speech conditions were classified without blocking progression.",
+        testScenario === "limited-calibration" ? "warning" : "complete"
       );
       setLane(
         faceLaneState,
         faceStatus,
-        "Ready",
-        "Facial position and illumination verified.",
-        "complete"
+        testScenario === "missing-face" ? "Unavailable" : "Strong",
+        testScenario === "missing-face"
+          ? "Facial signal is unavailable; the assessment will continue."
+          : "Facial conditions are ready.",
+        testScenario === "missing-face" ? "warning" : "complete"
       );
       updateState(
         "ready",
@@ -810,6 +1084,7 @@ async function runSystemCheck(): Promise<void> {
     quietRmsSamples = [];
     preflightFaceFrames = [];
     preflightPitchedFrames = 0;
+    preflightSpeechEnergyFrames = 0;
     calibration = null;
     voiceTracker.reset();
     cameraEmpty.hidden = true;
@@ -846,6 +1121,10 @@ async function runSystemCheck(): Promise<void> {
     headerMode.textContent = "System check";
     sampleInterval = window.setInterval(sampleAudioFrame, 100);
     faceInterval = window.setInterval(() => void sampleFaceFrame(), 100);
+    systemCheckTimer = window.setTimeout(
+      completeSystemCheck,
+      JUDGE_READY_TIMED_POLICY.systemCheckMaximumMs
+    );
   } catch {
     await releaseMedia();
     setLane(
@@ -868,22 +1147,29 @@ function prepareConductor(): void {
   resultsVisible = false;
   audioFrames = [];
   receivedFaceFrameCount = 0;
+  usableFaceFrameCount = 0;
   latestAudioFeature = null;
   latestFaceUsable = false;
   voiceTracker.reset();
-  guidedDemo.reset();
+  guidedDemo.reset(0);
   sessionStartedAtPerformance = performance.now();
   sessionStartedAtEpoch = Date.now();
   allEvents = [];
   clearEventList();
   latestObservation = null;
-  latestClaimFacts = [];
+  latestOutcomes = null;
   latestEvidence = null;
+  evidenceReviewReady = false;
+  lastGuidedTransitionId = 0;
+  lastFaceQuality = "unknown";
+  faceWindowOpen = false;
+  baselinePanel.hidden = true;
+  captureVisitId = `visit-${crypto.randomUUID()}`;
   conductorSession = createConductorSession(
     {
       containsPHI: false,
-      visitId: `visit-${crypto.randomUUID()}`,
-      participantId: "developer-self-demo",
+      visitId: captureVisitId,
+      participantId: captureParticipantId,
       captureMode: "live",
       occurredAt: new Date(sessionStartedAtEpoch).toISOString(),
       captureAdapter: { id: "macbook-browser", version: "0.3.0" },
@@ -898,17 +1184,27 @@ function prepareConductor(): void {
 
 function startTestCapture(): void {
   let fixtureTimeMs = 0;
-  const intervalMs = fastTestCapture ? 8 : 100;
+  const intervalMs = observeTestTransitions
+    ? 30
+    : fastTestCapture
+      ? 8
+      : 100;
   sampleInterval = window.setInterval(() => {
     if (state !== "capturing" || !conductorSession) return;
+    const speechAvailable = testScenario !== "missing-speech";
     const audio: AudioFeatureFrame & DerivedAudioFeature = {
       tMs: fixtureTimeMs,
-      voiced: true,
-      rms: 0.07,
-      pitchHz: fixtureTimeMs % 400 < 200 ? 122 : 158,
-      pitchConfidence: 0.92,
+      voiced: speechAvailable,
+      rms: speechAvailable ? 0.07 : 0.002,
+      pitchHz:
+        speechAvailable
+          ? fixtureTimeMs % 400 < 200
+            ? 122
+            : 158
+          : null,
+      pitchConfidence: speechAvailable ? 0.92 : 0,
       clipped: false,
-      snrDb: 24
+      snrDb: speechAvailable ? 24 : 0
     };
     latestAudioFeature = audio;
     audioFrames.push(audio);
@@ -916,29 +1212,36 @@ function startTestCapture(): void {
     updateLiveAudio(audio);
 
     const turnedAway =
-      fixtureTimeMs >= 1900 && fixtureTimeMs <= 2900;
+      testScenario === "missing-face" ||
+      (testScenario === "missed-recovery" && fixtureTimeMs >= 4_200) ||
+      (testScenario !== "missed-turn" &&
+        fixtureTimeMs >= 4_200 &&
+        fixtureTimeMs <= 6_400);
+    const unavailableFace = testScenario === "missing-face";
+    const faceWithheld = turnedAway || unavailableFace;
     const face: FaceLandmarkFrame = {
       tMs: fixtureTimeMs,
-      faceVisible: !turnedAway,
-      framingFraction: turnedAway ? 0 : 0.9,
+      faceVisible: !faceWithheld,
+      framingFraction: faceWithheld ? 0 : 0.9,
       illumination: 0.58,
-      yawDegrees: turnedAway ? 48 : 5,
+      yawDegrees: faceWithheld ? 48 : 5,
       eyeAspectRatio: fixtureTimeMs % 1300 === 0 ? 0.15 : 0.31,
       browRaise: 0.15 + (fixtureTimeMs % 500) / 5000,
       mouthOpen: 0.12,
       landmarkMotion: 0.04 + (fixtureTimeMs % 300) / 30000,
       observedFrameRate: 10,
-      faceBoxWidth: turnedAway ? 0 : 0.24,
-      faceBoxHeight: turnedAway ? 0 : 0.4,
-      edgeMargin: turnedAway ? 0 : 0.1
+      faceBoxWidth: faceWithheld ? 0 : 0.24,
+      faceBoxHeight: faceWithheld ? 0 : 0.4,
+      edgeMargin: faceWithheld ? 0 : 0.1
     };
     const originalNow = sessionStartedAtPerformance;
     sessionStartedAtPerformance = performance.now() - fixtureTimeMs;
     processCapturedFace(face);
     sessionStartedAtPerformance = originalNow;
     sessionClock.textContent = formatElapsed(fixtureTimeMs);
+    advanceTimedEncounter(fixtureTimeMs);
     fixtureTimeMs += 100;
-    if (fixtureTimeMs > 5600 && sampleInterval !== null) {
+    if (fixtureTimeMs > 14_100 && sampleInterval !== null) {
       window.clearInterval(sampleInterval);
       sampleInterval = null;
     }
@@ -977,19 +1280,37 @@ function startAssessment(): void {
   setLane(
     faceLaneState,
     faceStatus,
-    "Observing",
-    "Waiting for stable calibrated framing.",
-    "active"
+    calibration.faceQuality === "unavailable" ? "Unavailable" : "Observing",
+    calibration.faceQuality === "unavailable"
+      ? "Facial signal is unavailable; the timed workflow will continue."
+      : "Waiting for stable calibrated framing.",
+    calibration.faceQuality === "unavailable" ? "warning" : "active"
   );
   updateState(
     "capturing",
     "Follow the four guided steps to complete the assessment."
   );
   updateMilestones(guidedDemo.snapshot());
-  clockInterval = window.setInterval(updateClock, 250);
+  emitWorkflowEvent(
+    "capture-conductor",
+    "demo.phase.started",
+    "ambient-capture",
+    "Started the establishing phase.",
+    { phase: "establishing" }
+  );
+  emitWorkflowEvent(
+    "capture-conductor",
+    "coordinator.decision.recorded",
+    "ambient-capture",
+    "Speech and facial analysis started in parallel.",
+    { decision: "start-parallel-analysis" }
+  );
+  coordinatorDecision.textContent =
+    "Speech and facial analysis started in parallel";
   if (testCaptureMode) {
     startTestCapture();
   } else {
+    clockInterval = window.setInterval(updateClock, 100);
     sampleInterval = window.setInterval(sampleAudioFrame, 100);
     faceInterval = window.setInterval(() => void sampleFaceFrame(), 100);
   }
@@ -1002,6 +1323,11 @@ async function releaseMedia(): Promise<void> {
   sampleInterval = null;
   faceInterval = null;
   clockInterval = null;
+  window.clearTimeout(systemCheckTimer ?? undefined);
+  window.clearTimeout(packetTimer ?? undefined);
+  systemCheckTimer = null;
+  packetTimer = null;
+  evidencePacket.hidden = true;
   mediaStream?.getTracks().forEach((track) => track.stop());
   mediaStream = null;
   cameraPreview.srcObject = null;
@@ -1028,14 +1354,15 @@ function renderObservation(
   reveal = true
 ): void {
   aggregateGrid.replaceChildren();
-  const faceWindows = observation.qualitySummary.faceWindowCount;
+  const outcomes = latestOutcomes ?? createModalityOutcomes(observation, allEvents);
+  const measuredCount = outcomes.filter(
+    (outcome) => outcome.status === "measured"
+  ).length;
   resultSummary.replaceChildren(
     ...[
-      `${observation.qualitySummary.speechWindowCount} speech window`,
-      `${faceWindows} facial windows`,
-      `${Math.round(
-        observation.qualitySummary.usableFaceFraction * 100
-      )}% usable facial frames`
+      "2 modality outcomes",
+      `${measuredCount} measured`,
+      `${2 - measuredCount} withheld`
     ].map((label) => {
       const span = document.createElement("span");
       span.textContent = label;
@@ -1043,39 +1370,36 @@ function renderObservation(
     })
   );
 
-  const preferredCodes = new Set([
-    "prototype.speech.pitch_variability",
-    "prototype.speech.voiced_time_fraction",
-    "prototype.face.expressivity",
-    "prototype.face.blink_rate"
-  ]);
-  const preferred = observation.aggregates.filter((aggregate) =>
-    preferredCodes.has(aggregate.code)
-  );
-  const displayed =
-    preferred.length >= 4 ? preferred.slice(0, 4) : observation.aggregates;
-
-  for (const aggregate of displayed) {
+  for (const outcome of outcomes) {
     const card = document.createElement("article");
     card.className = "aggregate-card";
+    card.dataset.status = outcome.status;
     const header = document.createElement("div");
     const label = document.createElement("strong");
-    label.textContent = aggregate.label;
+    label.textContent =
+      outcome.modality === "speech"
+        ? "Speech outcome"
+        : "Facial outcome";
     const context = document.createElement("span");
-    context.textContent = aggregate.contextKind.replaceAll("-", " ");
+    context.textContent = outcome.status;
     header.append(label, context);
     const value = document.createElement("p");
     value.className = "aggregate-value";
     const number = document.createElement("span");
-    number.textContent = formatValue(aggregate.value, aggregate.unit);
+    number.textContent =
+      outcome.status === "measured"
+        ? formatValue(outcome.currentValue, outcome.unit)
+        : "Withheld";
     const unit = document.createElement("small");
-    unit.textContent = aggregate.unit;
+    unit.textContent =
+      outcome.status === "measured" ? outcome.unit : "quality protected";
     value.append(number, unit);
     const footer = document.createElement("div");
     footer.className = "aggregate-footer";
-    footer.textContent = `${aggregate.windowCount} ${
-      aggregate.windowCount === 1 ? "window" : "windows"
-    } · confidence ${aggregate.confidence.toFixed(2)}`;
+    footer.textContent =
+      outcome.status === "measured"
+        ? outcome.statement
+        : `${outcome.statement} Reason: ${formatReason(outcome.reasonCode)}.`;
     card.append(header, value, footer);
     aggregateGrid.append(card);
   }
@@ -1094,11 +1418,14 @@ function renderClaimButtons(claims: EvidenceCardClaim[]): void {
     button.className = "evidence-claim";
     button.dataset.claimId = claim.claimId;
     const marker = document.createElement("span");
-    marker.textContent = "Grounded evidence";
+    marker.textContent =
+      claim.status === "withheld"
+        ? "Traceable abstention"
+        : "Grounded measurement";
     const statement = document.createElement("strong");
     statement.textContent = claim.statement;
     const trace = document.createElement("small");
-    trace.textContent = "Open measurement trace";
+    trace.textContent = "Open evidence chain";
     button.append(marker, statement, trace);
     button.addEventListener("click", () => openTrace(claim.claimId));
     evidenceClaims.append(button);
@@ -1114,17 +1441,22 @@ function renderPendingEvidence(): void {
   evidenceCard.hidden = false;
   evidenceHeadline.textContent = "Measured evidence assembled";
   evidenceSummary.textContent =
-    "Speech and facial findings are grounded to their measured windows while the encounter narrative is prepared.";
+    "Speech and facial outcomes are available now while the concise encounter narrative is prepared.";
   boundaryStatement.textContent = EVIDENCE_BOUNDARY;
   evidenceStatusChip.textContent = "Preparing summary";
   reviewOutcome.textContent = "";
   acceptButton.disabled = true;
   rejectButton.disabled = true;
+  copyReportButton.disabled = true;
   renderClaimButtons(
-    latestClaimFacts.map((fact) => ({
-      claimId: fact.claimId,
-      statement: fact.statement
-    }))
+    (latestOutcomes ?? [])
+      .filter((outcome) => outcome.status === "measured")
+      .map((outcome) => ({
+        claimId: outcome.outcomeId,
+        modality: outcome.modality,
+        status: outcome.status,
+        statement: outcome.statement
+      }))
   );
 }
 
@@ -1136,77 +1468,125 @@ function renderEvidence(result: EvidenceApiResult): void {
   evidenceHeadline.textContent = result.draft.headline;
   evidenceSummary.textContent = result.draft.summary;
   boundaryStatement.textContent = result.draft.boundaryStatement;
-  evidenceStatusChip.textContent = "Ready for review";
+  evidenceStatusChip.textContent = `${result.draft.claims.length} ${
+    result.draft.claims.length === 1 ? "metric" : "metrics"
+  } grounded`;
   reviewOutcome.textContent = "";
   acceptButton.disabled = false;
   rejectButton.disabled = false;
+  copyReportButton.disabled = false;
   renderClaimButtons(result.draft.claims);
 }
 
+async function copyClinicalReport(): Promise<void> {
+  if (!latestEvidence) return;
+  const report = [
+    latestEvidence.draft.headline,
+    latestEvidence.draft.summary,
+    "",
+    "Encounter metrics",
+    ...latestEvidence.draft.claims.map(
+      (claim) => `- ${claim.statement}`
+    ),
+    "",
+    latestEvidence.draft.boundaryStatement
+  ].join("\n");
+  try {
+    await navigator.clipboard.writeText(report);
+    reviewOutcome.textContent = "EHR-ready report copied.";
+  } catch {
+    reviewOutcome.textContent =
+      "Copy unavailable. Review the report on screen.";
+  }
+}
+
 function openTrace(claimId: string): void {
-  const fact = latestClaimFacts.find(
-    (candidate) => candidate.claimId === claimId
+  const outcome = latestOutcomes?.find(
+    (candidate) => candidate.outcomeId === claimId
   );
-  if (!fact || !latestObservation) return;
-  const aggregate = latestObservation.aggregates.find(
-    (candidate) => candidate.code === fact.measurementCode
-  );
-  const measurements = latestObservation.measurements.filter(
-    (measurement) => measurement.code === fact.measurementCode
-  );
+  if (!outcome || !latestObservation) return;
+  const aggregate =
+    outcome.status === "measured"
+      ? latestObservation.aggregates.find(
+          (candidate) => candidate.code === outcome.measurementCode
+        )
+      : undefined;
+  const measurements =
+    outcome.status === "measured"
+      ? latestObservation.measurements.filter(
+          (measurement) =>
+            measurement.code === outcome.measurementCode
+        )
+      : [];
   emitWorkflowEvent(
     "capture-web",
     "evidence.trace.opened",
     "evidence-card",
-    `Opened the measurement trace for ${fact.label}.`,
+    `Opened the evidence chain for ${outcome.label}.`,
     { claimId },
-    fact.supportRefs
+    outcome.supportRefs
   );
   const supportingEvents = allEvents.filter(
     (event) =>
-      fact.eventIds.includes(event.eventId) ||
+      outcome.eventIds.includes(event.eventId) ||
       event.payload.claimId === claimId
   );
 
-  traceTitle.textContent = fact.label;
+  traceTitle.textContent = outcome.label;
   traceContent.replaceChildren();
-  const quality =
-    fact.modality === "speech"
-      ? `Confidence ${aggregate?.confidence.toFixed(2) ?? "—"}\nSNR ${
-          aggregate?.confounds.snrDb.toFixed(1) ?? "—"
-        } dB\nPitch coverage ${Math.round(
-          latestObservation.qualitySummary.pitchCoverage * 100
-        )}%`
-      : `Confidence ${aggregate?.confidence.toFixed(2) ?? "—"}\nUsable frames ${Math.round(
-          latestObservation.qualitySummary.usableFaceFraction * 100
-        )}%\nFacial recovery ${
-          latestObservation.qualitySummary.faceRecoveryObserved
-            ? "confirmed"
-            : "not observed"
-        }\nFrame rate ${
-          aggregate?.confounds.observedFrameRate.toFixed(1) ?? "—"
-        } FPS`;
+  traceContent.className = "trace-chain";
+  const quality = Object.entries(outcome.qualityFacts)
+    .map(([key, value]) => `${formatReason(key)}: ${String(value)}`)
+    .join("\n");
+  const windowDescription =
+    outcome.status === "measured"
+      ? measurements
+          .map(
+            (measurement) =>
+              `Accepted ${measurement.windowStartMs}–${measurement.windowEndMs} ms`
+          )
+          .join("\n")
+      : latestObservation.abstentions
+          .filter(
+            (abstention) => abstention.modality === outcome.modality
+          )
+          .map(
+            (abstention) =>
+              `Withheld ${abstention.windowStartMs}–${abstention.windowEndMs} ms · ${formatReason(abstention.reasonCode)}`
+          )
+          .join("\n");
+  const measurementDescription =
+    outcome.status === "measured"
+      ? `${formatValue(outcome.currentValue, outcome.unit)} ${
+          outcome.unit
+        }\nConfidence ${aggregate?.confidence.toFixed(2) ?? "—"}`
+      : `No value produced\n${formatReason(outcome.reasonCode)}`;
   const sections = [
-    { title: "Grounded statement", value: fact.statement },
     {
-      title: "Current measurement",
-      value: measurements
-        .map(
-          (measurement) =>
-            `${formatValue(measurement.value, measurement.unit)} ${
-              measurement.unit
-            } · ${measurement.windowStartMs}–${
-              measurement.windowEndMs
-            } ms`
+      title: "Agent decision",
+      value: supportingEvents
+        .filter((event) =>
+          [
+            "capture.quality.changed",
+            "coordinator.decision.recorded",
+            "modality.outcome.created"
+          ].includes(event.type)
         )
+        .map((event) => `#${event.sequence} ${event.summary}`)
         .join("\n")
+    },
+    { title: "Accepted or withheld window", value: windowDescription },
+    {
+      title:
+        outcome.status === "measured"
+          ? "Measurement"
+          : "Abstention",
+      value: measurementDescription
     },
     { title: "Quality conditions", value: quality },
     {
-      title: "Originating activity",
-      value: supportingEvents
-        .map((event) => `#${event.sequence} ${event.summary}`)
-        .join("\n")
+      title: "Grounded statement",
+      value: outcome.statement
     }
   ];
   for (const section of sections) {
@@ -1222,9 +1602,9 @@ function openTrace(claimId: string): void {
 }
 
 async function synthesizeEvidence(): Promise<void> {
-  if (!latestObservation || latestClaimFacts.length !== 2) {
+  if (!latestObservation || latestOutcomes?.length !== 2) {
     throw new Error(
-      "One speech fact and one facial fact are required."
+      "One speech outcome and one facial outcome are required."
     );
   }
   evidenceLoading.hidden = false;
@@ -1238,21 +1618,25 @@ async function synthesizeEvidence(): Promise<void> {
     "evidence-card.requested",
     "evidence-card",
     "Requested a structured current-encounter summary.",
-    { claimIds: latestClaimFacts.map((fact) => fact.claimId) },
-    latestClaimFacts.flatMap((fact) => fact.supportRefs)
+    { outcomeIds: latestOutcomes.map((outcome) => outcome.outcomeId) },
+    latestOutcomes.flatMap((outcome) => outcome.supportRefs)
   );
 
   try {
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 10_000);
     const response = await fetch("/api/evidence-card", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
+      signal: controller.signal,
       body: JSON.stringify({
         containsPHI: false,
         visitId: latestObservation.visitId,
         qualitySummary: latestObservation.qualitySummary,
-        facts: latestClaimFacts
+        outcomes: latestOutcomes
       })
     });
+    window.clearTimeout(timeout);
     const body = (await response.json()) as
       | EvidenceApiResult
       | { error: string };
@@ -1274,21 +1658,36 @@ async function synthesizeEvidence(): Promise<void> {
         attemptCount: body.attemptCount,
         timing: body.timing
       },
-      latestClaimFacts.flatMap((fact) => fact.supportRefs)
+      latestOutcomes.flatMap((outcome) => outcome.supportRefs)
     );
     for (const claimId of body.grounding.groundedClaimIds) {
-      const fact = latestClaimFacts.find(
-        (candidate) => candidate.claimId === claimId
+      const outcome = latestOutcomes.find(
+        (candidate) => candidate.outcomeId === claimId
       );
       emitWorkflowEvent(
         "evidence-card",
         "evidence-claim.grounded",
         "evidence-card",
-        `Grounded ${fact?.label ?? "encounter evidence"} to its measurement trace.`,
+        `Grounded ${outcome?.label ?? "encounter evidence"} to its evidence chain.`,
         { claimId },
-        fact?.supportRefs ?? []
+        outcome?.supportRefs ?? []
       );
     }
+    emitWorkflowEvent(
+      "evidence-card",
+      "evidence.grounding.completed",
+      "evidence-card",
+      `Grounded ${body.grounding.groundedClaimIds.length} encounter ${
+        body.grounding.groundedClaimIds.length === 1
+          ? "metric"
+          : "metrics"
+      } for the clinical report.`,
+      {
+        groundedOutcomeIds: body.grounding.groundedClaimIds
+      },
+      body.grounding.groundedClaimIds,
+      drafted.eventId
+    );
     emitWorkflowEvent(
       "clinician-review",
       "human-review.pending",
@@ -1299,18 +1698,12 @@ async function synthesizeEvidence(): Promise<void> {
       drafted.eventId
     );
     renderEvidence(body);
+    evidenceReviewReady = true;
     milestone("summary")?.classList.add("is-complete");
-    if (resultsVisible) {
-      updateState(
-        "review",
-        "Review the two grounded statements, then approve or dismiss the summary."
-      );
-    } else {
-      updateState(
-        "summary-ready",
-        "The encounter summary is ready for clinician review."
-      );
-    }
+    updateState(
+      "review",
+      "Review the two grounded statements, then approve or dismiss the summary."
+    );
   } catch {
     emitWorkflowEvent(
       "evidence-card",
@@ -1319,21 +1712,82 @@ async function synthesizeEvidence(): Promise<void> {
       "Clinical synthesis could not produce a grounded summary.",
       { causedByEventId: requested.eventId }
     );
-    evidenceLoading.hidden = true;
-    evidenceCard.hidden = true;
+    const reportableOutcomes = latestOutcomes.filter(
+      (outcome) => outcome.status === "measured"
+    );
+    const groundedIds = reportableOutcomes
+      .map((outcome) => outcome.outcomeId);
+    latestEvidence = {
+      draft: {
+        headline:
+          reportableOutcomes.length > 0
+            ? "Encounter metrics ready"
+            : "Encounter acquisition complete",
+        summary:
+          reportableOutcomes.length > 0
+            ? "Narrative synthesis is unavailable. The measured encounter metrics remain formatted for clinician review."
+            : "No audiovisual metrics were included in the encounter report.",
+        claims: reportableOutcomes.map((outcome) => ({
+            claimId: outcome.outcomeId,
+            modality: outcome.modality,
+            status: outcome.status,
+            statement: outcome.statement
+          })),
+        boundaryStatement: EVIDENCE_BOUNDARY
+      },
+      grounding: {
+        status: "pass",
+        errors: [],
+        groundedClaimIds: groundedIds
+      },
+      model: "unavailable",
+      promptVersion: "evidence-only",
+      responseId: `evidence-only-${latestObservation.visitId}`,
+      attemptCount: 0,
+      timing: { totalMs: 0, modelMs: 0, validationMs: 0 }
+    };
+    const grounded = emitWorkflowEvent(
+      "evidence-card",
+      "evidence.grounding.completed",
+      "evidence-card",
+      `Grounded ${groundedIds.length} reportable encounter ${
+        groundedIds.length === 1 ? "metric" : "metrics"
+      }; narrative synthesis was unavailable.`,
+      { groundedOutcomeIds: groundedIds, narrativeAvailable: false },
+      groundedIds,
+      requested.eventId
+    );
+    emitWorkflowEvent(
+      "clinician-review",
+      "human-review.pending",
+      "human-review",
+      "Encounter evidence is ready for clinician review.",
+      { evidenceOnly: true },
+      groundedIds,
+      grounded.eventId
+    );
+    renderEvidence(latestEvidence);
+    evidenceStatusChip.textContent = `${groundedIds.length} ${
+      groundedIds.length === 1 ? "metric" : "metrics"
+    } grounded · narrative unavailable`;
     evidenceError.hidden = false;
-    evidenceError.textContent = "Clinical synthesis unavailable.";
+    evidenceError.textContent =
+      "Clinical narrative unavailable. Grounded encounter evidence remains reviewable.";
     retryEvidenceButton.hidden = false;
     setLane(
       evidenceState,
       evidenceStatus,
-      "Unavailable",
-      "The encounter summary could not be prepared.",
+      "Evidence ready",
+      "Grounded modality outcomes remain available for review.",
       "warning"
     );
+    evidenceReviewReady = true;
     resultsVisible = true;
     resultsPanel.hidden = false;
-    updateState("error", "Clinical synthesis unavailable. Retry when ready.");
+    updateState(
+      "review",
+      "Review the grounded encounter outcomes, then approve or dismiss."
+    );
     resultsPanel.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 }
@@ -1343,6 +1797,51 @@ async function finishEncounter(): Promise<void> {
   const result = conductorSession.complete();
   latestObservation = result.observation;
   conductorSession = null;
+  latestOutcomes = createModalityOutcomes(
+    result.observation,
+    allEvents
+  );
+  for (const outcome of latestOutcomes) {
+    const created = emitWorkflowEvent(
+      outcome.modality === "speech"
+        ? "speech-acoustic"
+        : "facial-expressivity",
+      "modality.outcome.created",
+      "ambient-capture",
+      outcome.status === "measured"
+        ? `${
+            outcome.modality === "speech" ? "Speech" : "Facial"
+          } outcome measured from accepted evidence.`
+        : `${
+            outcome.modality === "speech" ? "Speech" : "Facial"
+          } outcome withheld because usable evidence was unavailable.`,
+      {
+        outcomeId: outcome.outcomeId,
+        modality: outcome.modality,
+        status: outcome.status,
+        ...("reasonCode" in outcome
+          ? { reasonCode: outcome.reasonCode }
+          : {})
+      },
+      outcome.supportRefs
+    );
+    outcome.eventIds.push(created.eventId);
+  }
+  emitWorkflowEvent(
+    "capture-conductor",
+    "coordinator.decision.recorded",
+    "ambient-capture",
+    "Two modality outcomes routed for grounding.",
+    {
+      outcomes: latestOutcomes.map((outcome) => ({
+        modality: outcome.modality,
+        status: outcome.status
+      }))
+    },
+    latestOutcomes.flatMap((outcome) => outcome.supportRefs)
+  );
+  coordinatorDecision.textContent =
+    "Two modality outcomes routed for grounding";
   renderObservation(result.observation, false);
   setLane(
     conductorState,
@@ -1354,23 +1853,23 @@ async function finishEncounter(): Promise<void> {
   setLane(
     speechState,
     speechStatus,
-    "Complete",
-    "Usable speech measurements were recorded.",
-    "complete"
+    latestOutcomes[0].status === "measured" ? "Measured" : "Withheld",
+    latestOutcomes[0].statement,
+    latestOutcomes[0].status === "measured" ? "complete" : "warning"
   );
   setLane(
     faceLaneState,
     faceStatus,
-    "Complete",
-    "Facial withholding and recovery were recorded.",
-    "complete"
+    latestOutcomes[1].status === "measured" ? "Measured" : "Withheld",
+    latestOutcomes[1].statement,
+    latestOutcomes[1].status === "measured" ? "complete" : "warning"
   );
-  latestClaimFacts = createEncounterClaimFacts(result.observation, allEvents);
   renderPendingEvidence();
   updateState(
     "analyzing",
     "Measured evidence is ready while the encounter summary is prepared."
   );
+  revealResults();
   await synthesizeEvidence();
 }
 
@@ -1378,15 +1877,6 @@ function revealResults(): void {
   if (!latestObservation) return;
   resultsVisible = true;
   resultsPanel.hidden = false;
-  if (latestEvidence) {
-    updateState(
-      "review",
-      "Review the two grounded statements, then approve or dismiss the summary."
-    );
-  } else {
-    stopButton.disabled = true;
-    stopButton.textContent = "Summary in progress";
-  }
   resultsPanel.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
@@ -1418,7 +1908,7 @@ async function finalizeCapture(): Promise<void> {
 }
 
 function recordReview(decision: ReviewDecision["decision"]): void {
-  if (!latestObservation || !latestEvidence) return;
+  if (!latestObservation || !latestEvidence || !evidenceReviewReady) return;
   const approved = decision === "approved";
   const review: ReviewDecision = {
     decision,
@@ -1436,7 +1926,7 @@ function recordReview(decision: ReviewDecision["decision"]): void {
     latestEvidence.grounding.groundedClaimIds
   );
   reviewOutcome.textContent = approved
-    ? "Summary approved for this session."
+    ? "Summary approved. Visit 1 established."
     : "Summary dismissed.";
   acceptButton.disabled = true;
   rejectButton.disabled = true;
@@ -1449,6 +1939,21 @@ function recordReview(decision: ReviewDecision["decision"]): void {
       : "The summary was not approved.",
     approved ? "complete" : "quiet"
   );
+  if (approved) {
+    emitWorkflowEvent(
+      "personal-trajectory",
+      "baseline.established",
+      "personal-trajectory",
+      "Established today as Visit 1 for future within-patient comparison.",
+      {
+        visitNumber: 1,
+        futureVisits: "empty-placeholders"
+      },
+      latestEvidence.grounding.groundedClaimIds
+    );
+    baselinePanel.hidden = false;
+    baselinePanel.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }
   updateState(
     "reviewed",
     approved
@@ -1472,19 +1977,19 @@ async function resetCapture(): Promise<void> {
   liveStrip.hidden = true;
   guidanceCard.hidden = true;
   sessionClock.textContent = "00:00";
-  frameCount.textContent = "0";
-  voicedCount.textContent = "0";
-  pitchValue.textContent = "—";
-  faceFrameCount.textContent = "0";
-  faceYawValue.textContent = "—";
-  faceFpsValue.textContent = "—";
+  speechDurationValue.textContent = "0.0 s";
+  pitchCoverageValue.textContent = "0%";
+  faceUsabilityValue.textContent = "0%";
+  faceRecoveryValue.textContent = "Pending";
   micMeterFill.style.width = "0%";
   faceQualityFill.style.width = "0%";
+  guidanceProgressFill.style.width = "0%";
   clearEventList();
   resultsPanel.hidden = true;
+  baselinePanel.hidden = true;
   traceDrawer.hidden = true;
   for (const item of document.querySelectorAll(".milestone")) {
-    item.classList.remove("is-complete");
+    item.classList.remove("is-complete", "is-limited");
   }
   privacyStatus.textContent = "Camera and microphone are off.";
   setLane(
@@ -1507,7 +2012,7 @@ async function resetCapture(): Promise<void> {
     faceWorkerReady ? "Ready" : "Preparing",
     faceWorkerReady
       ? "Ready for system check."
-      : "Preparing local facial analysis.",
+      : "Facial analysis is preparing; the system check can still begin.",
     faceWorkerReady ? "complete" : "quiet"
   );
   setLane(
@@ -1516,7 +2021,7 @@ async function resetCapture(): Promise<void> {
     synthesisReady ? "Ready" : "Unavailable",
     synthesisReady
       ? "Waiting for a completed assessment."
-      : "Clinical synthesis unavailable.",
+      : "Encounter evidence will remain reviewable if narrative synthesis is unavailable.",
     synthesisReady ? "complete" : "warning"
   );
   setLane(
@@ -1554,7 +2059,7 @@ async function checkSynthesisReadiness(): Promise<void> {
     );
     if (!synthesisReady) {
       captureHint.textContent =
-        "Clinical synthesis is unavailable. Contact the demo operator.";
+        "System check is ready. Encounter evidence remains reviewable even if narrative synthesis is unavailable.";
     }
     refreshStartAvailability();
   }
@@ -1588,7 +2093,7 @@ faceWorker.addEventListener("message", (event: MessageEvent) => {
       "warning"
     );
     captureHint.textContent =
-      "Facial analysis is unavailable. Restart the application.";
+      "Facial analysis is unavailable. The timed assessment can still continue.";
     refreshStartAvailability();
     return;
   }
@@ -1619,7 +2124,6 @@ faceWorker.addEventListener("message", (event: MessageEvent) => {
       ready ? "Facial position is stable." : guidance,
       ready ? "active" : "warning"
     );
-    checkPreflightReady();
     return;
   }
   if (state === "capturing") {
@@ -1636,13 +2140,9 @@ startButton.addEventListener("click", () => {
   if (state === "idle") void runSystemCheck();
   else if (state === "ready") startAssessment();
 });
-stopButton.addEventListener("click", () => {
-  if (state === "analyzing" || state === "summary-ready") {
-    revealResults();
-  }
-});
 resetButton.addEventListener("click", () => void resetCapture());
 retryEvidenceButton.addEventListener("click", () => void synthesizeEvidence());
+copyReportButton.addEventListener("click", () => void copyClinicalReport());
 acceptButton.addEventListener("click", () => recordReview("approved"));
 rejectButton.addEventListener("click", () => recordReview("dismissed"));
 traceCloseButton.addEventListener("click", () => {
@@ -1665,5 +2165,6 @@ if (testCaptureMode) {
 } else {
   faceWorker.postMessage({ type: "initialize" });
 }
+operatorDiagnostics.hidden = !operatorMode;
 void checkSynthesisReadiness();
 updateState("idle");
