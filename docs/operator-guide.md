@@ -47,14 +47,18 @@ that variable for a live presentation.
 2. Close other camera or microphone applications.
 3. Sit approximately an arm’s length from the MacBook.
 4. Use soft, even front lighting.
-5. Run the system check and wait for every lane to reach Ready.
-6. During capture, keep speaking through the turn-away interval.
-7. Return to the original calibrated position until Signal restored appears.
-8. Confirm that capture closes automatically after the final valid facial
-   window and that the camera and microphone are released.
-9. Confirm that the results workspace opens automatically. Grounded evidence
+5. Run the five-second system check. Limited or unavailable quality will not
+   prevent the timed assessment from starting.
+6. During the first four seconds, remain centered and speak naturally.
+7. Turn away while continuing to speak for three seconds.
+8. Return to the original position and continue speaking through the remaining
+   seven seconds.
+9. Confirm that capture closes automatically at fourteen seconds and that the
+   camera and microphone are released.
+10. Confirm that the results workspace opens automatically. Grounded evidence
    appears immediately while the short narrative is prepared in place.
-10. Confirm that both summary statements open a complete grounding trace.
+11. Confirm that both summary statements open a complete grounding trace and
+    approval establishes Visit 1.
 
 Clinical Synthesis uses priority processing, no reasoning pass, and a bounded
 response size. Request timing is written only to the browser operator console
@@ -71,16 +75,19 @@ http://127.0.0.1:4173/?testCapture=1&fast=1
 It is not linked from the presentation interface and is not used as a fallback
 for a live assessment.
 
+Append `&operator=1` to expose raw workflow events, internal thresholds,
+calibration details, service timing, and version identifiers. Never use
+operator mode in the presentation recording.
+
 ## Common failures
 
-- **System check cannot begin:** verify the server credential and restart the
-  development server.
+- **System check cannot begin:** confirm consent and verify that Chrome has
+  camera and microphone permission.
 - **Facial analysis unavailable:** verify that the local MediaPipe assets load
   and refresh Chrome.
 - **Move closer persists:** position the face so it occupies at least 14% of
   frame width.
-- **Speech verification stalls:** reduce background noise and speak naturally
-  for another two seconds.
-- **Assessment does not close automatically:** follow the current on-screen
-  cue; the flow requires initial measurement, withholding, recovery, and a
-  final facial window.
+- **Speech quality is limited:** reduce background noise if convenient; the
+  assessment will still start when the five-second check ends.
+- **Turn-away is not confirmed:** continue the assessment. The coordinator
+  records the missed confirmation and advances on schedule without retrying.

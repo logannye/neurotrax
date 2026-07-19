@@ -1,10 +1,13 @@
 import { describe, expect, it } from "vitest";
 import type {
+  EncounterObservation,
   EvidenceCardDraft,
-  EvidenceClaimFact
+  EvidenceClaimFact,
+  EventEnvelope
 } from "@neurotrax/contracts";
 import {
   assembleEvidenceCardDraft,
+  createModalityOutcomes,
   EVIDENCE_BOUNDARY,
   validateEvidenceCardDraft
 } from "./evidence.js";
@@ -65,6 +68,8 @@ describe("validateEvidenceCardDraft", () => {
     expect(draft.claims).toEqual(
       facts.map((fact) => ({
         claimId: fact.claimId,
+        modality: fact.modality,
+        status: "measured",
         statement: fact.statement
       }))
     );
@@ -104,5 +109,97 @@ describe("validateEvidenceCardDraft", () => {
     const draft = validDraft();
     draft.claims[1] = { ...draft.claims[0] };
     expect(validateEvidenceCardDraft(draft, facts).status).toBe("fail");
+  });
+
+  it("creates a traceable withheld outcome when one modality is unavailable", () => {
+    const observation = {
+      containsPHI: false,
+      captureMode: "live",
+      visitId: "visit-outcomes",
+      participantId: "participant",
+      occurredAt: "2026-07-18T18:00:00.000Z",
+      captureAdapter: { id: "browser", version: "1" },
+      windows: [],
+      measurements: [],
+      aggregates: [
+        {
+          code: "prototype.speech.pitch_variability",
+          label: "Pitch variability",
+          unit: "semitone-stddev",
+          contextKind: "spontaneous-speech",
+          value: 1.9,
+          spread: 0,
+          confidence: 0.9,
+          windowCount: 1,
+          algorithmVersion: "speech-acoustic-0.3",
+          confounds: {
+            snrDb: 20,
+            faceFramingFraction: 0,
+            observedFrameRate: 0,
+            illuminationRelative: 0,
+            yawDegrees: 0
+          },
+          uncertainty: "placeholder",
+          clinicalValidation: "none"
+        }
+      ],
+      abstentions: [
+        {
+          modality: "face",
+          windowStartMs: 4_000,
+          windowEndMs: 14_000,
+          reasonCode: "face-not-visible",
+          detail: "No facial value was produced."
+        }
+      ],
+      measurementCount: 1,
+      qualitySummary: {
+        speechWindowCount: 1,
+        faceWindowCount: 0,
+        abstentionCount: 1,
+        qualityTransitionCount: 2,
+        audioFrameCount: 140,
+        speechActiveFrameCount: 100,
+        pitchedFrameCount: 80,
+        pitchCoverage: 0.8,
+        faceFrameCount: 140,
+        usableFaceFrameCount: 0,
+        usableFaceFraction: 0,
+        faceWithholdingDurationMs: 10_000,
+        faceRecoveryObserved: false,
+        postRecoveryFaceWindowCount: 0
+      }
+    } satisfies EncounterObservation;
+    const events = [
+      {
+        schemaVersion: "neurotrax.workflow-event.v0.2",
+        eventId: "1-encounter-observation.created",
+        sequence: 1,
+        occurredAt: observation.occurredAt,
+        visitId: observation.visitId,
+        participantId: observation.participantId,
+        actor: {
+          kind: "agent",
+          id: "capture-conductor",
+          lane: "capture-conductor",
+          version: "0.2.0"
+        },
+        type: "encounter-observation.created",
+        stage: "ambient-capture",
+        summary: "Created the encounter observation.",
+        payload: {},
+        evidenceRefs: []
+      }
+    ] satisfies EventEnvelope[];
+
+    const outcomes = createModalityOutcomes(observation, events);
+    expect(outcomes.map((outcome) => outcome.status)).toEqual([
+      "measured",
+      "withheld"
+    ]);
+    expect(outcomes[1]).toMatchObject({
+      modality: "face",
+      reasonCode: "face-not-visible"
+    });
   });
 });

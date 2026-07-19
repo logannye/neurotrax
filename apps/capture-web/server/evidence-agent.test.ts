@@ -5,9 +5,10 @@ import {
 } from "./evidence-agent.js";
 import { hasEvidenceCredential } from "./vite-evidence-plugin.js";
 
-const facts = [
+const outcomes = [
   {
-    claimId: "claim-pitch",
+    outcomeId: "outcome-speech-measured",
+    status: "measured",
     measurementCode: "prototype.speech.pitch_variability",
     label: "Pitch variability",
     modality: "speech",
@@ -15,12 +16,14 @@ const facts = [
       "Pitch variability was measured from a technically usable speech interval.",
     currentValue: 1.9,
     unit: "semitone-stddev",
+    qualityFacts: { usableWindows: 1, pitchCoverage: 0.875 },
     supportRefs: ["speech-0"],
     eventIds: ["measurement-pitch"],
     allowedNumbers: ["1.9"]
   },
   {
-    claimId: "claim-face",
+    outcomeId: "outcome-face-measured",
+    status: "measured",
     measurementCode: "prototype.face.expressivity",
     label: "Facial movement",
     modality: "face",
@@ -28,6 +31,7 @@ const facts = [
       "Facial movement was measured before and after a quality-withheld interval.",
     currentValue: 0.04,
     unit: "motion-index",
+    qualityFacts: { usableWindows: 2, recoveryConfirmed: true },
     supportRefs: ["face-0", "face-1"],
     eventIds: ["measurement-face", "face-restored"],
     allowedNumbers: ["0.04"]
@@ -53,7 +57,7 @@ const request = {
     faceRecoveryObserved: true,
     postRecoveryFaceWindowCount: 1
   },
-  facts
+  outcomes
 } as const;
 
 function validNarrative() {
@@ -85,9 +89,11 @@ describe("runEvidenceAgent", () => {
     expect(result.grounding.status).toBe("pass");
     expect(result.attemptCount).toBe(1);
     expect(result.draft.claims).toEqual(
-      facts.map((fact) => ({
-        claimId: fact.claimId,
-        statement: fact.statement
+      outcomes.map((outcome) => ({
+        claimId: outcome.outcomeId,
+        modality: outcome.modality,
+        status: outcome.status,
+        statement: outcome.statement
       }))
     );
     expect(result.timing.totalMs).toBeGreaterThanOrEqual(0);
@@ -174,6 +180,46 @@ describe("runEvidenceAgent", () => {
       })
     ).rejects.toThrow(/timed out/i);
     expect(parse).toHaveBeenCalledTimes(1);
+  });
+
+  it("omits an unavailable modality from the clinical report", async () => {
+    const requestWithFaceUnavailable = {
+      ...request,
+      outcomes: [
+        outcomes[0],
+        {
+          outcomeId: "outcome-face-withheld",
+          status: "withheld",
+          label: "Facial outcome",
+          modality: "face",
+          statement:
+            "Facial measurement was withheld because no technically usable facial interval was captured.",
+          reasonCode: "face-not-visible",
+          qualityFacts: { usableWindows: 0, usableFraction: 0 },
+          supportRefs: ["observation:visit-test"],
+          eventIds: ["face-quality"]
+        }
+      ]
+    } as const;
+    const parse = vi.fn().mockResolvedValue(
+      response(
+        {
+          headline: "Speech metric ready for review",
+          summary:
+            "Pitch variability was measured during a technically usable portion of the encounter."
+        },
+        "response-speech-only"
+      )
+    );
+
+    const result = await runEvidenceAgent(requestWithFaceUnavailable, {
+      responses: { parse: parse as never }
+    });
+    expect(result.draft.claims).toHaveLength(1);
+    expect(result.draft.claims[0].modality).toBe("speech");
+    expect(result.draft.summary.toLowerCase()).not.toMatch(
+      /withheld|unavailable/
+    );
   });
 
   it("requires a nonblank server-side credential", () => {

@@ -17,8 +17,8 @@ make clinical decisions from its output.
 - Measurements, summary generation, grounding, and human disposition remain
   separate steps.
 - Every visible agent action derives from a versioned workflow event.
-- Every narrative claim resolves to a precomputed current-encounter fact,
-  aggregate, measurement window, quality/confound envelope, and originating
+- Every displayed outcome resolves to a current-encounter measurement or
+  abstention, accepted or withheld window, quality conditions, and originating
   events.
 
 ## Model boundary
@@ -27,10 +27,11 @@ The Evidence Agent receives bounded structured non-PHI facts only. It never
 receives microphone samples, camera frames, landmarks, screenshots,
 transcripts, or conversation content.
 
-The model cannot create measurements or select evidence facts. A deterministic
-validator blocks unsupported or clinical language. Failure is shown openly and
-must be retried; the application does not replace it with apparently
-successful canned prose.
+The model cannot create measurements or select evidence outcomes. A
+deterministic validator blocks unsupported or clinical language. If narrative
+synthesis fails, the application clearly identifies that limitation while
+retaining the exact grounded outcomes for human review; it does not fabricate
+a narrative.
 
 `OPENAI_API_KEY` is server-side only. It must never use a `VITE_` prefix or be
 committed.
@@ -48,6 +49,9 @@ committed.
 - raw-media recording, screenshots, transcripts, or retained clips;
 - hidden fixture substitution;
 - fabricated agent activity, progress, confidence, or reasoning.
+
+The report copy control is a local formatting/export affordance only. It does
+not authenticate to, connect with, or write into an EHR.
 
 ## Deployment deferrals
 

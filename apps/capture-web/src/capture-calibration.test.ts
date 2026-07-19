@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import type { FaceLandmarkFrame } from "@neurotrax/ambient-core";
 import {
   calibrateFaceFrame,
+  classifyAudioCalibration,
+  classifyFaceCalibration,
   createFaceCalibration,
   facePreflightPassed,
   preflightFaceGuidance
@@ -29,6 +31,12 @@ function face(
 }
 
 describe("guided face calibration", () => {
+  it("classifies eight reliable pitch frames as strong without waiting for ten", () => {
+    expect(classifyAudioCalibration(8, 8)).toBe("strong");
+    expect(classifyAudioCalibration(7, 9)).toBe("limited");
+    expect(classifyAudioCalibration(0, 0)).toBe("unavailable");
+  });
+
   it("accepts a stable face that is smaller than the old fixed target", () => {
     const frames = Array.from({ length: 15 }, (_, index) =>
       face({ tMs: index * 100 })
@@ -67,5 +75,20 @@ describe("guided face calibration", () => {
     expect(calibrateFaceFrame(face({ yawDegrees: 5 }), baseline).usable).toBe(
       true
     );
+  });
+
+  it("classifies incomplete facial checks without blocking", () => {
+    expect(classifyFaceCalibration([])).toEqual({
+      quality: "unavailable",
+      calibration: null,
+      usableFrameCount: 0
+    });
+    const limited = classifyFaceCalibration([
+      face(),
+      face({ edgeMargin: 0.005 }),
+      face({ yawDegrees: 35 })
+    ]);
+    expect(limited.quality).toBe("limited");
+    expect(limited.calibration).not.toBeNull();
   });
 });

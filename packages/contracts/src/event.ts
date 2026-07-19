@@ -27,16 +27,23 @@ export type AmbientEventType =
   | "measurement.recorded"
   | "measurement.abstained"
   | "encounter-observation.created"
+  | "demo.phase.started"
+  | "demo.phase.completed"
+  | "demo.phase.timed-out"
+  | "coordinator.decision.recorded"
+  | "modality.outcome.created"
   | "trajectory.compatibility.assessed"
   | "trajectory.comparison.completed"
   | "evidence-card.requested"
   | "evidence-card.drafted"
   | "evidence-claim.grounded"
   | "evidence-claim.rejected"
+  | "evidence.grounding.completed"
   | "evidence.trace.opened"
   | "human-review.pending"
   | "human-review.accepted"
-  | "human-review.rejected";
+  | "human-review.rejected"
+  | "baseline.established";
 
 export type WorkflowStage =
   | "ambient-capture"

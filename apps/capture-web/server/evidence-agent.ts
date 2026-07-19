@@ -3,9 +3,9 @@ import { zodTextFormat } from "openai/helpers/zod";
 import { z } from "zod";
 import type {
   EvidenceCardDraft,
-  EvidenceClaimFact,
   EvidenceSynthesisTiming,
-  GroundingResult
+  GroundingResult,
+  ModalityOutcome
 } from "@neurotrax/contracts";
 import {
   assembleEvidenceCardDraft,
@@ -15,18 +15,53 @@ import {
 export const EVIDENCE_MODEL = "gpt-5.6-luna";
 export const EVIDENCE_PROMPT_VERSION = "encounter-summary-grounded.v0.3";
 
-const ClaimFactSchema = z
+const ModalityOutcomeBaseSchema = z.object({
+  outcomeId: z.string().min(1),
+  label: z.string().min(1),
+  modality: z.enum(["speech", "face"]),
+  statement: z.string().min(1),
+  qualityFacts: z.record(
+    z.string(),
+    z.union([z.string(), z.number(), z.boolean()])
+  ),
+  supportRefs: z.array(z.string().min(1)).min(1),
+  eventIds: z.array(z.string().min(1)).min(1)
+});
+
+const MeasuredOutcomeSchema = ModalityOutcomeBaseSchema.extend({
+  status: z.literal("measured"),
+  measurementCode: z.string().min(1),
+  currentValue: z.number(),
+  unit: z.string().min(1),
+  allowedNumbers: z.array(z.string())
+}).strict();
+
+const WithheldOutcomeSchema = ModalityOutcomeBaseSchema.extend({
+  status: z.literal("withheld"),
+  reasonCode: z.string().min(1)
+}).strict();
+
+const ModalityOutcomeSchema = z.discriminatedUnion("status", [
+  MeasuredOutcomeSchema,
+  WithheldOutcomeSchema
+]);
+
+const QualitySummarySchema = z
   .object({
-    claimId: z.string().min(1),
-    measurementCode: z.string().min(1),
-    label: z.string().min(1),
-    modality: z.enum(["speech", "face"]),
-    statement: z.string().min(1),
-    currentValue: z.number(),
-    unit: z.string().min(1),
-    supportRefs: z.array(z.string().min(1)).min(1),
-    eventIds: z.array(z.string().min(1)).min(1),
-    allowedNumbers: z.array(z.string())
+    speechWindowCount: z.number().int().nonnegative(),
+    faceWindowCount: z.number().int().nonnegative(),
+    abstentionCount: z.number().int().nonnegative(),
+    qualityTransitionCount: z.number().int().nonnegative(),
+    audioFrameCount: z.number().int().nonnegative(),
+    speechActiveFrameCount: z.number().int().nonnegative(),
+    pitchedFrameCount: z.number().int().nonnegative(),
+    pitchCoverage: z.number().min(0).max(1),
+    faceFrameCount: z.number().int().nonnegative(),
+    usableFaceFrameCount: z.number().int().nonnegative(),
+    usableFaceFraction: z.number().min(0).max(1),
+    faceWithholdingDurationMs: z.number().nonnegative(),
+    faceRecoveryObserved: z.boolean(),
+    postRecoveryFaceWindowCount: z.number().int().nonnegative()
   })
   .strict();
 
@@ -34,27 +69,19 @@ export const EvidenceAgentRequestSchema = z
   .object({
     containsPHI: z.literal(false),
     visitId: z.string().min(1),
-    qualitySummary: z
-      .object({
-        speechWindowCount: z.number().int().nonnegative(),
-        faceWindowCount: z.number().int().nonnegative(),
-        abstentionCount: z.number().int().nonnegative(),
-        qualityTransitionCount: z.number().int().nonnegative(),
-        audioFrameCount: z.number().int().nonnegative(),
-        speechActiveFrameCount: z.number().int().nonnegative(),
-        pitchedFrameCount: z.number().int().nonnegative(),
-        pitchCoverage: z.number().min(0).max(1),
-        faceFrameCount: z.number().int().nonnegative(),
-        usableFaceFrameCount: z.number().int().nonnegative(),
-        usableFaceFraction: z.number().min(0).max(1),
-        faceWithholdingDurationMs: z.number().nonnegative(),
-        faceRecoveryObserved: z.boolean(),
-        postRecoveryFaceWindowCount: z.number().int().nonnegative()
-      })
-      .strict(),
-    facts: z.array(ClaimFactSchema).length(2)
+    qualitySummary: QualitySummarySchema,
+    outcomes: z.array(ModalityOutcomeSchema).length(2)
   })
-  .strict();
+  .strict()
+  .superRefine((value, context) => {
+    if (new Set(value.outcomes.map((outcome) => outcome.modality)).size !== 2) {
+      context.addIssue({
+        code: "custom",
+        message: "Exactly one speech outcome and one facial outcome are required.",
+        path: ["outcomes"]
+      });
+    }
+  });
 
 export type EvidenceAgentRequest = z.infer<
   typeof EvidenceAgentRequestSchema
@@ -99,15 +126,17 @@ function systemPrompt(validationErrors: string[] = []): string {
     validationErrors.length === 0
       ? ""
       : `\nA prior draft failed validation. Correct only these errors:\n- ${validationErrors.join("\n- ")}`;
-  return `Draft one concise Neurotrax clinician encounter narrative from current-encounter structured facts.
+  return `Draft one concise, EHR-ready Neurotrax encounter report from the successfully measured current-encounter metrics.
 
 Requirements:
 - Return only a direct headline and a one-sentence summary.
-- The summary must name both measurement labels.
+- Mention every supplied measurement label.
+- Do not mention a modality that is not supplied as a measurement.
+- Do not mention withholding, unavailability, insufficient signal, or acquisition failure.
 - Do not put numbers in the headline or summary.
 - Do not infer diagnosis, disease, progression, cause, treatment, medication effect, risk, normality, worsening, or improvement.
-- Describe only what was measured during the current encounter.
-- Do not restate or invent evidence claims; the application attaches its pre-grounded claims separately.
+- Describe only the successfully measured metrics from this encounter.
+- Do not restate or invent evidence statements; the application attaches its pre-grounded outcomes separately.
 - Return only the required structured output.${retryInstruction}`;
 }
 
@@ -119,10 +148,12 @@ function userPayload(input: EvidenceAgentRequest): string {
       abstentionCount: input.qualitySummary.abstentionCount,
       faceRecoveryObserved: input.qualitySummary.faceRecoveryObserved
     },
-    measurements: input.facts.map((fact) => ({
-      label: fact.label,
-      modality: fact.modality
-    }))
+    measurements: input.outcomes
+      .filter((outcome) => outcome.status === "measured")
+      .map((outcome) => ({
+        label: outcome.label,
+        modality: outcome.modality
+      }))
   });
 }
 
@@ -172,11 +203,11 @@ export async function runEvidenceAgent(
     const validationStartedAt = performance.now();
     const draft = assembleEvidenceCardDraft(
       narrative,
-      input.facts as EvidenceClaimFact[]
+      input.outcomes as ModalityOutcome[]
     );
     const grounding = validateEvidenceCardDraft(
       draft,
-      input.facts as EvidenceClaimFact[]
+      input.outcomes as ModalityOutcome[]
     );
     validationMs += performance.now() - validationStartedAt;
     if (grounding.status === "pass") {

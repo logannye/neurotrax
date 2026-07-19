@@ -1,5 +1,33 @@
 import type { Modality } from "./measurement.js";
 
+interface ModalityOutcomeBase {
+  outcomeId: string;
+  label: string;
+  modality: Modality;
+  statement: string;
+  qualityFacts: Record<string, string | number | boolean>;
+  supportRefs: string[];
+  eventIds: string[];
+}
+
+export interface MeasuredModalityOutcome extends ModalityOutcomeBase {
+  status: "measured";
+  measurementCode: string;
+  currentValue: number;
+  unit: string;
+  allowedNumbers: string[];
+}
+
+export interface WithheldModalityOutcome extends ModalityOutcomeBase {
+  status: "withheld";
+  reasonCode: string;
+}
+
+export type ModalityOutcome =
+  | MeasuredModalityOutcome
+  | WithheldModalityOutcome;
+
+/** @deprecated Use ModalityOutcome for new encounter synthesis work. */
 export interface EvidenceClaimFact {
   claimId: string;
   measurementCode: string;
@@ -15,6 +43,8 @@ export interface EvidenceClaimFact {
 
 export interface EvidenceCardClaim {
   claimId: string;
+  modality?: Modality;
+  status?: ModalityOutcome["status"];
   statement: string;
 }
 

@@ -198,7 +198,7 @@ describe("runConductor", () => {
       participantId: "developer-self-demo",
       captureMode: "fixture-playback",
       calibration: {
-        profileId: "macbook-guided-v0.1",
+        profileId: "macbook-timed-v0.2",
         calibratedAt: "2026-07-18T16:00:00.000Z",
         audio: {
           medianNoiseRms: 0.002,
@@ -206,11 +206,13 @@ describe("runConductor", () => {
           entryThresholdRms: 0.008,
           exitThresholdRms: 0.006
         },
+        audioQuality: "strong",
         face: {
           baselineBoxWidth: 0.24,
           baselineBoxHeight: 0.4,
           baselineIllumination: 0.58
-        }
+        },
+        faceQuality: "strong"
       }
     });
 
