@@ -29,7 +29,7 @@ function frame(tMs: number, voiced: boolean, pitchHz: number | null, snrDb = 20)
 }
 
 describe("extractSpeechAcoustic", () => {
-  it("emits three measurements over a clean voiced window", () => {
+  it("emits speech timing and pitch measurements over a clean voiced window", () => {
     const frames = Array.from({ length: 12 }, (_, index) =>
       frame(index * 100, index !== 5, 110 + (index % 5) * 8)
     );
@@ -41,6 +41,9 @@ describe("extractSpeechAcoustic", () => {
     const byCode = new Map(result.map((m) => [m.code, m]));
     expect(byCode.get("prototype.speech.voiced_time_fraction")!.value).toBeCloseTo(11 / 12, 5);
     expect(byCode.get("prototype.speech.pause_rate")!.value).toBe(0);
+    expect(byCode.get("prototype.speech.pitch_center")!.value).toBeGreaterThan(
+      100
+    );
     expect(byCode.get("prototype.speech.pitch_variability")!.value).toBeGreaterThan(0);
     for (const m of result) {
       expect(m.algorithmVersion).toBe(SPEECH_ACOUSTIC_VERSION);

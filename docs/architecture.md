@@ -46,16 +46,22 @@ device access can prevent the encounter from starting.
 ## Signal extraction
 
 Speech Analysis uses a calibrated noise floor, energy hysteresis, pitch
-correlation, bounded pause detection, and per-measurement confidence. Pitch
-variability requires at least ten pitched frames and 20% pitch coverage.
+correlation, bounded pause detection, and per-measurement confidence. It
+produces speech initiation latency, voiced-time fraction, bounded pause rate,
+pitch center, and pitch variability. Pitch measurements require at least ten
+pitched frames and 20% pitch coverage.
 
 Facial Analysis derives landmarks, blendshape proxies, pose, geometry,
 illumination, and normalized movement in an isolated browser thread. Framing
-is evaluated relative to the system-check baseline.
+is evaluated relative to the system-check baseline. Accepted windows produce
+facial movement, blink-rate proxy, brow excursion, mouth-aperture range, and
+eye-aperture range.
 
 ## Clinical synthesis and report export
 
-The evidence layer creates exactly one speech outcome and one facial outcome.
+The observation layer aggregates all ten functionally relevant measurements
+into the quantitative encounter profile. The evidence layer additionally
+selects exactly one primary speech outcome and one primary facial outcome.
 Each is either measured, with immutable measurement and provenance, or
 withheld, with a reason, quality facts, and evidence references.
 
@@ -68,7 +74,9 @@ interpretation. This smaller generation contract reduces latency and prevents
 claim drift. If narrative synthesis is unavailable, the two deterministic
 outcomes remain reviewable and the interface never waits indefinitely.
 
-Only measured outcomes appear in the EHR-ready report. Unavailable modalities
+Only measured values appear in the EHR-ready report. Each quantitative profile
+item can open a presentation-safe provenance chain, while the two primary
+statements retain the stricter claim-grounding path. Unavailable modalities
 remain part of acquisition provenance but are omitted from the clinical
 narrative. The copy action places the clinician-reviewed report on the local
 clipboard; no EHR connection or write is implemented.

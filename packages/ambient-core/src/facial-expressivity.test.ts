@@ -23,12 +23,12 @@ const window: MeasurableWindow = {
 function faceFrame(tMs: number, ear: number, motion: number, brow: number, framing = 0.95): FaceLandmarkFrame {
   return {
     tMs, faceVisible: framing >= 0.5, framingFraction: framing, illumination: 0.8,
-    eyeAspectRatio: ear, browRaise: brow, mouthOpen: 0.1, landmarkMotion: motion, observedFrameRate: 30
+    eyeAspectRatio: ear, browRaise: brow, mouthOpen: 0.08 + tMs / 100_000, landmarkMotion: motion, observedFrameRate: 30
   };
 }
 
 describe("extractFacialExpressivity", () => {
-  it("emits three measurements and counts one blink over a 60s window", () => {
+  it("emits facial motor measurements and counts one blink over a 60s window", () => {
     const frames = [
       faceFrame(0, 0.3, 0.05, 0.2), faceFrame(1000, 0.1, 0.06, 0.3),
       faceFrame(2000, 0.3, 0.04, 0.1), faceFrame(3000, 0.3, 0.05, 0.25)
@@ -38,6 +38,12 @@ describe("extractFacialExpressivity", () => {
     expect(byCode.get("prototype.face.expressivity")!.value).toBeCloseTo(0.05, 5);
     expect(byCode.get("prototype.face.blink_rate")!.value).toBe(1);
     expect(byCode.get("prototype.face.brow_amplitude")!.value).toBeCloseTo(0.2, 5);
+    expect(
+      byCode.get("prototype.face.mouth_amplitude")!.value
+    ).toBeGreaterThan(0);
+    expect(
+      byCode.get("prototype.face.eye_aperture_range")!.value
+    ).toBeCloseTo(0.2, 5);
     for (const m of result) {
       expect(m.algorithmVersion).toBe(FACIAL_EXPRESSIVITY_VERSION);
       expect(m.clinicalValidation).toBe("none");

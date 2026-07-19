@@ -14,7 +14,10 @@ import type {
   FrameStream
 } from "./primitives.js";
 import { detectMeasurableWindows, MAX_SPEECH_PAUSE_MS } from "./windowing.js";
-import { extractSpeechAcoustic } from "./speech-acoustic.js";
+import {
+  extractSpeechAcoustic,
+  SPEECH_ACOUSTIC_VERSION
+} from "./speech-acoustic.js";
 import { extractFacialExpressivity, FACE_FRAMING_FLOOR } from "./facial-expressivity.js";
 import { aggregateMeasurements } from "./aggregate.js";
 import { createEventFactory, type EventFactory } from "./events.js";
@@ -22,10 +25,14 @@ import { createEventFactory, type EventFactory } from "./events.js";
 const LABELS = new Map<string, { label: string; unit: string }>([
   ["prototype.speech.voiced_time_fraction", { label: "Voiced-time fraction", unit: "ratio" }],
   ["prototype.speech.pause_rate", { label: "Pause rate", unit: "pauses-per-minute" }],
+  ["prototype.speech.onset_latency", { label: "Speech initiation latency", unit: "seconds" }],
+  ["prototype.speech.pitch_center", { label: "Pitch center", unit: "hertz" }],
   ["prototype.speech.pitch_variability", { label: "Pitch variability", unit: "semitone-stddev" }],
   ["prototype.face.expressivity", { label: "Facial movement", unit: "motion-index" }],
   ["prototype.face.blink_rate", { label: "Blink rate", unit: "blinks-per-minute" }],
-  ["prototype.face.brow_amplitude", { label: "Brow amplitude", unit: "normalized-range" }]
+  ["prototype.face.brow_amplitude", { label: "Brow amplitude", unit: "normalized-range" }],
+  ["prototype.face.mouth_amplitude", { label: "Mouth aperture range", unit: "normalized-range" }],
+  ["prototype.face.eye_aperture_range", { label: "Eye aperture range", unit: "normalized-range" }]
 ]);
 
 const FACE_QUALITY_DEBOUNCE_MS = 750;
@@ -171,6 +178,50 @@ function processObservation(
         )
       );
     }
+  }
+
+  const firstSpeechWindow = windows.find(
+    (window) => window.modality === "speech"
+  );
+  if (
+    firstSpeechWindow &&
+    measurements.some((measurement) =>
+      measurement.code.startsWith("prototype.speech.")
+    )
+  ) {
+    const onsetMeasurement: Measurement = {
+      code: "prototype.speech.onset_latency",
+      label: "Speech initiation latency",
+      value: firstSpeechWindow.startMs / 1000,
+      unit: "seconds",
+      confidence: Math.min(
+        1,
+        Math.max(0, firstSpeechWindow.context.confounds.snrDb / 24)
+      ),
+      uncertainty: "placeholder",
+      algorithmVersion: SPEECH_ACOUSTIC_VERSION,
+      clinicalValidation: "none",
+      contextRef: firstSpeechWindow.windowId,
+      windowStartMs: 0,
+      windowEndMs: firstSpeechWindow.startMs,
+      evidenceSnippetRef: null
+    };
+    measurements.push(onsetMeasurement);
+    emit(
+      factory.next(
+        "speech-acoustic",
+        "measurement.recorded",
+        "ambient-capture",
+        "Recorded speech initiation latency.",
+        firstSpeechWindow.startMs,
+        {
+          windowId: firstSpeechWindow.windowId,
+          code: onsetMeasurement.code,
+          value: onsetMeasurement.value
+        },
+        [firstSpeechWindow.windowId]
+      )
+    );
   }
 
   const aggregates = aggregateMeasurements(

@@ -2,7 +2,7 @@ import type { FaceLandmarkFrame } from "./primitives.js";
 import type { Abstention, MeasurableWindow, Measurement } from "@neurotrax/contracts";
 import { mean } from "./stats.js";
 
-export const FACIAL_EXPRESSIVITY_VERSION = "facial-expressivity-0.2";
+export const FACIAL_EXPRESSIVITY_VERSION = "facial-expressivity-0.3";
 export const FACE_FRAMING_FLOOR = 0.6;
 export const BLINK_EAR_THRESHOLD = 0.2;
 const MIN_VISIBLE_FRAMES = 3;
@@ -78,10 +78,17 @@ export function extractFacialExpressivity(
   const blinkRate = countBlinks(frames) / durationMinutes;
   const brows = frames.map((f) => f.browRaise);
   const browAmplitude = Math.max(...brows) - Math.min(...brows);
+  const mouths = frames.map((f) => f.mouthOpen);
+  const mouthAmplitude = Math.max(...mouths) - Math.min(...mouths);
+  const eyeApertures = frames.map((f) => f.eyeAspectRatio);
+  const eyeApertureRange =
+    Math.max(...eyeApertures) - Math.min(...eyeApertures);
 
   return [
     measurement(window, "prototype.face.expressivity", "Facial expressivity", expressivity, "motion-index", confidence),
     measurement(window, "prototype.face.blink_rate", "Blink rate", blinkRate, "blinks-per-minute", confidence),
-    measurement(window, "prototype.face.brow_amplitude", "Brow amplitude", browAmplitude, "normalized-range", confidence)
+    measurement(window, "prototype.face.brow_amplitude", "Brow amplitude", browAmplitude, "normalized-range", confidence),
+    measurement(window, "prototype.face.mouth_amplitude", "Mouth aperture range", mouthAmplitude, "normalized-range", confidence),
+    measurement(window, "prototype.face.eye_aperture_range", "Eye aperture range", eyeApertureRange, "normalized-range", confidence)
   ];
 }

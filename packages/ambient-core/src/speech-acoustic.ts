@@ -2,7 +2,7 @@ import type { AudioFeatureFrame } from "./primitives.js";
 import type { Abstention, MeasurableWindow, Measurement } from "@neurotrax/contracts";
 import { mean, median, stdDev } from "./stats.js";
 
-export const SPEECH_ACOUSTIC_VERSION = "speech-acoustic-0.3";
+export const SPEECH_ACOUSTIC_VERSION = "speech-acoustic-0.4";
 export const SPEECH_SNR_FLOOR_DB = 12;
 const MIN_VOICED_FRAMES = 3;
 export const MIN_PITCHED_FRAMES = 10;
@@ -161,6 +161,21 @@ export function extractSpeechAcoustic(
       pitched.map((frame) => frame.pitchConfidence ?? 1)
     );
     measurements.push(
+      measurement(
+        window,
+        "prototype.speech.pitch_center",
+        "Pitch center",
+        median(pitched.map((frame) => frame.pitchHz as number)),
+        "hertz",
+        Math.min(
+          1,
+          0.3 * snrScore +
+            0.2 * durationScore +
+            0.2 * pitchCoverage +
+            0.15 * meanPitchConfidence +
+            0.15 * clippingScore
+        )
+      ),
       measurement(
         window,
         "prototype.speech.pitch_variability",
