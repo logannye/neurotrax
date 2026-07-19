@@ -629,26 +629,28 @@ test("shows facial analysis pausing while speech continues", async ({ page }) =>
   await page.locator("#start-button").click();
   await page.locator("#start-button").click();
   await expect
-    .poll(() =>
-      page.evaluate(() => ({
-        face: document.querySelector("#face-lane-state")?.textContent,
-        speech: document.querySelector("#speech-state")?.textContent,
-        decision:
-          document.querySelector("#coordinator-decision")?.textContent,
-        decisionEvent:
-          document
-            .querySelector("#coordinator-decision")
-            ?.getAttribute("data-event-id"),
-        callout: document.querySelector("#camera-callout")?.textContent,
-        calloutEvent:
-          document
-            .querySelector("#camera-callout")
-            ?.getAttribute("data-event-id"),
-        faceEvent:
-          document
-            .querySelector('[data-lane="facial-expressivity"]')
-            ?.getAttribute("data-event-id")
-      }))
+    .poll(
+      () =>
+        page.evaluate(() => ({
+          face: document.querySelector("#face-lane-state")?.textContent,
+          speech: document.querySelector("#speech-state")?.textContent,
+          decision:
+            document.querySelector("#coordinator-decision")?.textContent,
+          decisionEvent:
+            document
+              .querySelector("#coordinator-decision")
+              ?.getAttribute("data-event-id"),
+          callout: document.querySelector("#camera-callout")?.textContent,
+          calloutEvent:
+            document
+              .querySelector("#camera-callout")
+              ?.getAttribute("data-event-id"),
+          faceEvent:
+            document
+              .querySelector('[data-lane="facial-expressivity"]')
+              ?.getAttribute("data-event-id")
+        })),
+      { intervals: [20], timeout: 5_000 }
     )
     .toMatchObject({
       face: "Paused",
