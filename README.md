@@ -5,8 +5,12 @@
 ## About
 
 Neurotrax is an agentic AI system designed to make telehealth encounters a
-richer source of structured information about neurological function. Instead
-of treating video visits only as conversations, it coordinates independent
+richer source of structured information about neurological function. It is team of 
+specialized subagents that analyze patient speech patterns, facial movements,
+and other other biomarkers of neurological health to screen for and monitor 
+signs of neurological health.
+
+Instead of treating video visits only as conversations, it coordinates independent
 speech and facial analysis agents that identify technically usable moments,
 measure bounded audiovisual features, abstain when signal quality is poor, and
 assemble the resulting evidence for clinician review.
