@@ -4,119 +4,98 @@
 
 ## About
 
-Neurotrax is an agentic AI system designed to make telehealth encounters a
-richer source of structured information about neurological function. It is team of 
-specialized subagents that analyze patient speech patterns, facial movements,
-and other other biomarkers of neurological health to screen for and monitor 
-signs of neurological health.
+Neurotrax turns an ordinary telehealth encounter into a structured source of
+information about speech and facial function. It coordinates a small team of AI
+agents that observe different signal streams, select useful measurement
+windows, calculate bounded audiovisual metrics, assemble the supporting
+evidence, and prepare a concise report for clinician review.
 
-Instead of treating video visits only as conversations, it coordinates independent
-speech and facial analysis agents that identify technically usable moments,
-measure bounded audiovisual features, abstain when signal quality is poor, and
-assemble the resulting evidence for clinician review.
+The experience uses the camera and microphone already built into a laptop. Raw
+audio and video are processed only during the encounter: Neurotrax does not
+record the visit, retain screenshots or clips, create a transcript, or send raw
+media to the reporting stage.
 
-The system uses the camera and microphone already present on a laptop. It
-processes audiovisual signals while the encounter is happening, releases the
-devices when capture ends, and produces a concise encounter summary with a
-trace back to every supporting measurement. Audio and video are not recorded
-or retained, and no AI component is permitted to make a diagnosis or take an
-autonomous clinical action.
-
-Neurotrax demonstrates how carefully bounded AI agents can turn routine care
-into a more measurable workflow while preserving provenance, uncertainty,
-privacy, and human oversight.
+The goal is simple: make routine remote care more measurable without adding
+special hardware, a separate testing appointment, or another long workflow for
+the clinician.
 
 > **Demonstration use only. Not for clinical decisions.**
 
 ## Why we built it
 
-Telehealth is excellent at connecting a clinician and patient, but most video
-visits still function mainly as conversations. The camera and microphone carry
-additional information—speech timing, vocal variation, facial movement,
-framing, pose, and signal quality—that is usually observed informally and then
-lost when the visit ends.
+Video visits are rich in information, but most of that information is observed
+informally and disappears when the call ends. A participant's vocal variation,
+speaking patterns, facial movement, head position, and other observable
+features may all contribute useful context to a neurological evaluation.
 
-That is especially important in neurological and neurodegenerative care, where
-change can be gradual and difficult to recognize from memory alone. A short
-appointment may contain useful functional signals, but clinicians have limited
-time to measure them manually, document them consistently, and compare them
-across many encounters.
+This matters in neurological and neurodegenerative care because functional
+change can be gradual. A clinician may see a patient only occasionally, and
+subtle change can be difficult to recognize from memory or narrative notes
+alone.
 
-Neurotrax explores a different model:
+Neurotrax explores a care model in which routine telehealth encounters can
+produce consistent, structured observations:
 
-- collect structured audiovisual measurements during the visit;
-- separate usable signal from poor-quality signal;
-- preserve the evidence behind every reported observation;
-- summarize the encounter without making a diagnosis; and
-- keep a clinician in control of the final result.
+- audiovisual features are measured during the visit;
+- each reported metric retains its supporting evidence;
+- a concise encounter report is prepared automatically;
+- a clinician approves or dismisses the final summary; and
+- future visits can build a patient-specific trajectory over time.
 
-The current system focuses on one encounter at a time. A future version could
-trend validated measurements across genuine prior visits, creating a more
-objective view of change over time without requiring a separate testing
-session.
+The result is not a diagnosis. It is a better-organized observation layer that
+can support clinician judgment.
 
-## What Neurotrax does
-
-Neurotrax has two focused capabilities.
+## The two core capabilities
 
 ### 1. Ambient audiovisual assessment
 
-After consent, the application runs a short system check to calibrate the
-participant’s environment, voice, facial position, and lighting. During the
-assessment, speech and facial signals are evaluated independently.
+After consent, Neurotrax checks the participant's environment and prepares the
+camera and microphone. During the assessment, Speech Analysis and Facial
+Analysis operate independently.
 
-The system check ends after five seconds, and the encounter follows a fixed
-fourteen-second sequence. Signal quality determines whether an agent measures
-or abstains; it never determines whether the workflow is allowed to finish.
+Speech Analysis identifies useful speech intervals and calculates features
+such as voiced-time fraction, bounded pause rate, and pitch variability.
+Facial Analysis evaluates facial visibility, position, pose, illumination, and
+movement before calculating facial metrics.
 
-If the participant briefly turns away, Facial Analysis stops producing
-measurements rather than inventing a value. Speech Analysis can continue
-operating at the same time. When the participant returns to an acceptable
-position, facial measurement resumes automatically.
+The two paths remain independent. When the participant turns away, the facial
+path can pause while speech analysis continues. When the participant returns,
+the facial path reconnects automatically. This is an important safety pattern:
+one signal should never block the rest of the encounter or cause the system to
+invent a value.
 
-This independent **measure, withhold, and recover** behavior is central to the
-system: missing or unreliable information should be visible, not silently
-converted into false precision.
+### 2. Clinician encounter report
 
-### 2. EHR-ready encounter report
+When capture ends, Neurotrax routes the measured speech and facial metrics to
+Clinical Synthesis. The resulting **Clinician Encounter Summary** contains:
 
-At the end of the encounter, Neurotrax creates exactly one acquisition outcome
-for speech and one for facial analysis. Clinical Synthesis includes only
-successfully measured metrics in a short, copyable encounter report. A
-modality without a usable metric is omitted from the clinical narrative rather
-than described as a finding.
+- a short, generalist-readable narrative;
+- the reportable current-encounter metrics;
+- a trace from each statement to its measurement window and quality context;
+- a copyable format for clinician-reviewed EHR documentation; and
+- explicit **Approve summary** and **Dismiss** actions.
 
-Before anything is displayed, a grounding layer checks that:
+Only captured metrics are shown in the presentation report. Technical
+acquisition details remain available in operator diagnostics, not in the
+clinician-facing summary.
 
-- each statement refers to a real current-encounter measurement or abstention;
-- the supporting accepted or withheld window exists;
-- relevant quality conditions are preserved;
-- no unsupported number or clinical conclusion was added; and
-- one statement is supported by each modality.
+## How AI agents work together
 
-The clinician can inspect either statement, review its evidence trace, and then
-**Approve summary** or **Dismiss** it. The workflow is not complete until a
-human makes that decision.
+Neurotrax uses specialized agents with narrow responsibilities instead of
+asking one general system to control the entire encounter.
 
-## Where AI agents are involved
-
-Neurotrax uses a small team of bounded agents rather than one system making
-every decision. Each agent has a specific responsibility, its own quality
-rules, and an auditable output.
-
-| Workflow role | What it does | What it produces |
+| Agent | Responsibility | Observable output |
 | --- | --- | --- |
-| **Encounter Coordinator** | Runs the timed workflow, coordinates parallel analysis, opens and closes measurement windows, and advances on schedule while recording whether each target moment was confirmed. | A structured current-encounter observation and auditable decisions. |
-| **Speech Analysis** | Detects technically usable speech and measures features such as voiced-time fraction, bounded pauses, and pitch variability. | Speech measurements or an explicit abstention. |
-| **Facial Analysis** | Evaluates visibility, position, pose, illumination, frame rate, and facial movement. It withholds output when quality is inadequate and resumes after recovery. | Facial measurements or an explicit abstention. |
-| **Clinical Synthesis** | Converts successfully measured speech and facial metrics into concise, generalist-readable language without changing the underlying evidence. | A copyable, EHR-ready encounter report. |
-| **Clinician Review** | Gives a person the final decision over whether the summary should be used for the session. | An approval or dismissal event. |
+| **Encounter Coordinator** | Orchestrates the encounter, starts parallel analysis, routes evidence, and keeps the workflow moving. | Agent events and a structured encounter observation. |
+| **Speech Analysis** | Selects useful speech windows and calculates bounded vocal metrics. | Speech measurements with quality context and provenance. |
+| **Facial Analysis** | Selects useful facial windows, pauses when the participant turns away, and reconnects on return. | Facial measurements with quality context and provenance. |
+| **Clinical Synthesis** | Converts measured outputs into concise clinical documentation without changing the underlying evidence. | A grounded, EHR-ready encounter summary. |
+| **Clinician Review** | Keeps a person in control of the final deliverable. | An approval or dismissal event. |
 
-The agents communicate through structured events rather than hidden narrative
-about what they are “thinking.” This makes the workflow observable while
-keeping the displayed activity tied to actions the system actually performed.
-
-## The encounter workflow
+The live interface is driven by real workflow events. When an analysis path
+opens a window, pauses, reconnects, routes a metric, completes grounding, or
+enters review, the corresponding node changes state. The interface does not
+display invented internal monologues or hidden reasoning.
 
 ```mermaid
 flowchart LR
@@ -124,90 +103,72 @@ flowchart LR
     CHECK --> COORDINATOR["Encounter Coordinator"]
     COORDINATOR --> SPEECH["Speech Analysis"]
     COORDINATOR --> FACE["Facial Analysis"]
-    SPEECH --> OBSERVATION["Current-encounter observation"]
-    FACE --> OBSERVATION
-    OBSERVATION --> FACTS["Measured or withheld modality outcomes"]
-    FACTS --> SYNTHESIS["Clinical Synthesis"]
-    SYNTHESIS --> GROUNDING["Deterministic grounding"]
+    SPEECH --> EVIDENCE["Measured encounter evidence"]
+    FACE --> EVIDENCE
+    EVIDENCE --> SYNTHESIS["Clinical Synthesis"]
+    SYNTHESIS --> GROUNDING["Evidence grounding"]
     GROUNDING --> REVIEW["Clinician Review"]
 ```
 
-In the live experience:
+## What a viewer sees
 
-1. The participant provides consent.
-2. Neurotrax requests camera and microphone access.
-3. The system measures quiet-room conditions.
-4. The participant speaks while facial framing and lighting are assessed.
-5. After no more than five seconds, the system labels each calibration as
-   strong, limited, or unavailable and enables the assessment.
-6. Speech and facial agents establish independent usable windows.
-7. The participant briefly turns away while continuing to speak.
-8. Facial Analysis visibly withholds measurement while Speech Analysis
-   continues.
-9. The participant returns, and Facial Analysis confirms recovery.
-10. Neurotrax closes capture automatically after fourteen seconds and begins
-    preparing the summary in the background.
-11. Two grounded encounter statements are available immediately while a short
-    clinician-readable narrative is synthesized.
-12. The results workspace opens automatically; the clinician inspects the
-    evidence, can copy the formatted report into an authorized documentation
-    workflow, and approves or dismisses it.
-13. Approval establishes today as Visit 1 and shows how future routine visits
-    could form a within-patient trajectory without inventing prior history.
+1. The participant consents and starts the system check.
+2. The Encounter Coordinator activates Speech Analysis and Facial Analysis in
+   parallel.
+3. As the participant speaks, accepted evidence packets move through the live
+   agent graph.
+4. The participant briefly turns away while continuing to speak.
+5. Facial Analysis pauses while Speech Analysis remains active.
+6. The participant returns; Facial Analysis reconnects and completes its next
+   measurement window.
+7. The Coordinator routes the measured metrics to Clinical Synthesis.
+8. A clinician-ready report opens automatically.
+9. Selecting a metric reveals its evidence chain.
+10. The clinician approves or dismisses the summary.
 
-The system check and guided assessment complete in approximately nineteen
-seconds. Narrative availability cannot delay access to the two grounded
-modality outcomes.
+Approval establishes the current encounter as Visit 1. Empty future-visit
+positions illustrate how repeated routine encounters could eventually form a
+within-patient trajectory—without presenting invented prior patient data.
 
-## How this could make care better, faster, and less expensive
+## Potential impact
 
-Neurotrax is not yet clinically validated, so these are intended design
-benefits rather than claims of demonstrated clinical performance.
+### Better care
 
-### Better
+- **More consistent observation:** the same measurement and quality policies
+  can be applied at each encounter.
+- **Evidence-backed documentation:** every displayed metric can be traced to a
+  measurement window, quality conditions, and originating agent events.
+- **Independent signal handling:** one analysis path can pause without
+  disrupting the other.
+- **Human oversight:** agents measure, organize, and draft; a clinician decides.
+- **Longitudinal potential:** repeated measurements could help clinicians
+  recognize subtle within-patient change across visits.
 
-- **More consistent observation:** the same quality rules can be applied at
-  each encounter instead of relying only on memory or informal impressions.
-- **Visible uncertainty:** poor framing, excessive head rotation, low light,
-  and unusable speech can cause an explicit abstention instead of a misleading
-  measurement.
-- **Evidence-backed summaries:** every displayed statement can be traced to a
-  measurement, time window, quality conditions, and originating workflow
-  events.
-- **Human oversight:** the system drafts and verifies; a clinician decides.
-- **Potential longitudinal value:** repeated validated measurements could make
-  subtle functional change easier to recognize across visits.
+### Faster care
 
-### Faster
+- **Assessment during ordinary telehealth:** signal collection occurs during
+  the encounter that is already happening.
+- **Automatic evidence curation:** agents organize measurement windows and
+  provenance without requiring manual review of an entire recording.
+- **Immediate structured output:** measured metrics are ready as capture ends
+  while the concise narrative is assembled.
+- **Rapid verification:** selecting any report statement opens its supporting
+  evidence chain.
 
-- **Assessment during ordinary care:** signals are collected while the
-  telehealth encounter is already happening.
-- **Automatic measurement preparation:** usable windows and quality conditions
-  are organized without requiring a clinician to review the full encounter
-  manually.
-- **Concise handoff:** the clinician receives two bounded statements rather
-  than an unstructured stream of technical output.
-- **Immediate evidence:** measured or withheld modality outcomes appear as soon
-  as capture ends, without waiting for narrative synthesis.
-- **Faster verification:** selecting a statement opens its supporting evidence
-  immediately.
+### More accessible and potentially less expensive care
 
-### Less expensive
+- **Existing hardware:** a standard laptop camera and microphone become the
+  sensing layer.
+- **Remote reach:** structured observations can be collected without requiring
+  every check to occur at a specialty center.
+- **Reduced preparation burden:** measurements and documentation are organized
+  before clinician review.
+- **Focused clinician time:** automation handles signal curation and evidence
+  assembly while the clinician retains control of interpretation and action.
 
-- **Existing hardware:** the design uses a standard laptop camera and
-  microphone rather than specialized sensing equipment.
-- **Remote availability:** repeatable observations could be collected without
-  requiring every check to occur in a specialty center.
-- **Lower documentation burden:** structured measurements and summaries may
-  reduce repetitive manual preparation.
-- **Focused clinician attention:** automation handles signal curation and
-  evidence assembly while preserving the clinician’s role in interpretation
-  and action.
+## Measurement scope
 
-## What the system measures—and what it does not
-
-The current assessment derives bounded speech and facial measurements,
-including:
+The current system derives bounded measurements such as:
 
 - voiced-time fraction;
 - pauses within a defined duration range;
@@ -215,55 +176,40 @@ including:
 - facial movement;
 - blink-rate proxy;
 - brow-movement amplitude; and
-- technical context such as signal quality, illumination, pose, and frame
-  rate.
+- measurement context including illumination, pose, and frame rate.
 
-These measurements are exploratory engineering outputs. Neurotrax does not:
+Neurotrax does not interpret the content of the conversation, infer emotion or
+intent, diagnose a condition, recommend treatment, contact a patient, or alter
+a clinical record autonomously.
 
-- diagnose a neurological condition;
-- determine whether a person is improving or declining;
-- recommend treatment or medication changes;
-- infer emotion, intent, truthfulness, cognition, or decision-making capacity;
-- interpret the content of the conversation;
-- contact a patient or alter clinical records; or
-- take an autonomous clinical action.
+## Privacy and safety
 
-## Privacy and safety by design
-
-- Explicit consent is required before device access or analysis.
+- Device access requires explicit consent.
 - Audio and video are processed only during the active encounter.
-- No recordings, screenshots, clips, or transcripts are retained.
-- Raw camera frames and microphone samples are never sent to Clinical
-  Synthesis.
-- Only structured measurements, quality facts, and evidence references reach
-  the summary stage.
+- No recording, screenshot, clip, or transcript is retained.
+- Raw media never reaches Clinical Synthesis.
+- Only structured measurements, quality facts, and evidence references enter
+  the report workflow.
 - Camera and microphone access is released when capture ends.
-- Unusable intervals produce abstentions rather than fabricated values.
 - The clinician remains the final reviewer.
 
 ## Evidence traceability
 
-Every summary statement can be followed back through the system:
+Every displayed metric follows the same chain:
 
 ```text
 agent decision
-  → accepted or withheld window
-  → measurement or abstention
+  → accepted measurement window
+  → audiovisual metric
   → quality conditions
-  → grounded statement
+  → grounded report statement
 ```
-
-This trace separates three responsibilities that should not be collapsed:
-
-1. measuring a signal;
-2. describing what was measured; and
-3. deciding what, if anything, to do clinically.
 
 “EHR-ready” means the report is formatted for clinician-reviewed copy or
 export. This demonstration does not connect to or write into an electronic
 health record.
 
-## Running Neurotrax locally
+## Run locally
 
 Requirements:
 
@@ -280,10 +226,10 @@ pnpm dev
 
 Open [http://127.0.0.1:4173](http://127.0.0.1:4173).
 
-Operator configuration and troubleshooting are documented in
+Configuration and troubleshooting are documented in
 [`docs/operator-guide.md`](docs/operator-guide.md).
 
-## Validation
+## Validate
 
 ```bash
 pnpm test:unit
@@ -294,17 +240,12 @@ pnpm demo:smoke
 pnpm test
 ```
 
-Automated coverage includes audiovisual calibration, speech detection, room-hum
-rejection, facial quality failures, modality-specific withholding, recovery,
-measurement confidence, grounded summary generation, evidence tracing, and
-both human review decisions.
-
 ## Repository map
 
 ```text
-apps/capture-web/       Live audiovisual capture, guided interface, and summary service
-packages/contracts/     Shared calibration, observation, event, and evidence contracts
-packages/ambient-core/  Deterministic signal windowing and measurement extraction
+apps/capture-web/       Live audiovisual capture, agent interface, and summary service
+packages/contracts/     Shared observation, event, and evidence contracts
+packages/ambient-core/  Signal windowing and measurement extraction
 packages/evidence-core/ Current-encounter fact creation and grounding
 docs/                   Architecture, safety, validation, and operator guidance
 ```

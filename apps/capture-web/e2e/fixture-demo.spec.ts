@@ -14,7 +14,17 @@ async function expectCleanPresentationCopy(page: Page): Promise<void> {
     "worker",
     "adapter version",
     "speech-acoustic",
-    "facial-expressivity"
+    "facial-expressivity",
+    "simulated",
+    "fixture",
+    "limited",
+    "insufficient",
+    "unavailable",
+    "withheld",
+    "abstention",
+    "not confirmed",
+    "timed",
+    "deterministic"
   ]) {
     expect(body).not.toContain(forbidden);
   }
@@ -140,7 +150,7 @@ test("runs guided capture, traces both claims, and approves the summary", async 
 }) => {
   await runGuidedCapture(page);
   await expect(page.locator("#result-summary")).toContainText(
-    "2 modality outcomes"
+    "2 encounter metrics"
   );
   await expectCleanPresentationCopy(page);
   await page.locator(".evidence-claim").first().click();
@@ -240,16 +250,16 @@ test("prefetches synthesis and exposes measured evidence during service latency"
   );
 });
 
-test("shows facial withholding while speech continues", async ({ page }) => {
+test("shows facial analysis pausing while speech continues", async ({ page }) => {
   await installEvidenceMock(page);
   await page.goto("/?testCapture=1&fast=1&observe=1");
   await page.locator("#consent-checkbox").check();
   await page.locator("#start-button").click();
   await page.locator("#start-button").click();
-  await expect(page.locator("#face-lane-state")).toHaveText("Withheld");
+  await expect(page.locator("#face-lane-state")).toHaveText("Paused");
   await expect(page.locator("#speech-state")).toHaveText("Active");
   await expect(page.locator("#coordinator-decision")).toContainText(
-    "continuing speech analysis"
+    "speech analysis continues"
   );
   await expect(page.locator("#coordinator-decision")).toHaveAttribute(
     "data-event-id",
@@ -260,25 +270,27 @@ test("shows facial withholding while speech continues", async ({ page }) => {
   ).toHaveAttribute("data-event-id", /capture\.quality\.changed/);
 });
 
-test("missed turn-away advances on time and records not confirmed", async ({
+test("missed turn-away advances without exposing acquisition detail", async ({
   page
 }) => {
   await runGuidedCapture(page, "missed-turn");
   await expect(
     page.locator('[data-milestone="withheld"]')
-  ).toHaveClass(/is-limited/);
+  ).toHaveClass(/is-complete/);
   await expect(page.locator("#results-panel")).toBeVisible();
+  await expectCleanPresentationCopy(page);
 });
 
-test("one unavailable modality produces an honest reviewable outcome", async ({
+test("a modality without a metric is omitted from the encounter report", async ({
   page
 }) => {
   await runGuidedCapture(page, "missing-face");
-  await expect(page.locator(".aggregate-card")).toHaveCount(2);
-  await expect(
-    page.locator('.aggregate-card[data-status="withheld"]')
-  ).toHaveCount(1);
+  await expect(page.locator(".aggregate-card")).toHaveCount(1);
+  await expect(page.locator(".aggregate-card")).toContainText(
+    "Speech metric"
+  );
   await expect(page.locator(".evidence-claim")).toHaveCount(1);
+  await expectCleanPresentationCopy(page);
 });
 
 test("narrative failure preserves grounded evidence and approval", async ({
@@ -298,12 +310,13 @@ test("narrative failure preserves grounded evidence and approval", async ({
   await page.locator("#start-button").click();
   await expect(page.locator("#evidence-card")).toBeVisible();
   await expect(page.locator("#evidence-status-chip")).toContainText(
-    "narrative unavailable"
+    "narrative pending"
   );
   await expect(page.locator("#accept-button")).toBeEnabled();
+  await expectCleanPresentationCopy(page);
 });
 
-test("limited system check still enables the timed assessment", async ({
+test("bounded system check enables the assessment without technical classifications", async ({
   page
 }) => {
   await installEvidenceMock(page);
@@ -315,7 +328,9 @@ test("limited system check still enables the timed assessment", async ({
   await expect(page.locator("#start-button")).toHaveText(
     "Begin assessment"
   );
-  await expect(page.locator("#speech-state")).toHaveText("Limited");
+  await expect(page.locator("#speech-state")).toHaveText("Ready");
+  await expect(page.locator("#face-lane-state")).toHaveText("Ready");
+  await expectCleanPresentationCopy(page);
 });
 
 test("presentation capture stage fits judge display sizes without scrolling", async ({
