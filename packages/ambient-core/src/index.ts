@@ -18,12 +18,21 @@ export {
   SPEECH_SNR_FLOOR_DB
 } from "./speech-acoustic.js";
 export {
+  createNeutralFacialBaseline,
+  evaluateEyeClosureAdherence,
+  evaluateSmileAdherence,
   extractFacialTaskMeasurements,
   FACIAL_KINEMATICS_VERSION,
   SMILE_ADHERENCE_FLOOR,
   EYE_CLOSURE_ADHERENCE_FLOOR
 } from "./facial-task.js";
-export type { FacialExtractionResult } from "./facial-task.js";
+export type {
+  EyeClosureAdherenceEvaluation,
+  FacialExtractionResult,
+  FacialSide,
+  NeutralFacialBaseline,
+  SmileAdherenceEvaluation
+} from "./facial-task.js";
 export {
   evaluateVisualQuality
 } from "./visual-quality.js";
@@ -33,6 +42,7 @@ export {
   MAX_SPEECH_PAUSE_MS,
   MIN_WINDOW_MS
 } from "./windowing.js";
+export type { WindowDetectionOptions } from "./windowing.js";
 export { aggregateMeasurements } from "./aggregate.js";
 export { createEventFactory } from "./events.js";
 export type { EventFactory } from "./events.js";

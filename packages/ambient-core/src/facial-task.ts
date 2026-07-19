@@ -17,6 +17,7 @@ import {
 export const FACIAL_KINEMATICS_VERSION = "facial-task-kinematics-1.0";
 export const SMILE_ADHERENCE_FLOOR = 0.02;
 export const EYE_CLOSURE_ADHERENCE_FLOOR = 0.2;
+export const EYE_RECOVERY_CLOSURE_CEILING = 0.1;
 const MIN_NUMERIC_FRAMES = 3;
 
 const SMILE_CODES = [
@@ -36,7 +37,80 @@ export interface FacialExtractionResult {
   abstentions: Abstention[];
 }
 
-type Side = "left" | "right";
+export type FacialSide = "left" | "right";
+
+export interface NeutralFacialBaseline {
+  processorRef: string | null;
+  sourceFrameCount: number;
+  mouthCorners: Record<FacialSide, NormalizedPoint | null>;
+  eyeAperture: Record<FacialSide, number | null>;
+}
+
+export interface SmileAdherenceEvaluation {
+  observed: boolean;
+  processorCompatible: boolean;
+  adherent: Record<FacialSide, boolean>;
+  excursions: Record<FacialSide, number | null>;
+  excursionSamples: Record<FacialSide, number[]>;
+  pairedAsymmetrySamples: number[];
+}
+
+export interface EyeClosureAdherenceEvaluation {
+  observed: boolean;
+  processorCompatible: boolean;
+  closed: Record<FacialSide, boolean>;
+  recovered: Record<FacialSide, boolean>;
+  closureFractions: Record<FacialSide, number | null>;
+  closureFractionSamples: Record<FacialSide, number[]>;
+  pairedAsymmetrySamples: number[];
+}
+
+const SIDES = ["left", "right"] as const;
+const ADHERENCE_EPSILON = 1e-12;
+
+interface TimedFacialSample {
+  tMs: number;
+  value: number;
+}
+
+/**
+ * Treat each observation as the value held until the next observation. This
+ * keeps task percentiles tied to elapsed evidence rather than to however many
+ * frames the camera happened to deliver during one part of the interval.
+ */
+function timeWeightedPercentile(
+  samples: readonly TimedFacialSample[],
+  probability: number
+): number {
+  const ordered = samples
+    .filter((sample) => finite(sample.tMs) && finite(sample.value))
+    .sort((left, right) => left.tMs - right.tMs);
+  const fallback = ordered.map((sample) => sample.value);
+  if (ordered.length < 2) return percentile(fallback, probability);
+
+  const weighted = ordered.flatMap((sample, index) => {
+    const next = ordered[index + 1];
+    if (!next) return [];
+    const weight = next.tMs - sample.tMs;
+    return weight > 0 ? [{ value: sample.value, weight }] : [];
+  });
+  const totalWeight = weighted.reduce(
+    (total, sample) => total + sample.weight,
+    0
+  );
+  if (totalWeight <= 0) return percentile(fallback, probability);
+
+  weighted.sort((left, right) => left.value - right.value);
+  const targetWeight = probability * totalWeight;
+  let cumulativeWeight = 0;
+  for (const sample of weighted) {
+    cumulativeWeight += sample.weight;
+    if (cumulativeWeight + ADHERENCE_EPSILON >= targetWeight) {
+      return sample.value;
+    }
+  }
+  return weighted.at(-1)?.value ?? percentile(fallback, probability);
+}
 
 function framesForWindow(
   frames: FacialKinematicsFrameV1[],
@@ -57,9 +131,17 @@ function finitePoint(point: NormalizedPoint): boolean {
   return finite(point.x) && finite(point.y);
 }
 
+function meetsFloor(value: number | null, floor: number): boolean {
+  return value !== null && value + ADHERENCE_EPSILON >= floor;
+}
+
+function meetsCeiling(value: number | null, ceiling: number): boolean {
+  return value !== null && value <= ceiling + ADHERENCE_EPSILON;
+}
+
 function medianPoint(
   frames: FacialKinematicsFrameV1[],
-  side: Side
+  side: FacialSide
 ): NormalizedPoint | null {
   const points = frames.flatMap((frame) => {
     const point = frame.mouthCorners?.[side];
@@ -74,13 +156,214 @@ function medianPoint(
 
 function medianEyeAperture(
   frames: FacialKinematicsFrameV1[],
-  side: Side
+  side: FacialSide
 ): number | null {
   const values = frames.flatMap((frame) => {
     const value = frame.eyeAperture?.[side];
     return value !== undefined && finite(value) && value > 0 ? [value] : [];
   });
   return values.length < MIN_NUMERIC_FRAMES ? null : median(values);
+}
+
+/**
+ * Builds the task-independent neutral reference used by both live guidance and
+ * final facial measurement. Inputs are expected to be one accepted, usable
+ * neutral interval; mixed processors deliberately produce an unusable
+ * processor reference instead of silently combining model outputs.
+ */
+export function createNeutralFacialBaseline(
+  frames: readonly FacialKinematicsFrameV1[]
+): NeutralFacialBaseline {
+  const mutableFrames = [...frames];
+  const processorRefs = new Set(
+    mutableFrames.map((frame) => frame.processorRef)
+  );
+  return {
+    processorRef:
+      processorRefs.size === 1
+        ? mutableFrames[0]?.processorRef ?? null
+        : null,
+    sourceFrameCount: mutableFrames.length,
+    mouthCorners: {
+      left: medianPoint(mutableFrames, "left"),
+      right: medianPoint(mutableFrames, "right")
+    },
+    eyeAperture: {
+      left: medianEyeAperture(mutableFrames, "left"),
+      right: medianEyeAperture(mutableFrames, "right")
+    }
+  };
+}
+
+function framesMatchBaselineProcessor(
+  baseline: NeutralFacialBaseline,
+  frames: readonly FacialKinematicsFrameV1[]
+): boolean {
+  return (
+    baseline.processorRef !== null &&
+    frames.length > 0 &&
+    frames.every((frame) => frame.processorRef === baseline.processorRef)
+  );
+}
+
+/**
+ * Evaluates the existing 0.02 inter-eye-normalized smile criterion. Passing a
+ * single frame supports live gating; passing a task interval returns the same
+ * time-weighted 90th-percentile values consumed by final extraction.
+ */
+export function evaluateSmileAdherence(
+  baseline: NeutralFacialBaseline,
+  frames: readonly FacialKinematicsFrameV1[]
+): SmileAdherenceEvaluation {
+  const processorCompatible = framesMatchBaselineProcessor(baseline, frames);
+  const samples: Record<FacialSide, number[]> = {
+    left: [],
+    right: []
+  };
+  const timedSamples: Record<FacialSide, TimedFacialSample[]> = {
+    left: [],
+    right: []
+  };
+  const pairedAsymmetrySamples: number[] = [];
+
+  if (processorCompatible) {
+    for (const frame of frames) {
+      const perFrame: Partial<Record<FacialSide, number>> = {};
+      for (const side of SIDES) {
+        const point = frame.mouthCorners?.[side];
+        const center = baseline.mouthCorners[side];
+        if (!point || !center || !finitePoint(point)) continue;
+        const value = Math.hypot(point.x - center.x, point.y - center.y);
+        if (!finite(value)) continue;
+        samples[side].push(value);
+        timedSamples[side].push({ tMs: frame.tMs, value });
+        perFrame[side] = value;
+      }
+      if (perFrame.left !== undefined && perFrame.right !== undefined) {
+        pairedAsymmetrySamples.push(
+          Math.abs(perFrame.left - perFrame.right)
+        );
+      }
+    }
+  }
+
+  const excursions = {
+    left:
+      timedSamples.left.length > 0
+        ? timeWeightedPercentile(timedSamples.left, 0.9)
+        : null,
+    right:
+      timedSamples.right.length > 0
+        ? timeWeightedPercentile(timedSamples.right, 0.9)
+        : null
+  };
+  const adherent = {
+    left: meetsFloor(excursions.left, SMILE_ADHERENCE_FLOOR),
+    right: meetsFloor(excursions.right, SMILE_ADHERENCE_FLOOR)
+  };
+  return {
+    observed: adherent.left || adherent.right,
+    processorCompatible,
+    adherent,
+    excursions,
+    excursionSamples: samples,
+    pairedAsymmetrySamples
+  };
+}
+
+function closureFraction(aperture: number, openAperture: number): number {
+  return Math.max(0, Math.min(1, 1 - aperture / openAperture));
+}
+
+/**
+ * Evaluates the existing 20% neutral-referenced aperture reduction. As with
+ * smile adherence, this accepts one live frame or a complete accepted interval.
+ */
+export function evaluateEyeClosureAdherence(
+  baseline: NeutralFacialBaseline,
+  frames: readonly FacialKinematicsFrameV1[]
+): EyeClosureAdherenceEvaluation {
+  const processorCompatible = framesMatchBaselineProcessor(baseline, frames);
+  const samples: Record<FacialSide, number[]> = {
+    left: [],
+    right: []
+  };
+  const timedSamples: Record<FacialSide, TimedFacialSample[]> = {
+    left: [],
+    right: []
+  };
+  const pairedAsymmetrySamples: number[] = [];
+
+  if (processorCompatible) {
+    for (const frame of frames) {
+      const perFrame: Partial<Record<FacialSide, number>> = {};
+      for (const side of SIDES) {
+        const aperture = frame.eyeAperture?.[side];
+        const openAperture = baseline.eyeAperture[side];
+        if (
+          aperture === undefined ||
+          !finite(aperture) ||
+          aperture < 0 ||
+          openAperture === null
+        ) {
+          continue;
+        }
+        const value = closureFraction(aperture, openAperture);
+        samples[side].push(value);
+        timedSamples[side].push({ tMs: frame.tMs, value });
+        perFrame[side] = value;
+      }
+      if (perFrame.left !== undefined && perFrame.right !== undefined) {
+        pairedAsymmetrySamples.push(
+          Math.abs(perFrame.left - perFrame.right)
+        );
+      }
+    }
+  }
+
+  const closureFractions = {
+    left:
+      timedSamples.left.length > 0
+        ? timeWeightedPercentile(timedSamples.left, 0.9)
+        : null,
+    right:
+      timedSamples.right.length > 0
+        ? timeWeightedPercentile(timedSamples.right, 0.9)
+        : null
+  };
+  const closed = {
+    left: meetsFloor(
+      closureFractions.left,
+      EYE_CLOSURE_ADHERENCE_FLOOR
+    ),
+    right: meetsFloor(
+      closureFractions.right,
+      EYE_CLOSURE_ADHERENCE_FLOOR
+    )
+  };
+  const recovered = {
+    left:
+      processorCompatible &&
+      meetsCeiling(
+        closureFractions.left,
+        EYE_RECOVERY_CLOSURE_CEILING
+      ),
+    right:
+      processorCompatible &&
+      meetsCeiling(
+        closureFractions.right,
+        EYE_RECOVERY_CLOSURE_CEILING
+      )
+  };
+  return {
+    observed: closed.left || closed.right,
+    processorCompatible,
+    closed,
+    recovered,
+    closureFractions,
+    closureFractionSamples: samples,
+    pairedAsymmetrySamples
+  };
 }
 
 function confidenceFor(
@@ -209,7 +492,9 @@ function extractSmileWindow(
 ): FacialExtractionResult {
   const processorRef = activeFrames[0]?.processorRef;
   const result: FacialExtractionResult = { measurements: [], abstentions: [] };
-  if (!processorRef || neutralFrames[0]?.processorRef !== processorRef) {
+  const baseline = createNeutralFacialBaseline(neutralFrames);
+  const evaluation = evaluateSmileAdherence(baseline, activeFrames);
+  if (!processorRef || !evaluation.processorCompatible) {
     result.abstentions.push(
       abstention(
         window,
@@ -223,42 +508,17 @@ function extractSmileWindow(
     return result;
   }
 
-  const baseline = {
-    left: medianPoint(neutralFrames, "left"),
-    right: medianPoint(neutralFrames, "right")
-  };
-  const excursions: Record<Side, number[]> = { left: [], right: [] };
-  const pairedAsymmetry: number[] = [];
-  for (const frame of activeFrames) {
-    const perFrame: Partial<Record<Side, number>> = {};
-    for (const side of ["left", "right"] as const) {
-      const point = frame.mouthCorners?.[side];
-      const center = baseline[side];
-      if (!point || !center || !finitePoint(point)) continue;
-      const value = Math.hypot(point.x - center.x, point.y - center.y);
-      if (!finite(value)) continue;
-      excursions[side].push(value);
-      perFrame[side] = value;
-    }
-    if (perFrame.left !== undefined && perFrame.right !== undefined) {
-      pairedAsymmetry.push(Math.abs(perFrame.left - perFrame.right));
-    }
-  }
-
   const value = {
     left:
-      excursions.left.length >= MIN_NUMERIC_FRAMES
-        ? percentile(excursions.left, 0.9)
+      evaluation.excursionSamples.left.length >= MIN_NUMERIC_FRAMES
+        ? evaluation.excursions.left
         : null,
     right:
-      excursions.right.length >= MIN_NUMERIC_FRAMES
-        ? percentile(excursions.right, 0.9)
+      evaluation.excursionSamples.right.length >= MIN_NUMERIC_FRAMES
+        ? evaluation.excursions.right
         : null
   };
-  if (
-    Math.max(value.left ?? 0, value.right ?? 0) <
-    SMILE_ADHERENCE_FLOOR
-  ) {
+  if (!evaluation.observed) {
     result.abstentions.push(
       abstention(
         window,
@@ -273,7 +533,7 @@ function extractSmileWindow(
   }
 
   const confidence = confidenceFor(window, activeFrames.length);
-  for (const side of ["left", "right"] as const) {
+  for (const side of SIDES) {
     if (value[side] === null) {
       result.abstentions.push(
         abstention(
@@ -296,7 +556,7 @@ function extractSmileWindow(
         label: `${side === "left" ? "Left" : "Right"} smile excursion`,
         value: value[side],
         unit: "inter-eye-normalized-distance",
-        uncertaintyValues: excursions[side],
+        uncertaintyValues: evaluation.excursionSamples[side],
         confidence,
         processorRef
       })
@@ -306,7 +566,7 @@ function extractSmileWindow(
   if (
     value.left !== null &&
     value.right !== null &&
-    pairedAsymmetry.length >= MIN_NUMERIC_FRAMES
+    evaluation.pairedAsymmetrySamples.length >= MIN_NUMERIC_FRAMES
   ) {
     result.measurements.push(
       measurement(window, neutralWindow, {
@@ -314,17 +574,13 @@ function extractSmileWindow(
         label: "Smile-excursion asymmetry",
         value: Math.abs(value.left - value.right),
         unit: "inter-eye-normalized-distance",
-        uncertaintyValues: pairedAsymmetry,
+        uncertaintyValues: evaluation.pairedAsymmetrySamples,
         confidence,
         processorRef
       })
     );
   }
   return result;
-}
-
-function closureFraction(aperture: number, openAperture: number): number {
-  return Math.max(0, Math.min(1, 1 - aperture / openAperture));
 }
 
 function extractEyeClosureWindow(
@@ -335,7 +591,12 @@ function extractEyeClosureWindow(
 ): FacialExtractionResult {
   const processorRef = activeFrames[0]?.processorRef;
   const result: FacialExtractionResult = { measurements: [], abstentions: [] };
-  if (!processorRef || neutralFrames[0]?.processorRef !== processorRef) {
+  const baseline = createNeutralFacialBaseline(neutralFrames);
+  const evaluation = evaluateEyeClosureAdherence(
+    baseline,
+    activeFrames
+  );
+  if (!processorRef || !evaluation.processorCompatible) {
     result.abstentions.push(
       abstention(
         window,
@@ -349,48 +610,17 @@ function extractEyeClosureWindow(
     return result;
   }
 
-  const open = {
-    left: medianEyeAperture(neutralFrames, "left"),
-    right: medianEyeAperture(neutralFrames, "right")
-  };
-  const fractions: Record<Side, number[]> = { left: [], right: [] };
-  const pairedAsymmetry: number[] = [];
-  for (const frame of activeFrames) {
-    const perFrame: Partial<Record<Side, number>> = {};
-    for (const side of ["left", "right"] as const) {
-      const aperture = frame.eyeAperture?.[side];
-      const openAperture = open[side];
-      if (
-        aperture === undefined ||
-        !finite(aperture) ||
-        aperture < 0 ||
-        openAperture === null
-      ) {
-        continue;
-      }
-      const value = closureFraction(aperture, openAperture);
-      fractions[side].push(value);
-      perFrame[side] = value;
-    }
-    if (perFrame.left !== undefined && perFrame.right !== undefined) {
-      pairedAsymmetry.push(Math.abs(perFrame.left - perFrame.right));
-    }
-  }
-
   const value = {
     left:
-      fractions.left.length >= MIN_NUMERIC_FRAMES
-        ? percentile(fractions.left, 0.9)
+      evaluation.closureFractionSamples.left.length >= MIN_NUMERIC_FRAMES
+        ? evaluation.closureFractions.left
         : null,
     right:
-      fractions.right.length >= MIN_NUMERIC_FRAMES
-        ? percentile(fractions.right, 0.9)
+      evaluation.closureFractionSamples.right.length >= MIN_NUMERIC_FRAMES
+        ? evaluation.closureFractions.right
         : null
   };
-  if (
-    Math.max(value.left ?? 0, value.right ?? 0) <
-    EYE_CLOSURE_ADHERENCE_FLOOR
-  ) {
+  if (!evaluation.observed) {
     result.abstentions.push(
       abstention(
         window,
@@ -405,7 +635,7 @@ function extractEyeClosureWindow(
   }
 
   const confidence = confidenceFor(window, activeFrames.length);
-  for (const side of ["left", "right"] as const) {
+  for (const side of SIDES) {
     if (value[side] === null) {
       result.abstentions.push(
         abstention(
@@ -428,7 +658,7 @@ function extractEyeClosureWindow(
         label: `${side === "left" ? "Left" : "Right"} eye-closure fraction`,
         value: value[side],
         unit: "fraction",
-        uncertaintyValues: fractions[side],
+        uncertaintyValues: evaluation.closureFractionSamples[side],
         confidence,
         processorRef
       })
@@ -438,7 +668,7 @@ function extractEyeClosureWindow(
   if (
     value.left !== null &&
     value.right !== null &&
-    pairedAsymmetry.length >= MIN_NUMERIC_FRAMES
+    evaluation.pairedAsymmetrySamples.length >= MIN_NUMERIC_FRAMES
   ) {
     result.measurements.push(
       measurement(window, neutralWindow, {
@@ -446,7 +676,7 @@ function extractEyeClosureWindow(
         label: "Eye-closure fraction asymmetry",
         value: Math.abs(value.left - value.right),
         unit: "fraction",
-        uncertaintyValues: pairedAsymmetry,
+        uncertaintyValues: evaluation.pairedAsymmetrySamples,
         confidence,
         processorRef
       })

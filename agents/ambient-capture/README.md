@@ -20,7 +20,10 @@ conversation, brief prompted microtasks, or both.
 The hero behavior is modality and task independence: the face lane withholds
 during a turn-away while the speech lane continues, then facial quality
 recovers for neutral-face, smile, and eye-closure tasks. Failure of one task
-abstains only its measurements.
+resets that task's live evidence streak; a guided assessment advances only when
+the task criterion is satisfied. Final extraction receives only the last
+qualifying interval, preventing failed attempts from contaminating the neutral
+reference or facial measurements.
 
 Prompted tasks remain inside Ambient Capture. They do not bypass quality gates,
 make a modality mandatory at the platform level, or create clinical meaning.
@@ -31,5 +34,6 @@ Ambient Capture does not interpret conversation content, diagnose, compare
 history, generate narrative conclusions, or recommend action.
 
 Native MediaPipe landmarks, blendshapes, transformation matrices, and video
-frames do not cross the browser-worker boundary. Only compact derived geometry,
-quality, timing, and processor provenance may enter the coordinator.
+frames do not cross the browser-worker boundary. The live full-face mesh is
+drawn on a worker-owned canvas and is presentation-only. Only compact derived
+geometry, quality, timing, and processor provenance may enter the coordinator.

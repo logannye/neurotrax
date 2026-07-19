@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { detectMeasurableWindows } from "./windowing.js";
 import {
+  syntheticFacialFrame,
   syntheticFrameStream,
   syntheticTaskFrames
 } from "./test-helpers.js";
@@ -83,5 +84,91 @@ describe("detectMeasurableWindows", () => {
     expect(windows.map((window) => window.context.kind)).toEqual([
       "neutral-face"
     ]);
+  });
+
+  it("clips guided visual windows to only the final accepted intervals", () => {
+    const face = [
+      ...syntheticTaskFrames("neutral-face", 0),
+      ...syntheticTaskFrames("neutral-face", 2_000),
+      ...syntheticTaskFrames("smile", 4_000),
+      ...syntheticTaskFrames("smile", 6_000),
+      ...syntheticTaskFrames("eye-closure", 8_000)
+    ];
+
+    const windows = detectMeasurableWindows(syntheticFrameStream({ face }), {
+      guidedTaskEvidenceIntervals: [
+        {
+          taskContext: "neutral-face",
+          startMs: 2_050,
+          endMs: 3_550
+        },
+        {
+          taskContext: "smile",
+          startMs: 6_050,
+          endMs: 7_550
+        },
+        {
+          taskContext: "eye-closure",
+          startMs: 8_050,
+          endMs: 9_550
+        }
+      ]
+    });
+
+    expect(
+      windows.map(({ startMs, endMs, context }) => ({
+        startMs,
+        endMs,
+        kind: context.kind
+      }))
+    ).toEqual([
+      { startMs: 2_050, endMs: 3_550, kind: "neutral-face" },
+      { startMs: 6_050, endMs: 7_550, kind: "smile" },
+      { startMs: 8_050, endMs: 9_550, kind: "eye-closure" }
+    ]);
+  });
+
+  it("accepts an exact 1500ms guided interval sampled every 34ms", () => {
+    const face = Array.from({ length: 45 }, (_, index) => {
+      const tMs = index * 34;
+      return syntheticFacialFrame(tMs, "neutral-face", {
+        sequence: index,
+        analyzedFrameRate: 1_000 / 34,
+        interResultGapMs: index === 0 ? null : 34
+      });
+    });
+
+    const windows = detectMeasurableWindows(syntheticFrameStream({ face }), {
+      guidedTaskEvidenceIntervals: [
+        {
+          taskContext: "neutral-face",
+          startMs: 0,
+          endMs: 1_500
+        }
+      ]
+    });
+
+    expect(face.at(-1)?.tMs).toBe(1_496);
+    expect(windows).toEqual([
+      expect.objectContaining({
+        modality: "face",
+        startMs: 0,
+        endMs: 1_500,
+        context: expect.objectContaining({ kind: "neutral-face" })
+      })
+    ]);
+  });
+
+  it("preserves all usable task runs when guided intervals are omitted", () => {
+    const face = [
+      ...syntheticTaskFrames("neutral-face", 0),
+      ...syntheticTaskFrames("neutral-face", 2_000)
+    ];
+
+    expect(
+      detectMeasurableWindows(syntheticFrameStream({ face }))
+        .filter((window) => window.modality === "face")
+        .map((window) => window.startMs)
+    ).toEqual([0, 2_000]);
   });
 });

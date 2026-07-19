@@ -9,7 +9,7 @@ import type { FrameStreamDiagnostics } from "./visual-frame-pump.js";
 import type { ScheduledVisualFrame } from "./visual-frame-pump.js";
 
 export const VISUAL_WORKER_MESSAGE_VERSION =
-  "phenometric.visual-worker-message.v1" as const;
+  "phenometric.visual-worker-message.v2" as const;
 export const MEDIAPIPE_TASKS_VISION_VERSION = "0.10.35" as const;
 export const FACE_LANDMARKER_MODEL_PATH =
   "/models/face_landmarker.task" as const;
@@ -51,6 +51,20 @@ export interface VisualWorkerResetMessage {
   captureEpoch: number;
 }
 
+export interface VisualWorkerAttachOverlayMessage {
+  schemaVersion: typeof VISUAL_WORKER_MESSAGE_VERSION;
+  type: "attach-overlay";
+  captureEpoch: number;
+  canvas: OffscreenCanvas;
+  maxRenderHz: number;
+}
+
+export interface VisualWorkerClearOverlayMessage {
+  schemaVersion: typeof VISUAL_WORKER_MESSAGE_VERSION;
+  type: "clear-overlay";
+  captureEpoch: number;
+}
+
 export interface VisualWorkerFrameMessage {
   schemaVersion: typeof VISUAL_WORKER_MESSAGE_VERSION;
   type: "frame";
@@ -75,6 +89,8 @@ export interface VisualWorkerDisposeMessage {
 export type VisualWorkerRequest =
   | VisualWorkerInitializeMessage
   | VisualWorkerResetMessage
+  | VisualWorkerAttachOverlayMessage
+  | VisualWorkerClearOverlayMessage
   | VisualWorkerFrameMessage
   | VisualWorkerDisposeMessage;
 
@@ -127,11 +143,19 @@ export interface VisualWorkerDisposedMessage {
   captureEpoch: number;
 }
 
+export interface VisualWorkerOverlayStatusMessage {
+  schemaVersion: typeof VISUAL_WORKER_MESSAGE_VERSION;
+  type: "overlay-status";
+  captureEpoch: number;
+  attached: boolean;
+}
+
 export type VisualWorkerResponse =
   | VisualWorkerReadyMessage
   | VisualWorkerResultMessage
   | VisualWorkerDiscardedMessage
   | VisualWorkerErrorMessage
+  | VisualWorkerOverlayStatusMessage
   | VisualWorkerDisposedMessage;
 
 export function visualWorkerMessage<TMessage extends VisualWorkerRequest>(
@@ -181,6 +205,30 @@ export function createVisualWorkerResetMessage(
   return {
     schemaVersion: VISUAL_WORKER_MESSAGE_VERSION,
     type: "reset",
+    captureEpoch
+  };
+}
+
+export function createVisualWorkerAttachOverlayMessage(
+  captureEpoch: number,
+  canvas: OffscreenCanvas,
+  maxRenderHz = 12
+): VisualWorkerAttachOverlayMessage {
+  return {
+    schemaVersion: VISUAL_WORKER_MESSAGE_VERSION,
+    type: "attach-overlay",
+    captureEpoch,
+    canvas,
+    maxRenderHz
+  };
+}
+
+export function createVisualWorkerClearOverlayMessage(
+  captureEpoch: number
+): VisualWorkerClearOverlayMessage {
+  return {
+    schemaVersion: VISUAL_WORKER_MESSAGE_VERSION,
+    type: "clear-overlay",
     captureEpoch
   };
 }

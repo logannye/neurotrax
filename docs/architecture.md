@@ -66,25 +66,49 @@ current inference and never leave the worker. The worker emits a compact,
 versioned `FacialKinematicsFrameV1` with anatomical laterality, normalized
 geometry, pose, quality observations, timing, and processor provenance.
 
+The application transfers a separate `OffscreenCanvas` into that same worker.
+At no more than 12 Hz, the worker draws all 478 points, the complete MediaPipe
+facial tessellation, and task-relevant contour and measurement-anchor accents.
+The drawing uses unmirrored normalized coordinates and shares the preview's CSS
+mirror, so display alignment cannot change stored anatomical laterality.
+Neither native landmark coordinates, mesh connections, screenshots, nor
+overlay pixels cross back into application messages or serialized artifacts.
+The canvas is cleared at every visual-withholding and media lifecycle boundary
+and recreated after a worker restart. Browsers without transferred-canvas
+support retain the native-landmark-free bounding-box display.
+
 ## Guided workflow
 
 The browser-level guided controller does not create measurements. It runs a
-fixed nineteen-second nonclinical policy:
+completion-gated, nonclinical policy:
 
-1. five seconds centered and speaking naturally;
-2. three seconds turning away while speech continues;
-3. three seconds facing the camera with a relaxed neutral face;
-4. four seconds smiling comfortably; and
-5. four seconds gently closing and reopening the eyes.
+1. 1.5 seconds of continuous usable face plus voiced, unclipped speech;
+2. 750 ms of intentional face absence or out-of-range pose while speech
+   remains voiced;
+3. 1.5 seconds of usable face plus non-voiced audio for a quiet neutral
+   reference;
+4. 1.5 seconds of usable, silent evidence including at least 500 ms of
+   threshold-crossing smile excursion; and
+5. 1.5 seconds of usable, silent evidence in which the same eye closes for at
+   least 300 ms and recovers for at least 300 ms.
 
-Each phase records `confirmed`, `not-confirmed`, or `pending`. The coordinator
-always advances at the phase deadline, while the conductor remains responsible
-for authoritative measurements and abstentions. Only missing consent or denied
-device access can prevent the encounter from starting. A prompted facial task
-needs at least 1.5 seconds of usable evidence. Missing task adherence abstains
-only that task and does not suppress usable speech or another facial task.
+Elapsed time alone never advances a phase, and no skip is available. A quality
+break—or more than 200 ms between visual results—resets the current continuous
+streak without changing phases. After
+twelve seconds, the coordinator exposes criterion-specific corrective
+guidance, and the participant can continue retrying indefinitely or explicitly
+end and discard the assessment. A worker restart resets the current gate; a
+visual-processor change after neutral capture returns the workflow to neutral
+and invalidates later facial completions.
 
-This fixed sequence is a presentation fixture, not the target protocol system.
+Every confirmed transition carries its accepted evidence interval. The
+conductor clips final neutral, smile, and eye-closure windows to those exact
+intervals, so failed attempts cannot affect a baseline or measurement. Shared
+pure baseline and task-adherence evaluators are used by both live gating and
+final extraction. Non-guided consumers retain task-specific abstention
+behavior.
+
+This guided sequence is a presentation fixture, not the target protocol system.
 The generalized platform will support both natural conversational windows and
 brief protocol-defined microtasks. Prompting remains a context within Ambient
 Capture and must not bypass the conductor's quality or abstention authority.
@@ -189,7 +213,7 @@ flowchart TD
     CHECK --> CAL["CaptureCalibration"]
     CAL --> SESSION["Conductor session"]
     SESSION --> AUDIO["Speech Analysis"]
-    SESSION --> FACE["Ephemeral MediaPipe worker"]
+    SESSION --> FACE["Ephemeral MediaPipe worker + live mesh"]
     AUDIO --> OBS["EncounterObservation"]
     FACE --> OBS
     OBS --> FACTS["Speech + facial outcomes"]

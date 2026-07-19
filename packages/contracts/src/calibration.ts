@@ -84,29 +84,43 @@ export interface VisualQualityAssessment {
   sharpnessFloor: number;
 }
 
-export type TimedEncounterPhase =
-  VisualTaskContext;
+export type CompletionGatedEncounterPhase = VisualTaskContext;
 
 export type ConfirmationState =
   | "pending"
-  | "confirmed"
-  | "not-confirmed";
+  | "confirmed";
 
-export interface TimedEncounterPhasePolicy {
-  phase: TimedEncounterPhase;
-  minimumDurationMs: number;
-  maximumDurationMs: number;
+export interface CompletionGatedPhasePolicy {
+  phase: CompletionGatedEncounterPhase;
+  evidenceDurationMs: number;
+  adherenceHoldMs: number;
+  assistanceAfterMs: number;
   successCondition: string;
-  timeoutBehavior: "advance-and-record-not-confirmed";
 }
 
-export interface TimedEncounterPolicy {
-  id: "judge-ready-timed-v0.2";
+export interface CompletionGatedEncounterPolicy {
+  id: "completion-gated-v0.3";
   systemCheckMaximumMs: number;
   quietCalibrationMs: number;
+  maximumContinuousSignalGapMs: number;
   reliablePitchFramesForStrong: number;
   minimumSpeechEnergyFrames: number;
   faceFramesForStrong: number;
   faceFramesForLimited: number;
-  phases: readonly TimedEncounterPhasePolicy[];
+  phases: readonly CompletionGatedPhasePolicy[];
+}
+
+export interface CompletionGateProgress {
+  evidenceMs: number;
+  evidenceRequiredMs: number;
+  adherenceMs: number;
+  adherenceRequiredMs: number;
+  fraction: number;
+}
+
+export interface GuidedTaskEvidenceInterval {
+  taskContext: VisualTaskContext;
+  startMs: number;
+  endMs: number;
+  processorRef?: string;
 }

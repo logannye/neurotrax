@@ -20,6 +20,12 @@ workflow defined in a versioned protocol pack.
 - Raw frames and samples are processed ephemerally; no recording path exists.
 - Native facial landmarks, blendshapes, and transformation matrices remain
   inside the browser worker for one inference and are never serialized.
+- The live facial mesh is rendered directly into a transferred worker-owned
+  canvas. Native landmark coordinates, connection arrays, screenshots, and
+  overlay pixels never enter observations, events, diagnostics, evidence
+  requests, or network payloads.
+- Ending and discarding an assessment releases device access immediately and
+  produces no observation or report.
 - Each modality applies its own quality contract and can abstain independently.
 - An unusable interval yields no measurement value.
 - Measurements, summary generation, grounding, and human disposition remain
@@ -103,7 +109,7 @@ misuse review.
 The current application has no raw-media or native-visual-observation retention
 path. Serialized observations explicitly assert `rawMediaRetained: false` and
 `nativeVisualObservationsRetained: false`; that must remain true for this
-prototype.
+prototype. The presentation-only mesh does not create a new retention path.
 
 Future analytical or clinical validation may require an independently deployed
 research environment with explicitly consented media retention. Such a system

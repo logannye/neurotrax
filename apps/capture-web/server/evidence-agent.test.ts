@@ -117,7 +117,7 @@ describe("runEvidenceAgent", () => {
       parse.mock.calls[0][0].input
     ).toLowerCase();
     expect(serializedModelInput).not.toMatch(
-      /landmark|blendshape|transformationmatrix|deviceid|devicelabel|rawmedia/
+      /landmark|meshconnection|overlaypixel|offscreencanvas|screenshot|blendshape|transformationmatrix|deviceid|devicelabel|rawmedia/
     );
   });
 

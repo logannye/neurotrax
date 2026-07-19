@@ -8,10 +8,12 @@ export type {
   VisualTaskContext,
   VisualQualityReasonCode,
   VisualQualityAssessment,
-  TimedEncounterPhase,
+  CompletionGatedEncounterPhase,
   ConfirmationState,
-  TimedEncounterPhasePolicy,
-  TimedEncounterPolicy
+  CompletionGatedPhasePolicy,
+  CompletionGatedEncounterPolicy,
+  CompletionGateProgress,
+  GuidedTaskEvidenceInterval
 } from "./calibration.js";
 export type {
   Modality,

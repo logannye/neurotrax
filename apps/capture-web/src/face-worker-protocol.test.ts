@@ -4,6 +4,8 @@ import {
   MEDIAPIPE_TASKS_VISION_VERSION,
   VISUAL_WORKER_MESSAGE_VERSION,
   createVideoCaptureSettings,
+  createVisualWorkerAttachOverlayMessage,
+  createVisualWorkerClearOverlayMessage,
   createVisualWorkerInitializeMessage,
   visualPipelineProvenance
 } from "./face-worker-protocol.js";
@@ -47,6 +49,37 @@ describe("visual worker protocol", () => {
     });
     expect(JSON.stringify(message)).not.toMatch(
       /deviceId|groupId|label/i
+    );
+  });
+
+  it("versions transferred-canvas lifecycle requests without coordinates", () => {
+    const canvas = {
+      width: 0,
+      height: 0,
+      getContext: () => null
+    } as unknown as OffscreenCanvas;
+
+    const attach = createVisualWorkerAttachOverlayMessage(
+      7,
+      canvas,
+      12
+    );
+    const clear = createVisualWorkerClearOverlayMessage(7);
+
+    expect(attach).toEqual({
+      schemaVersion: "phenometric.visual-worker-message.v2",
+      type: "attach-overlay",
+      captureEpoch: 7,
+      canvas,
+      maxRenderHz: 12
+    });
+    expect(clear).toEqual({
+      schemaVersion: "phenometric.visual-worker-message.v2",
+      type: "clear-overlay",
+      captureEpoch: 7
+    });
+    expect(JSON.stringify({ ...attach, canvas: undefined })).not.toMatch(
+      /landmarks|coordinates|pixels|bitmap|matrix|blendshape/i
     );
   });
 });

@@ -148,10 +148,12 @@ clinically usable when a modality or task fails.
 ### Current prototype foundation
 
 The current implementation is a nonclinical engineering demonstration of that
-hybrid shape. It uses MediaPipe as its only visual model and runs a fixed
-nineteen-second sequence: establishing speech and face capture, turn-away,
-neutral face, smile, and eye closure. It reports bilateral smile excursion and
-eye-closure fraction plus absolute left-right asymmetry, alongside five speech
+hybrid shape. It uses MediaPipe as its only visual model and runs a
+completion-gated sequence: establishing speech and face capture, intentional
+turn-away, quiet neutral reference, smile, and eye closure with reopening. Each
+exercise must satisfy its engineering signal criterion; elapsed time cannot
+advance or skip it. It reports bilateral smile excursion and eye-closure
+fraction plus absolute left-right asymmetry, alongside five speech
 measurements. These are descriptive prototype measurements, not validated
 clinical endpoints or scores.
 
@@ -159,7 +161,9 @@ Subject-left and subject-right are anatomical labels and do not change when the
 preview is mirrored. Visual acquisition timestamps, processor provenance, and
 quality observations remain attached to derived frames. Native landmarks,
 blendshapes, transformation matrices, and video frames remain ephemeral inside
-the browser worker and are not observation data.
+the browser worker and are not observation data. A live 478-point mesh is
+drawn directly inside that worker for presentation only; its coordinates and
+pixels are not returned, retained, or serialized.
 
 ## Measurement domains
 

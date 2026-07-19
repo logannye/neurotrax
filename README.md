@@ -238,6 +238,10 @@ The working demonstration uses a laptop camera and microphone and implements:
 - local MediaPipe facial geometry in a versioned browser-worker pipeline;
 - acquisition-time video scheduling, anatomical laterality, camera and model
   provenance, and reason-coded visual quality;
+- a worker-rendered 478-point facial mesh that is visible during usable
+  capture but never enters application data;
+- completion-gated coaching that advances only after each exercise is
+  technically observed;
 - independent, quality-gated speech and facial measurement windows;
 - eleven prototype encounter metrics;
 - robust per-visit aggregation with algorithm-version checks;
@@ -259,10 +263,13 @@ They are engineering features, not validated biomarkers. Measurements
 explicitly carry technical uncertainty state and
 `clinicalValidation: "none"`.
 
-The live demonstration uses a nineteen-second nonclinical task sequence:
+The live demonstration uses a completion-gated nonclinical task sequence:
 establish the audiovisual signals, demonstrate independent facial withholding,
-capture a neutral reference, hold a comfortable smile, and gently close and
-reopen the eyes.
+capture a quiet neutral reference, hold a comfortable smile, and gently close
+and reopen the eyes. A quality break resets only the current evidence streak;
+elapsed time never advances an unfinished exercise. After twelve seconds the
+interface provides criterion-specific guidance, while the participant can
+keep retrying or end and discard the assessment.
 Personal Trajectory exists as a tested internal package but is not connected
 to persistent patient history. No authentication, clinical data store, FHIR
 integration, EHR write, or production deployment is implemented.
@@ -274,6 +281,8 @@ The production direction is **ephemeral media, durable measurements**:
 - request explicit, purpose-specific consent before analysis;
 - process raw audio and video locally when technically feasible;
 - retain the minimum structured measurements needed for the intended use;
+- keep the live mesh presentation-only inside the visual worker, with no
+  landmark, connection, screenshot, or overlay-pixel serialization;
 - keep raw media and conversation content away from narrative generation;
 - make device, context, quality, uncertainty, and algorithm version visible;
 - permit every modality and measurement to abstain;

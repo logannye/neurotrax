@@ -238,9 +238,13 @@ node <<'NODE'
   );
   if (
     correctionEvent.payload?.attempt !== 1 ||
-    correctionEvent.payload?.retryPolicy?.maxAttempts !== 1
+    correctionEvent.payload?.retryPolicy?.maxAttempts !== null ||
+    correctionEvent.payload?.retryPolicy?.onExhaustion !==
+      "remain-on-current-task"
   ) {
-    throw new Error("Guided-capture correction must be bounded to one attempt.");
+    throw new Error(
+      "Guided-capture correction must permit repetition without timeout or skip."
+    );
   }
   if (
     !captureQualityEvent.payload?.processor?.id ||
@@ -343,11 +347,11 @@ node <<'NODE'
   }
 
   const expectedPhases = [
-    ["establishing", 5],
-    ["turn-away", 3],
-    ["neutral-face", 3],
-    ["smile", 4],
-    ["eye-closure", 4]
+    ["establishing", 1500],
+    ["turn-away", 750],
+    ["neutral-face", 1500],
+    ["smile", 1500],
+    ["eye-closure", 1500]
   ];
   const expectedFaceCodes = [
     "prototype.face.smile_excursion.left",
@@ -373,19 +377,26 @@ node <<'NODE'
     protocol.sequence.some(
       (phase, index) =>
         phase.phase !== expectedPhases[index][0] ||
-        phase.durationSeconds !== expectedPhases[index][1]
+        phase.evidenceDurationMs !== expectedPhases[index][1] ||
+        phase.assistanceAfterMs !== 12000 ||
+        "durationSeconds" in phase
     ) ||
-    protocol.sequence.reduce(
-      (total, phase) => total + phase.durationSeconds,
-      0
-    ) !== 19 ||
+    protocol.sequence[3].adherenceHoldMs !== 500 ||
+    protocol.sequence[4].closureHoldMs !== 300 ||
+    protocol.sequence[4].recoveryHoldMs !== 300 ||
+    protocol.advancement?.mode !== "signal-gated" ||
+    protocol.advancement?.maximumContinuousSignalGapMs !== 200 ||
+    protocol.advancement?.timeoutBehavior !== "never-auto-advance" ||
+    protocol.advancement?.skipAvailable !== false ||
+    protocol.advancement?.acceptedEvidence !==
+      "final-qualifying-interval-only" ||
     JSON.stringify(protocol.speechMeasurements) !==
       JSON.stringify(expectedSpeechCodes) ||
     JSON.stringify(protocol.facialMeasurements) !==
       JSON.stringify(expectedFaceCodes)
   ) {
     throw new Error(
-      "Protocol must define the 19-second sequence and exact 5 speech + 6 facial measurements."
+      "Protocol must define completion-gated exercises and exact 5 speech + 6 facial measurements."
     );
   }
   if (
@@ -395,6 +406,11 @@ node <<'NODE'
     protocol.processing?.lateralityConvention !== "subject-anatomical" ||
     protocol.processing?.coordinateSpace !==
       "normalized-unmirrored-image" ||
+    protocol.processing?.liveOverlay?.landmarkCount !== 478 ||
+    protocol.processing?.liveOverlay?.maximumRenderRateHz !== 12 ||
+    protocol.processing?.liveOverlay?.renderedInsideVisualWorker !== true ||
+    protocol.processing?.liveOverlay?.displayOnly !== true ||
+    protocol.processing?.liveOverlay?.stored !== false ||
     protocol.clinicalClaims?.length !== 0
   ) {
     throw new Error(
@@ -458,7 +474,11 @@ node <<'NODE'
     "transformationMatrix",
     "facialTransformationMatrixes",
     "bitmap",
-    "mediaStream"
+    "mediaStream",
+    "meshConnections",
+    "overlayPixels",
+    "offscreenCanvas",
+    "screenshot"
   ]);
   const findForbiddenKey = (value) => {
     if (!value || typeof value !== "object") return null;
@@ -474,7 +494,8 @@ node <<'NODE'
     ["prior observation", priorObservation],
     ["history", history],
     ["comparison", comparison],
-    ["evidence card", card]
+    ["evidence card", card],
+    ["event stream", events]
   ]) {
     const forbidden = findForbiddenKey(artifact);
     if (forbidden) {

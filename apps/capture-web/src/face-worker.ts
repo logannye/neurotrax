@@ -9,6 +9,7 @@ import {
   deriveFaceFeature,
   type FaceFeatureState
 } from "./face-features.js";
+import { FaceMeshOverlayRenderer } from "./face-mesh-overlay.js";
 import {
   FACE_LANDMARKER_MODEL_PATH,
   VISUAL_WORKER_MESSAGE_VERSION,
@@ -35,6 +36,8 @@ let featureState: FaceFeatureState = {
 };
 let analyzedAcquisitionTimes: number[] = [];
 let initializing: Promise<void> | null = null;
+const meshOverlay = new FaceMeshOverlayRenderer();
+let meshOverlayCaptureEpoch: number | null = null;
 const qualityCanvas = new OffscreenCanvas(
   QUALITY_ROI_SIZE,
   QUALITY_ROI_SIZE
@@ -48,6 +51,10 @@ function post(message: VisualWorkerResponse): void {
 }
 
 function resetDerivedState(captureEpoch: number): void {
+  meshOverlay.clear();
+  if (meshOverlay.isAttached()) {
+    meshOverlayCaptureEpoch = captureEpoch;
+  }
   activeCaptureEpoch = captureEpoch;
   lastSequence = 0;
   lastAcquiredAtMs = null;
@@ -261,6 +268,7 @@ function processFrame(message: VisualWorkerFrameMessage): void {
   }
   if (!landmarker || !provenance) {
     message.bitmap.close();
+    meshOverlay.clear();
     post(
       errorMessage("Face Landmarker is not ready.", {
         code: "worker-not-ready",
@@ -312,6 +320,22 @@ function processFrame(message: VisualWorkerFrameMessage): void {
     featureState = derived.nextState;
     lastSequence = message.sequence;
     lastAcquiredAtMs = message.acquiredAtMs;
+    if (
+      nativeLandmarks &&
+      derived.frame.faceVisible &&
+      derived.frame.qualityReasons.length === 0 &&
+      meshOverlayCaptureEpoch === message.captureEpoch
+    ) {
+      meshOverlay.render({
+        landmarks: nativeLandmarks,
+        taskContext: message.taskContext,
+        width: message.width,
+        height: message.height,
+        acquiredAtMs: message.acquiredAtMs
+      });
+    } else {
+      meshOverlay.clear();
+    }
     post({
       schemaVersion: VISUAL_WORKER_MESSAGE_VERSION,
       type: "frame",
@@ -323,6 +347,7 @@ function processFrame(message: VisualWorkerFrameMessage): void {
       stream: message.stream
     });
   } catch (error) {
+    meshOverlay.clear();
     post(
       errorMessage(readableError(error, "Face inference failed."), {
         code: "inference-failed",
@@ -338,6 +363,8 @@ function processFrame(message: VisualWorkerFrameMessage): void {
 }
 
 function dispose(captureEpoch: number): void {
+  meshOverlay.detach();
+  meshOverlayCaptureEpoch = null;
   landmarker?.close();
   landmarker = null;
   provenance = null;
@@ -376,6 +403,7 @@ self.addEventListener("message", (event: MessageEvent<unknown>) => {
   const message = candidate as VisualWorkerRequest;
   if (message.type === "initialize") {
     void initialize(message).catch((error) => {
+      meshOverlay.clear();
       post(
         errorMessage(
           readableError(
@@ -394,6 +422,35 @@ self.addEventListener("message", (event: MessageEvent<unknown>) => {
   }
   if (message.type === "reset") {
     resetDerivedState(message.captureEpoch);
+    return;
+  }
+  if (message.type === "attach-overlay") {
+    if (message.captureEpoch < activeCaptureEpoch) {
+      post({
+        schemaVersion: VISUAL_WORKER_MESSAGE_VERSION,
+        type: "overlay-status",
+        captureEpoch: message.captureEpoch,
+        attached: false
+      });
+      return;
+    }
+    const attached = meshOverlay.attach(
+      message.canvas,
+      message.maxRenderHz
+    );
+    meshOverlayCaptureEpoch = attached ? message.captureEpoch : null;
+    post({
+      schemaVersion: VISUAL_WORKER_MESSAGE_VERSION,
+      type: "overlay-status",
+      captureEpoch: message.captureEpoch,
+      attached
+    });
+    return;
+  }
+  if (message.type === "clear-overlay") {
+    if (message.captureEpoch === meshOverlayCaptureEpoch) {
+      meshOverlay.clear();
+    }
     return;
   }
   if (message.type === "dispose") {

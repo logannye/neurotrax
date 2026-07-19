@@ -1,11 +1,15 @@
 import "./styles.css";
 import {
+  createNeutralFacialBaseline,
   createConductorSession,
   createEventFactory,
+  evaluateEyeClosureAdherence,
+  evaluateSmileAdherence,
   evaluateVisualQuality,
   type AudioFeatureFrame,
   type ConductorSession,
-  type FacialKinematicsFrameV1
+  type FacialKinematicsFrameV1,
+  type NeutralFacialBaseline
 } from "@phenometric/ambient-core";
 import {
   createModalityOutcomes,
@@ -44,7 +48,8 @@ import {
 } from "./capture-calibration.js";
 import {
   createGuidedDemoController,
-  JUDGE_READY_TIMED_POLICY,
+  JUDGE_READY_COMPLETION_POLICY,
+  type GuidedPhase,
   type GuidedDemoSnapshot
 } from "./guided-demo.js";
 import {
@@ -53,11 +58,14 @@ import {
   OverlayRenderThrottle,
   VideoFramePump,
   VisualLaneGuard,
+  VisualResultAcceptanceGuard,
   VisualWorkerRestartBudget,
   type FrameStreamDiagnostics
 } from "./visual-frame-pump.js";
 import {
   VISUAL_WORKER_MESSAGE_VERSION,
+  createVisualWorkerAttachOverlayMessage,
+  createVisualWorkerClearOverlayMessage,
   visualPipelineProvenance,
   visualWorkerMessage,
   type VisualWorkerFrameMessage,
@@ -94,6 +102,8 @@ function element<T extends HTMLElement>(id: string): T {
 
 const cameraPreview = element<HTMLVideoElement>("camera-preview");
 const faceOverlay = element<HTMLCanvasElement>("face-overlay");
+let landmarkOverlay = element<HTMLCanvasElement>("landmark-overlay");
+const meshDisclosure = element<HTMLDivElement>("mesh-disclosure");
 const cameraEmpty = element<HTMLDivElement>("camera-empty");
 const liveStrip = element<HTMLDivElement>("live-strip");
 const cameraCallout = element<HTMLDivElement>("camera-callout");
@@ -105,6 +115,8 @@ const guidanceTitle = element<HTMLElement>("guidance-title");
 const guidanceDetail = element<HTMLElement>("guidance-detail");
 const guidanceProgressFill =
   element<HTMLSpanElement>("guidance-progress-fill");
+const guidanceProgress =
+  element<HTMLDivElement>("guidance-progress");
 const consentCheckbox = element<HTMLInputElement>("consent-checkbox");
 const startButton = element<HTMLButtonElement>("start-button");
 const stopButton = element<HTMLButtonElement>("stop-button");
@@ -191,6 +203,7 @@ const testScenario = query.get("scenario") ?? "hero";
 const operatorMode = query.get("operator") === "1";
 const visualWorkerSmokeMode =
   import.meta.env.DEV && query.get("visualWorkerSmoke") === "1";
+let testVisualCaptureSuspended = false;
 
 const REQUESTED_VIDEO_CAPTURE = {
   width: 1280,
@@ -214,7 +227,9 @@ function defaultVideoCaptureSettings(): VideoCaptureSettings {
 }
 
 let state: CaptureState = "idle";
+let lifecycleGeneration = 0;
 let mediaStream: MediaStream | null = null;
+const pendingMediaStreams = new Set<MediaStream>();
 let audioContext: AudioContext | null = null;
 let audioSource: MediaStreamAudioSourceNode | null = null;
 let analyser: AnalyserNode | null = null;
@@ -235,7 +250,10 @@ let audioFrames: AudioFeatureFrame[] = [];
 let receivedFaceFrameCount = 0;
 let usableFaceFrameCount = 0;
 let latestAudioFeature: DerivedAudioFeature | null = null;
+let latestAudioFeatureAtMs = Number.NEGATIVE_INFINITY;
 let latestFaceUsable = false;
+let guidedPhaseFaceFrames: FacialKinematicsFrameV1[] = [];
+let neutralFacialBaseline: NeutralFacialBaseline | null = null;
 let faceWorkerReady = false;
 let visualCaptureEpoch = 1;
 let visualPipeline: VisualPipelineProvenance | null = null;
@@ -244,6 +262,9 @@ let videoCaptureSettings: VideoCaptureSettings =
 let visualScheduler: LatestFrameScheduler<ImageBitmap> | null = null;
 let visualFramePump: VideoFramePump<ImageBitmap> | null = null;
 let visualSmokeSubmitted = false;
+let landmarkOverlayAttached = false;
+let landmarkOverlayTransferred = false;
+let externalVisualWithholdingActive = false;
 let latestVisualRuntimeDiagnostics: {
   acquiredAtMs: number;
   analyzedFrameRate: number;
@@ -265,14 +286,19 @@ let resultsVisible = false;
 let captureVisitId = "";
 let captureParticipantId = "developer-self-demo";
 let lastGuidedTransitionId = 0;
+let lastAssistancePhase: GuidedPhase | null = null;
 let lastFaceQuality: "unknown" | "measurable" | "withheld" = "unknown";
 let faceWindowOpen = false;
 let packetTimer: number | null = null;
 let cameraCalloutTimer: number | null = null;
 let traceCloseTimer: number | null = null;
+let resetCaptureOperation: Promise<void> | null = null;
+let testProcessorChangeInjected = false;
 const voiceTracker = createVoiceActivityTracker();
 const guidedDemo = createGuidedDemoController();
 const visualLaneGuard = new VisualLaneGuard();
+const visualResultAcceptanceGuard =
+  new VisualResultAcceptanceGuard();
 const visualWorkerRestartBudget = new VisualWorkerRestartBudget();
 const overlayRenderThrottle = new OverlayRenderThrottle(12);
 
@@ -305,6 +331,91 @@ function createFaceWorker(): Worker {
 }
 
 let faceWorker = createFaceWorker();
+
+function replaceLandmarkOverlayCanvas(): void {
+  const replacement = document.createElement("canvas");
+  replacement.id = "landmark-overlay";
+  replacement.className = "landmark-overlay";
+  replacement.setAttribute("aria-hidden", "true");
+  replacement.hidden = true;
+  landmarkOverlay.replaceWith(replacement);
+  landmarkOverlay = replacement;
+  landmarkOverlayAttached = false;
+  landmarkOverlayTransferred = false;
+  meshDisclosure.hidden = true;
+}
+
+function attachLandmarkOverlay(worker: Worker): boolean {
+  const transferableCanvas = landmarkOverlay as HTMLCanvasElement & {
+    transferControlToOffscreen?: () => OffscreenCanvas;
+  };
+  if (typeof transferableCanvas.transferControlToOffscreen !== "function") {
+    landmarkOverlay.hidden = true;
+    meshDisclosure.hidden = true;
+    return false;
+  }
+  try {
+    const offscreen = transferableCanvas.transferControlToOffscreen();
+    landmarkOverlayTransferred = true;
+    worker.postMessage(
+      createVisualWorkerAttachOverlayMessage(
+        visualCaptureEpoch,
+        offscreen,
+        12
+      ),
+      [offscreen]
+    );
+    // The worker confirms that a 2D context was created before the UI claims
+    // that the mesh is live.
+    landmarkOverlayAttached = false;
+    landmarkOverlay.hidden = true;
+    meshDisclosure.hidden = true;
+    return true;
+  } catch {
+    landmarkOverlayAttached = false;
+    landmarkOverlay.hidden = true;
+    meshDisclosure.hidden = true;
+    return false;
+  }
+}
+
+function clearLandmarkOverlay(): void {
+  landmarkOverlay.hidden = true;
+  meshDisclosure.hidden = true;
+  if (landmarkOverlayTransferred) {
+    try {
+      faceWorker.postMessage(
+        createVisualWorkerClearOverlayMessage(visualCaptureEpoch)
+      );
+    } catch {
+      // A terminated worker already releases its transferred display surface.
+    }
+    return;
+  }
+  const context = landmarkOverlay.getContext("2d");
+  context?.clearRect(
+    0,
+    0,
+    landmarkOverlay.width,
+    landmarkOverlay.height
+  );
+}
+
+function clearAllVisualOverlays(): void {
+  clearLandmarkOverlay();
+  faceOverlay.getContext("2d")?.clearRect(
+    0,
+    0,
+    faceOverlay.width,
+    faceOverlay.height
+  );
+}
+
+function showLandmarkOverlay(): void {
+  if (!landmarkOverlayAttached) return;
+  landmarkOverlay.hidden = false;
+  meshDisclosure.hidden = false;
+}
 
 function formatElapsed(elapsedMs: number): string {
   const totalSeconds = Math.max(0, Math.floor(elapsedMs / 1000));
@@ -522,18 +633,20 @@ function updateState(nextState: CaptureState, detail?: string): void {
 
   startButton.disabled = true;
   stopButton.disabled = true;
+  stopButton.hidden = true;
   resetButton.hidden = !["review", "reviewed", "error"].includes(nextState);
 
   if (nextState === "idle" || nextState === "ready") {
-    stopButton.textContent = "Complete assessment";
     refreshStartAvailability();
   }
   if (nextState === "capturing") {
-    stopButton.textContent = "Complete assessment";
-    stopButton.disabled = true;
+    stopButton.textContent = "End assessment";
+    stopButton.hidden = false;
+    stopButton.disabled = false;
   }
   if (nextState === "analyzing") {
     stopButton.textContent = "Summary in progress";
+    stopButton.hidden = true;
     stopButton.disabled = true;
   }
   if (detail) captureHint.textContent = detail;
@@ -579,47 +692,43 @@ function updateMilestones(snapshot: GuidedDemoSnapshot): void {
     snapshot.confirmations.eyeClosure === "confirmed" ||
       snapshot.phase === "complete"
   );
-  stopButton.disabled = true;
-
-  const phaseDuration =
-    snapshot.phase === "complete"
-      ? 1
-      : JUDGE_READY_TIMED_POLICY.phases.find(
-          (phase) => phase.phase === snapshot.phase
-        )?.maximumDurationMs ?? 1;
-  guidanceProgressFill.style.width = `${
-    snapshot.phase === "complete"
-      ? 100
-      : Math.round(
-          ((phaseDuration - snapshot.remainingMs) / phaseDuration) * 100
-        )
-  }%`;
+  const progressPercent = Math.round(snapshot.progress.fraction * 100);
+  guidanceProgressFill.style.width = `${progressPercent}%`;
+  guidanceProgress.setAttribute(
+    "aria-valuenow",
+    progressPercent.toString()
+  );
 
   if (snapshot.phase === "establishing") {
     guidanceStep.textContent = "Step 1 of 5";
     guidanceTitle.textContent = "Speak naturally";
     guidanceDetail.textContent =
-      "Keep your face centered while speech and facial signals stabilize.";
+      snapshot.assistanceText ??
+      "Keep your face centered and continue speaking until the signal is confirmed.";
   } else if (snapshot.phase === "turn-away") {
     guidanceStep.textContent = "Step 2 of 5";
     guidanceTitle.textContent = "Briefly turn away";
     guidanceDetail.textContent =
-      "Continue speaking while Facial Analysis pauses until you return.";
+      snapshot.assistanceText ??
+      "Continue speaking and turn away until Facial Analysis pauses.";
   } else if (snapshot.phase === "neutral-face") {
     guidanceStep.textContent = "Step 3 of 5";
-    guidanceTitle.textContent = "Relax your face";
+    guidanceTitle.textContent = "Hold a quiet neutral reference";
     guidanceDetail.textContent =
-      "Face the camera, stop speaking, and hold a comfortable neutral expression.";
+      snapshot.assistanceText ??
+      "Face the camera, stop speaking, and hold still while a neutral reference is captured.";
   } else if (snapshot.phase === "smile") {
     guidanceStep.textContent = "Step 4 of 5";
     guidanceTitle.textContent = "Smile comfortably";
     guidanceDetail.textContent =
-      "Hold a comfortable smile while bilateral facial movement is measured.";
+      snapshot.assistanceText ??
+      "Stay quiet and hold a comfortable smile until the signal is confirmed.";
   } else if (snapshot.phase === "eye-closure") {
     guidanceStep.textContent = "Step 5 of 5";
     guidanceTitle.textContent = "Close and reopen your eyes";
     guidanceDetail.textContent =
-      "Gently close your eyes, hold briefly, then reopen them.";
+      snapshot.assistanceText ??
+      "Stay quiet, gently close your eyes, hold briefly, then reopen them fully.";
   } else {
     guidanceStep.textContent = "Capture complete";
     guidanceTitle.textContent = "Preparing encounter summary";
@@ -639,27 +748,25 @@ function updateMilestones(snapshot: GuidedDemoSnapshot): void {
   }
 }
 
-function recordTimedTransition(snapshot: GuidedDemoSnapshot): void {
+function recordGuidedTransition(snapshot: GuidedDemoSnapshot): void {
   const transition = snapshot.lastTransition;
   if (!transition || transition.id <= lastGuidedTransitionId) return;
   lastGuidedTransitionId = transition.id;
-  const confirmed = transition.outcome === "confirmed";
+  lastAssistancePhase = null;
   const completion = emitWorkflowEvent(
     "capture-conductor",
-    confirmed ? "demo.phase.completed" : "demo.phase.timed-out",
+    "demo.phase.completed",
     "ambient-capture",
-    confirmed
-      ? `Completed the ${transition.from} phase with its target signal confirmed.`
-      : `Completed the ${transition.from} phase.`,
+    `Completed the ${transition.from} phase with its target signal confirmed.`,
     {
       phase: transition.from,
-      confirmation: confirmed ? "confirmed" : "not-confirmed",
-      transitionAtMs: transition.atMs
+      confirmation: "confirmed",
+      transitionAtMs: transition.atMs,
+      acceptedEvidenceInterval: transition.acceptedEvidenceInterval
     }
   );
-  const decisionSummary = confirmed
-    ? `Coordinator advanced after confirming ${transition.from.replaceAll("-", " ")}.`
-    : "Coordinator advanced the assessment.";
+  const decisionSummary =
+    `Coordinator advanced after confirming ${transition.from.replaceAll("-", " ")}.`;
   emitWorkflowEvent(
     "capture-conductor",
     "coordinator.decision.recorded",
@@ -668,7 +775,7 @@ function recordTimedTransition(snapshot: GuidedDemoSnapshot): void {
     {
       phase: transition.from,
       decision: "advance",
-      confirmation: confirmed ? "confirmed" : "not-confirmed"
+      confirmation: "confirmed"
     },
     [],
     completion.eventId
@@ -686,32 +793,138 @@ function recordTimedTransition(snapshot: GuidedDemoSnapshot): void {
   }
 }
 
-function advanceTimedEncounter(tMs: number): void {
-  if (state !== "capturing") return;
-  let snapshot = guidedDemo.tick(tMs);
-  recordTimedTransition(snapshot);
+function recordGuidedAssistance(snapshot: GuidedDemoSnapshot): void {
   if (
-    snapshot.phase === "neutral-face" &&
-    faceWindowOpen &&
-    latestFaceUsable &&
-    tMs - snapshot.phaseStartedAt >= 1_500
+    !snapshot.needsAssistance ||
+    snapshot.phase === "complete" ||
+    lastAssistancePhase === snapshot.phase
   ) {
-    snapshot = guidedDemo.noteNeutralFace();
-  } else if (
-    snapshot.phase === "smile" &&
-    faceWindowOpen &&
-    latestFaceUsable &&
-    tMs - snapshot.phaseStartedAt >= 1_500
-  ) {
-    snapshot = guidedDemo.noteSmile();
-  } else if (
-    snapshot.phase === "eye-closure" &&
-    faceWindowOpen &&
-    latestFaceUsable &&
-    tMs - snapshot.phaseStartedAt >= 1_500
-  ) {
-    snapshot = guidedDemo.noteEyeClosure();
+    return;
   }
+  lastAssistancePhase = snapshot.phase;
+  const event = emitWorkflowEvent(
+    "capture-conductor",
+    "coordinator.decision.recorded",
+    "ambient-capture",
+    `Corrective guidance shown for the ${snapshot.phase} criterion.`,
+    {
+      phase: snapshot.phase,
+      decision: "corrective-guidance",
+      assistanceCode: snapshot.assistanceCode,
+      criterionProgress: snapshot.progress.fraction
+    }
+  );
+  setCoordinatorDecision(
+    "Current exercise needs a little adjustment",
+    event.eventId
+  );
+  showCameraCallout(
+    "Adjust and repeat the current exercise",
+    "amber",
+    event.eventId,
+    2_500
+  );
+}
+
+function advanceGuidedEncounter(tMs: number): void {
+  if (state !== "capturing") return;
+  const snapshot = guidedDemo.tick(tMs);
+  recordGuidedAssistance(snapshot);
+  updateMilestones(snapshot);
+  const confirmedTasks = [
+    snapshot.confirmations.neutralFace,
+    snapshot.confirmations.smile,
+    snapshot.confirmations.eyeClosure
+  ].filter((confirmation) => confirmation === "confirmed").length;
+  faceRecoveryValue.textContent = `${confirmedTasks}/3`;
+}
+
+function acceptedFramesForTransition(
+  snapshot: GuidedDemoSnapshot
+): FacialKinematicsFrameV1[] {
+  const interval = snapshot.lastTransition?.acceptedEvidenceInterval;
+  if (!interval) return [];
+  return guidedPhaseFaceFrames.filter(
+    (frame) =>
+      frame.taskContext === interval.taskContext &&
+      frame.tMs >= interval.startMs &&
+      frame.tMs <= interval.endMs &&
+      (interval.processorRef === undefined ||
+        frame.processorRef === interval.processorRef)
+  );
+}
+
+function observeGuidedFaceFrame(
+  frame: FacialKinematicsFrameV1,
+  usable: boolean
+): void {
+  if (state !== "capturing") return;
+  const before = guidedDemo.snapshot(frame.tMs);
+  if (
+    before.phase === "complete" ||
+    frame.taskContext !== before.phase
+  ) {
+    return;
+  }
+
+  guidedPhaseFaceFrames.push(frame);
+  guidedPhaseFaceFrames = guidedPhaseFaceFrames.filter(
+    (candidate) => frame.tMs - candidate.tMs <= 4_000
+  );
+  const audioAvailable =
+    latestAudioFeature !== null &&
+    Math.abs(frame.tMs - latestAudioFeatureAtMs) <= 250;
+  const smile =
+    neutralFacialBaseline === null
+      ? null
+      : evaluateSmileAdherence(neutralFacialBaseline, [frame]);
+  const eyeClosure =
+    neutralFacialBaseline === null
+      ? null
+      : evaluateEyeClosureAdherence(neutralFacialBaseline, [frame]);
+  const snapshot = guidedDemo.observe({
+    tMs: frame.tMs,
+    audioAvailable,
+    audioVoiced: latestAudioFeature?.voiced ?? false,
+    audioClipped: latestAudioFeature?.clipped ?? false,
+    visualUsable: usable,
+    visualReasonCodes: frame.qualityReasons,
+    processorRef: frame.processorRef,
+    smile: {
+      leftAdherent: smile?.adherent.left ?? false,
+      rightAdherent: smile?.adherent.right ?? false
+    },
+    eyeClosure: {
+      left: {
+        closed: eyeClosure?.closed.left ?? false,
+        recovered: eyeClosure?.recovered.left ?? false
+      },
+      right: {
+        closed: eyeClosure?.closed.right ?? false,
+        recovered: eyeClosure?.recovered.right ?? false
+      }
+    }
+  });
+
+  const transitioned =
+    snapshot.lastTransition !== null &&
+    snapshot.lastTransition.id > lastGuidedTransitionId;
+  if (transitioned && snapshot.lastTransition?.from === "neutral-face") {
+    neutralFacialBaseline = createNeutralFacialBaseline(
+      acceptedFramesForTransition(snapshot)
+    );
+  } else if (
+    !transitioned &&
+    before.phase !== snapshot.phase &&
+    snapshot.phase === "neutral-face"
+  ) {
+    neutralFacialBaseline = null;
+  }
+  if (before.phase !== snapshot.phase) {
+    guidedPhaseFaceFrames =
+      !transitioned && snapshot.phase === "neutral-face" ? [frame] : [];
+  }
+  recordGuidedTransition(snapshot);
   updateMilestones(snapshot);
   const confirmedTasks = [
     snapshot.confirmations.neutralFace,
@@ -748,18 +961,11 @@ function applyEventToLanes(event: EventEnvelope): void {
     });
     eventCount.textContent = "Agents active";
   }
-  if (event.type === "capture.window.opened" && event.payload.modality === "speech") {
-    updateMilestones(guidedDemo.noteSpeechWindow());
-  }
   if (
     event.type === "capture.window.opened" &&
     event.payload.modality === "face"
   ) {
     faceWindowOpen = true;
-    const snapshot = guidedDemo.snapshot();
-    if (snapshot.phase === "establishing") {
-      updateMilestones(guidedDemo.noteInitialFaceWindow());
-    }
   }
   if (
     event.type === "capture.window.closed" &&
@@ -785,11 +991,6 @@ function applyEventToLanes(event: EventEnvelope): void {
         quality === "measurable" ? "measurable" : "withheld";
       const snapshot = guidedDemo.snapshot();
       if (nextFaceQuality === "withheld") {
-        updateMilestones(
-          guidedDemo.noteWithholding(
-            latestAudioFeature?.voiced ?? false
-          )
-        );
         document
           .querySelector<HTMLElement>(".agent-graph")
           ?.setAttribute("data-face-path", "paused");
@@ -926,7 +1127,6 @@ function appendEvent(event: EventEnvelope): void {
   const visibleTypes = new Set<AmbientEventType>([
     "capture.window.opened",
     "capture.quality.changed",
-    "demo.phase.timed-out",
     "coordinator.decision.recorded",
     "modality.outcome.created",
     "evidence.grounding.completed",
@@ -972,8 +1172,6 @@ function appendEvent(event: EventEnvelope): void {
       ? `${
           normalized.payload.modality === "face" ? "Facial" : "Speech"
         } window accepted.`
-      : normalized.type === "demo.phase.timed-out"
-      ? "Encounter Coordinator completed the current phase."
       : normalized.type === "evidence.grounding.completed"
         ? "Evidence matched to source measurements."
         : normalized.type === "human-review.pending"
@@ -1007,7 +1205,7 @@ function renderOperatorDiagnostics(
   lastOperatorDiagnosticsRenderAtMs = now;
   operatorOutput.textContent = JSON.stringify(
     {
-      policy: JUDGE_READY_TIMED_POLICY,
+      policy: JUDGE_READY_COMPLETION_POLICY,
       calibration,
       visualPipeline,
       videoCaptureSettings,
@@ -1146,7 +1344,14 @@ function drawFaceOverlay(
   context.restore();
 }
 
-function completeSystemCheck(): void {
+function completeSystemCheck(generation: number): void {
+  if (
+    generation !== lifecycleGeneration ||
+    !consentCheckbox.checked ||
+    !["calibrating-quiet", "calibrating-voice"].includes(state)
+  ) {
+    return;
+  }
   if (calibration) return;
   if (quietRmsSamples.length === 0) {
     quietRmsSamples = [0.002, 0.002, 0.002];
@@ -1169,6 +1374,7 @@ function completeSystemCheck(): void {
     faceResult
   );
   window.clearInterval(sampleInterval ?? undefined);
+  clearAllVisualOverlays();
   stopVisualFramePump();
   window.clearTimeout(systemCheckTimer ?? undefined);
   sampleInterval = null;
@@ -1226,7 +1432,7 @@ function sampleAudioFrame(): void {
       100,
       Math.round(
         ((now - preflightStartedAt) /
-          JUDGE_READY_TIMED_POLICY.systemCheckMaximumMs) *
+          JUDGE_READY_COMPLETION_POLICY.systemCheckMaximumMs) *
           100
       )
     )}%`;
@@ -1238,7 +1444,7 @@ function sampleAudioFrame(): void {
     micMeterFill.style.width = `${Math.min(100, Math.round(rms * 900))}%`;
     if (
       now - preflightStartedAt >=
-        JUDGE_READY_TIMED_POLICY.quietCalibrationMs &&
+        JUDGE_READY_COMPLETION_POLICY.quietCalibrationMs &&
       quietRmsSamples.length >= 8
     ) {
       voiceTracker.calibrate(quietRmsSamples);
@@ -1281,17 +1487,9 @@ function sampleAudioFrame(): void {
     tMs: Math.round(now - sessionStartedAtPerformance),
     ...derived
   };
+  latestAudioFeatureAtMs = frame.tMs;
   audioFrames.push(frame);
   conductorSession.ingestAudio(frame);
-}
-
-function taskContextAt(tMs: number): VisualTaskContext {
-  let phaseEndMs = 0;
-  for (const phase of JUDGE_READY_TIMED_POLICY.phases) {
-    phaseEndMs += phase.maximumDurationMs;
-    if (tMs < phaseEndMs) return phase.phase;
-  }
-  return "eye-closure";
 }
 
 function relativeVisualTimestamp(acquiredAtMs: number): number {
@@ -1302,8 +1500,10 @@ function relativeVisualTimestamp(acquiredAtMs: number): number {
   return Math.max(0, Math.round(acquiredAtMs - origin));
 }
 
-function currentVisualTask(tMs: number): VisualTaskContext {
-  return state === "capturing" ? taskContextAt(tMs) : "establishing";
+function currentVisualTask(): VisualTaskContext {
+  if (state !== "capturing") return "establishing";
+  const phase = guidedDemo.snapshot().phase;
+  return phase === "complete" ? "eye-closure" : phase;
 }
 
 function stopVisualFramePump(): void {
@@ -1331,9 +1531,20 @@ function cameraTrackAvailable(): boolean {
   );
 }
 
+function handleCameraUnavailable(): void {
+  visualLaneGuard.markCameraAvailable(false);
+  pauseVisualAcquisition("camera-unavailable");
+}
+
+function handleCameraAvailable(): void {
+  visualLaneGuard.markCameraAvailable(true);
+  resumeVisualAcquisition();
+}
+
 function pauseVisualAcquisition(
   reasonCode: VisualQualityReasonCode
 ): void {
+  clearAllVisualOverlays();
   if (state === "capturing") noteVisualWithholding(reasonCode);
   stopVisualFramePump();
 }
@@ -1367,7 +1578,8 @@ function configureVisualFramePump(): void {
         sequence: scheduled.sequence,
         tMs,
         acquiredAtMs: scheduled.acquisitionTimestampMs,
-        taskContext: currentVisualTask(tMs),
+        taskContext:
+          scheduled.taskContext ?? currentVisualTask(),
         width: scheduled.width,
         height: scheduled.height,
         bitmap: scheduled.frame,
@@ -1380,7 +1592,8 @@ function configureVisualFramePump(): void {
   visualFramePump = new VideoFramePump<ImageBitmap>({
     source: cameraPreview,
     scheduler: visualScheduler,
-    capture: async () => createImageBitmap(cameraPreview)
+    capture: async () => createImageBitmap(cameraPreview),
+    taskContextAtAcquisition: currentVisualTask
   });
 }
 
@@ -1397,7 +1610,10 @@ function initializeVisualWorkerForCurrentEpoch(): void {
 function beginVisualCaptureEpoch(
   initializeWorker: boolean
 ): void {
+  clearAllVisualOverlays();
   visualCaptureEpoch += 1;
+  visualResultAcceptanceGuard.reset();
+  externalVisualWithholdingActive = false;
   configureVisualFramePump();
   visualLaneGuard.reset();
   visualLaneGuard.markPageVisible(!document.hidden);
@@ -1427,27 +1643,47 @@ function noteVisualWithholding(
   )
 ): void {
   latestFaceUsable = false;
+  if (!externalVisualWithholdingActive) {
+    visualResultAcceptanceGuard.invalidateThrough(performance.now());
+    externalVisualWithholdingActive = true;
+  }
+  clearAllVisualOverlays();
+  guidedPhaseFaceFrames = [];
+  if (state === "capturing") {
+    updateMilestones(
+      guidedDemo.resetCurrentGate(
+        atMs,
+        visualPipeline?.processorRef
+      )
+    );
+  }
   conductorSession?.ingestVisualWithholding({
     tMs: atMs,
     reasonCode,
-    taskContext: currentVisualTask(atMs),
+    taskContext: currentVisualTask(),
     processorRef: visualPipeline?.processorRef
   });
 }
 
 function restartVisualWorker(): void {
   stopVisualFramePump();
+  clearAllVisualOverlays();
   faceWorker.terminate();
+  visualCaptureEpoch += 1;
+  visualResultAcceptanceGuard.reset();
+  externalVisualWithholdingActive = false;
+  replaceLandmarkOverlayCanvas();
   faceWorker = createFaceWorker();
   bindFaceWorker(faceWorker);
+  attachLandmarkOverlay(faceWorker);
   faceWorkerReady = false;
   visualLaneGuard.markWorkerAvailable(false);
-  visualCaptureEpoch += 1;
   configureVisualFramePump();
   initializeVisualWorkerForCurrentEpoch();
 }
 
 function handleVisualWorkerFailure(): void {
+  clearAllVisualOverlays();
   visualLaneGuard.markWorkerAvailable(false);
   noteVisualWithholding("worker-unavailable");
   if (
@@ -1483,13 +1719,22 @@ function processCapturedFace(
       };
   latestFaceUsable = calibrated.usable;
   conductorSession.ingestFace(calibrated.frame);
+  observeGuidedFaceFrame(calibrated.frame, calibrated.usable);
   updateLiveFace(
     calibrated.frame,
     calibrated.usable,
     calibrated.guidance
   );
-  if (overlayRenderThrottle.shouldRender(rawFrame.acquiredAtMs)) {
+  if (
+    calibrated.usable &&
+    overlayRenderThrottle.shouldRender(rawFrame.acquiredAtMs)
+  ) {
     drawFaceOverlay(rawFrame.boundingBox, calibrated.usable);
+  }
+  if (calibrated.usable) {
+    showLandmarkOverlay();
+  } else {
+    clearAllVisualOverlays();
   }
 }
 
@@ -1498,7 +1743,7 @@ function updateClock(): void {
   const now = performance.now();
   const elapsed = now - sessionStartedAtPerformance;
   sessionClock.textContent = formatElapsed(elapsed);
-  advanceTimedEncounter(elapsed);
+  advanceGuidedEncounter(elapsed);
   const laneHealth = visualLaneGuard.evaluate(now);
   for (const reason of laneHealth.reasons) {
     const reasonCode: VisualQualityReasonCode =
@@ -1513,8 +1758,20 @@ function updateClock(): void {
   }
 }
 
-async function initializeMedia(): Promise<void> {
-  mediaStream = await navigator.mediaDevices.getUserMedia({
+function systemCheckRequestIsCurrent(generation: number): boolean {
+  return (
+    generation === lifecycleGeneration &&
+    consentCheckbox.checked &&
+    state === "requesting"
+  );
+}
+
+function stopStream(stream: MediaStream): void {
+  stream.getTracks().forEach((track) => track.stop());
+}
+
+async function initializeMedia(generation: number): Promise<boolean> {
+  const stream = await navigator.mediaDevices.getUserMedia({
     video: {
       facingMode: "user",
       width: { ideal: REQUESTED_VIDEO_CAPTURE.width },
@@ -1527,58 +1784,95 @@ async function initializeMedia(): Promise<void> {
       autoGainControl: false
     }
   });
-  cameraPreview.srcObject = mediaStream;
-  await cameraPreview.play();
-  const videoTrack = mediaStream.getVideoTracks()[0];
-  const settings = videoTrack?.getSettings();
-  videoCaptureSettings = {
-    requested: { ...REQUESTED_VIDEO_CAPTURE },
-    actual: {
-      width:
-        settings?.width ??
-        cameraPreview.videoWidth ??
-        REQUESTED_VIDEO_CAPTURE.width,
-      height:
-        settings?.height ??
-        cameraPreview.videoHeight ??
-        REQUESTED_VIDEO_CAPTURE.height,
-      frameRate: settings?.frameRate ?? null
-    },
-    ...(settings?.facingMode
-      ? { facingMode: settings.facingMode }
-      : {}),
-    coordinateSpace: "normalized-unmirrored-image",
-    displayMirrored: true,
-    lateralityConvention: "subject-anatomical"
-  };
-  if (videoTrack) {
-    videoTrack.addEventListener("mute", () => {
-      visualLaneGuard.markCameraAvailable(false);
-      pauseVisualAcquisition("camera-unavailable");
-    });
-    videoTrack.addEventListener("ended", () => {
-      visualLaneGuard.markCameraAvailable(false);
-      pauseVisualAcquisition("camera-unavailable");
-    });
-    videoTrack.addEventListener("unmute", () => {
-      visualLaneGuard.markCameraAvailable(true);
-      resumeVisualAcquisition();
-    });
+  // Own the acquired tracks before awaiting playback or audio startup so a
+  // consent withdrawal can stop them synchronously at either boundary.
+  pendingMediaStreams.add(stream);
+  let context: AudioContext | null = null;
+  try {
+    if (!systemCheckRequestIsCurrent(generation)) {
+      pendingMediaStreams.delete(stream);
+      stopStream(stream);
+      return false;
+    }
+
+    cameraPreview.srcObject = stream;
+    await cameraPreview.play();
+    if (!systemCheckRequestIsCurrent(generation)) {
+      cameraPreview.srcObject = null;
+      pendingMediaStreams.delete(stream);
+      stopStream(stream);
+      return false;
+    }
+
+    context = new AudioContext({ latencyHint: "interactive" });
+    await context.resume();
+    if (!systemCheckRequestIsCurrent(generation)) {
+      cameraPreview.srcObject = null;
+      pendingMediaStreams.delete(stream);
+      stopStream(stream);
+      await context.close();
+      return false;
+    }
+
+    const videoTrack = stream.getVideoTracks()[0];
+    const settings = videoTrack?.getSettings();
+    const source = context.createMediaStreamSource(stream);
+    const nextAnalyser = context.createAnalyser();
+    nextAnalyser.fftSize = 4096;
+    nextAnalyser.smoothingTimeConstant = 0;
+    source.connect(nextAnalyser);
+
+    pendingMediaStreams.delete(stream);
+    mediaStream = stream;
+    audioContext = context;
+    audioSource = source;
+    analyser = nextAnalyser;
+    sampleBuffer = new Float32Array(nextAnalyser.fftSize);
+    videoCaptureSettings = {
+      requested: { ...REQUESTED_VIDEO_CAPTURE },
+      actual: {
+        width:
+          settings?.width ??
+          cameraPreview.videoWidth ??
+          REQUESTED_VIDEO_CAPTURE.width,
+        height:
+          settings?.height ??
+          cameraPreview.videoHeight ??
+          REQUESTED_VIDEO_CAPTURE.height,
+        frameRate: settings?.frameRate ?? null
+      },
+      ...(settings?.facingMode
+        ? { facingMode: settings.facingMode }
+        : {}),
+      coordinateSpace: "normalized-unmirrored-image",
+      displayMirrored: true,
+      lateralityConvention: "subject-anatomical"
+    };
+    if (videoTrack) {
+      videoTrack.addEventListener("mute", handleCameraUnavailable);
+      videoTrack.addEventListener("ended", handleCameraUnavailable);
+      videoTrack.addEventListener("unmute", handleCameraAvailable);
+    }
+    return true;
+  } catch (error) {
+    pendingMediaStreams.delete(stream);
+    if (cameraPreview.srcObject === stream) {
+      cameraPreview.srcObject = null;
+    }
+    stopStream(stream);
+    if (context && context.state !== "closed") {
+      await context.close();
+    }
+    throw error;
   }
-  audioContext = new AudioContext({ latencyHint: "interactive" });
-  await audioContext.resume();
-  audioSource = audioContext.createMediaStreamSource(mediaStream);
-  analyser = audioContext.createAnalyser();
-  analyser.fftSize = 4096;
-  analyser.smoothingTimeConstant = 0;
-  audioSource.connect(analyser);
-  sampleBuffer = new Float32Array(analyser.fftSize);
 }
 
 async function runSystemCheck(): Promise<void> {
   if (state !== "idle" || !consentCheckbox.checked) {
     return;
   }
+  lifecycleGeneration += 1;
+  const generation = lifecycleGeneration;
   updateState("requesting", "Allow camera and microphone access to continue.");
   voiceState.textContent = "Preparing";
   faceState.textContent = "Preparing";
@@ -1665,7 +1959,8 @@ async function runSystemCheck(): Promise<void> {
       return;
     }
 
-    await initializeMedia();
+    const initialized = await initializeMedia(generation);
+    if (!initialized || !systemCheckRequestIsCurrent(generation)) return;
     preflightStartedAt = performance.now();
     quietRmsSamples = [];
     preflightFaceFrames = [];
@@ -1708,10 +2003,11 @@ async function runSystemCheck(): Promise<void> {
     beginVisualCaptureEpoch(true);
     sampleInterval = window.setInterval(sampleAudioFrame, 100);
     systemCheckTimer = window.setTimeout(
-      completeSystemCheck,
-      JUDGE_READY_TIMED_POLICY.systemCheckMaximumMs
+      () => completeSystemCheck(generation),
+      JUDGE_READY_COMPLETION_POLICY.systemCheckMaximumMs
     );
   } catch {
+    if (generation !== lifecycleGeneration) return;
     await releaseMedia();
     setLane(
       conductorState,
@@ -1729,16 +2025,25 @@ async function runSystemCheck(): Promise<void> {
 
 function prepareConductor(): void {
   if (!calibration) throw new Error("System check is required.");
+  lifecycleGeneration += 1;
   captureFinalizationScheduled = false;
   resultsVisible = false;
   audioFrames = [];
   receivedFaceFrameCount = 0;
   usableFaceFrameCount = 0;
   latestAudioFeature = null;
+  latestAudioFeatureAtMs = Number.NEGATIVE_INFINITY;
   latestFaceUsable = false;
+  guidedPhaseFaceFrames = [];
+  neutralFacialBaseline = null;
   latestVisualRuntimeDiagnostics = null;
   lastOperatorDiagnosticsRenderAtMs = Number.NEGATIVE_INFINITY;
+  testProcessorChangeInjected = false;
+  testVisualCaptureSuspended = false;
+  delete document.body.dataset.testProcessorChangeRewound;
   overlayRenderThrottle.reset();
+  visualResultAcceptanceGuard.reset();
+  externalVisualWithholdingActive = false;
   voiceTracker.reset();
   visualWorkerRestartBudget.reset();
   guidedDemo.reset(0);
@@ -1751,6 +2056,7 @@ function prepareConductor(): void {
   latestEvidence = null;
   evidenceReviewReady = false;
   lastGuidedTransitionId = 0;
+  lastAssistancePhase = null;
   lastFaceQuality = "unknown";
   faceWindowOpen = false;
   baselinePanel.hidden = true;
@@ -1779,15 +2085,6 @@ function startTestCapture(): void {
   let fixtureTimeMs = 0;
   let fixtureSequence = 0;
   const frameStepMs = 34;
-  const establishingEndMs =
-    JUDGE_READY_TIMED_POLICY.phases[0].maximumDurationMs;
-  const turnAwayEndMs =
-    establishingEndMs +
-    JUDGE_READY_TIMED_POLICY.phases[1].maximumDurationMs;
-  const encounterEndMs = JUDGE_READY_TIMED_POLICY.phases.reduce(
-    (total, phase) => total + phase.maximumDurationMs,
-    0
-  );
   const intervalMs = observeTestTransitions
     ? 10
     : fastTestCapture
@@ -1795,10 +2092,29 @@ function startTestCapture(): void {
       : 10;
   visualCaptureEpoch += 1;
   sampleInterval = window.setInterval(() => {
-    if (state !== "capturing" || !conductorSession) return;
+    if (
+      state !== "capturing" ||
+      !conductorSession ||
+      document.hidden ||
+      testVisualCaptureSuspended
+    ) {
+      return;
+    }
+    const snapshot = guidedDemo.snapshot(fixtureTimeMs);
+    if (snapshot.phase === "complete") {
+      window.clearInterval(sampleInterval ?? undefined);
+      sampleInterval = null;
+      return;
+    }
+    const taskContext = snapshot.phase;
+    const phaseElapsedMs = Math.max(
+      0,
+      fixtureTimeMs - snapshot.phaseStartedAt
+    );
     const speechAvailable =
       testScenario !== "missing-speech" &&
-      fixtureTimeMs < turnAwayEndMs;
+      (taskContext === "establishing" ||
+        taskContext === "turn-away");
     const audio: AudioFeatureFrame & DerivedAudioFeature = {
       tMs: fixtureTimeMs,
       voiced: speechAvailable,
@@ -1814,19 +2130,28 @@ function startTestCapture(): void {
       snrDb: speechAvailable ? 24 : 0
     };
     latestAudioFeature = audio;
+    latestAudioFeatureAtMs = fixtureTimeMs;
     audioFrames.push(audio);
     conductorSession.ingestAudio(audio);
     updateLiveAudio(audio);
 
-    const taskContext = taskContextAt(fixtureTimeMs);
-    const turnedAway =
-      testScenario === "missing-face" ||
-      (testScenario !== "missed-turn" &&
-        taskContext === "turn-away");
+    const intentionalTurnAway =
+      taskContext === "turn-away" &&
+      testScenario !== "unfinished-task" &&
+      testScenario !== "technical-turn-away" &&
+      (testScenario !== "missed-turn" || phaseElapsedMs >= 14_000);
+    const technicalTurnAway =
+      taskContext === "turn-away" &&
+      testScenario === "technical-turn-away";
     const unavailableFace = testScenario === "missing-face";
-    const faceWithheld = turnedAway || unavailableFace;
-    const smiling = taskContext === "smile";
-    const closingEyes = taskContext === "eye-closure";
+    const faceWithheld =
+      intentionalTurnAway || unavailableFace;
+    const smiling =
+      taskContext === "smile" &&
+      testScenario !== "unfinished-smile";
+    const closingEyes =
+      taskContext === "eye-closure" &&
+      phaseElapsedMs < 500;
     fixtureSequence += 1;
     const face: FacialKinematicsFrameV1 = {
       schemaVersion: "phenometric.facial-kinematics-frame.v1",
@@ -1877,29 +2202,39 @@ function startTestCapture(): void {
         illuminationMean: 0.58,
         darkClippingFraction: 0.01,
         brightClippingFraction: 0.01,
-        sharpness: 0.01
+        sharpness: technicalTurnAway ? 0.0001 : 0.01
       },
       analyzedFrameRate: 1_000 / frameStepMs,
       interResultGapMs:
         fixtureSequence === 1 ? null : frameStepMs,
       skippedFrameFraction: 0,
       processingLatencyMs: 8,
-      qualityReasons: faceWithheld ? ["face-not-visible"] : [],
+      qualityReasons: faceWithheld
+        ? ["face-not-visible"]
+        : [],
       processorRef:
         visualPipeline?.processorRef ??
         visualPipelineProvenance("GPU").processorRef
     };
     processCapturedFace(face);
-    sessionClock.textContent = formatElapsed(fixtureTimeMs);
-    advanceTimedEncounter(fixtureTimeMs);
-    fixtureTimeMs += frameStepMs;
     if (
-      fixtureTimeMs > encounterEndMs + frameStepMs &&
-      sampleInterval !== null
+      testScenario === "processor-change-after-completion" &&
+      !testProcessorChangeInjected &&
+      guidedDemo.snapshot(fixtureTimeMs).phase === "complete"
     ) {
-      window.clearInterval(sampleInterval);
-      sampleInterval = null;
+      testProcessorChangeInjected = true;
+      applyVisualPipelineProvenance(
+        visualPipelineProvenance("CPU"),
+        fixtureTimeMs
+      );
+      document.body.dataset.testProcessorChangeRewound =
+        guidedDemo.snapshot(fixtureTimeMs).phase === "neutral-face"
+          ? "true"
+          : "false";
     }
+    sessionClock.textContent = formatElapsed(fixtureTimeMs);
+    advanceGuidedEncounter(fixtureTimeMs);
+    fixtureTimeMs += frameStepMs;
   }, intervalMs);
 }
 
@@ -1940,7 +2275,7 @@ function startAssessment(): void {
   );
   updateState(
     "capturing",
-    "Follow the five guided steps to complete the assessment."
+    "Complete each guided exercise; progress advances only when its signal criterion is confirmed."
   );
   updateMilestones(guidedDemo.snapshot());
   emitWorkflowEvent(
@@ -1948,7 +2283,12 @@ function startAssessment(): void {
     "demo.phase.started",
     "ambient-capture",
     "Started the establishing phase.",
-    { phase: "establishing" }
+    {
+      phase: "establishing",
+      policyId: JUDGE_READY_COMPLETION_POLICY.id,
+      advancement: "signal-gated",
+      skipAvailable: false
+    }
   );
   const startDecision = emitWorkflowEvent(
     "capture-conductor",
@@ -1972,6 +2312,8 @@ function startAssessment(): void {
 }
 
 async function releaseMedia(): Promise<void> {
+  stopButton.hidden = true;
+  stopButton.disabled = true;
   for (const interval of [sampleInterval, clockInterval]) {
     if (interval !== null) window.clearInterval(interval);
   }
@@ -1987,6 +2329,10 @@ async function releaseMedia(): Promise<void> {
   cameraCalloutTimer = null;
   traceCloseTimer = null;
   evidencePacket.hidden = true;
+  for (const pendingStream of pendingMediaStreams) {
+    stopStream(pendingStream);
+  }
+  pendingMediaStreams.clear();
   mediaStream?.getTracks().forEach((track) => track.stop());
   mediaStream = null;
   cameraPreview.srcObject = null;
@@ -1997,6 +2343,7 @@ async function releaseMedia(): Promise<void> {
   sampleBuffer = null;
   const context = audioContext;
   audioContext = null;
+  clearAllVisualOverlays();
   visualCaptureEpoch += 1;
   faceWorker.postMessage(
     visualWorkerMessage({
@@ -2007,12 +2354,8 @@ async function releaseMedia(): Promise<void> {
   faceWorker.terminate();
   faceWorkerReady = false;
   visualLaneGuard.reset();
-  faceOverlay.getContext("2d")?.clearRect(
-    0,
-    0,
-    faceOverlay.width,
-    faceOverlay.height
-  );
+  visualResultAcceptanceGuard.reset();
+  externalVisualWithholdingActive = false;
   if (context && context.state !== "closed") await context.close();
 }
 
@@ -2432,7 +2775,10 @@ function closeTrace(): void {
   }, 220);
 }
 
-async function synthesizeEvidence(): Promise<void> {
+async function synthesizeEvidence(
+  generation = lifecycleGeneration
+): Promise<void> {
+  if (generation !== lifecycleGeneration) return;
   if (!latestObservation || latestOutcomes?.length !== 2) {
     throw new Error(
       "One speech outcome and one facial outcome are required."
@@ -2470,9 +2816,11 @@ async function synthesizeEvidence(): Promise<void> {
       })
     });
     window.clearTimeout(timeout);
+    if (generation !== lifecycleGeneration) return;
     const body = (await response.json()) as
       | EvidenceApiResult
       | { error: string };
+    if (generation !== lifecycleGeneration) return;
     if (!response.ok || "error" in body) {
       throw new Error(
         "error" in body ? body.error : "Summary preparation failed."
@@ -2539,6 +2887,7 @@ async function synthesizeEvidence(): Promise<void> {
       "Review the two grounded statements, then approve or dismiss the summary."
     );
   } catch {
+    if (generation !== lifecycleGeneration) return;
     emitWorkflowEvent(
       "evidence-card",
       "evidence-claim.rejected",
@@ -2626,8 +2975,12 @@ async function synthesizeEvidence(): Promise<void> {
   }
 }
 
-async function finishEncounter(): Promise<void> {
+async function finishEncounter(generation: number): Promise<void> {
+  if (generation !== lifecycleGeneration) return;
   if (!conductorSession) throw new Error("No active assessment.");
+  conductorSession.setGuidedTaskEvidenceIntervals(
+    guidedDemo.snapshot().acceptedEvidenceIntervals
+  );
   const result = conductorSession.complete();
   latestObservation = result.observation;
   conductorSession = null;
@@ -2719,7 +3072,7 @@ async function finishEncounter(): Promise<void> {
     "Measured evidence is ready while the encounter summary is prepared."
   );
   revealResults();
-  await synthesizeEvidence();
+  await synthesizeEvidence(generation);
 }
 
 function revealResults(): void {
@@ -2731,14 +3084,12 @@ function revealResults(): void {
 
 async function finalizeCapture(): Promise<void> {
   if (state !== "capturing" || !guidedDemo.snapshot().canComplete) return;
+  const generation = lifecycleGeneration;
   const completionEvent =
     [...allEvents]
       .reverse()
-      .find((event) =>
-        ["demo.phase.completed", "demo.phase.timed-out"].includes(
-          event.type
-        )
-      ) ?? allEvents.at(-1);
+      .find((event) => event.type === "demo.phase.completed") ??
+    allEvents.at(-1);
   if (completionEvent) {
     showCameraCallout(
       "Assessment complete",
@@ -2751,7 +3102,21 @@ async function finalizeCapture(): Promise<void> {
   guidanceDetail.textContent = "Preparing the clinician encounter summary.";
   guidanceProgressFill.style.width = "100%";
   await new Promise((resolve) => window.setTimeout(resolve, 320));
+  if (
+    generation !== lifecycleGeneration ||
+    state !== "capturing" ||
+    !guidedDemo.snapshot().canComplete
+  ) {
+    if (
+      generation === lifecycleGeneration &&
+      state === "capturing"
+    ) {
+      captureFinalizationScheduled = false;
+    }
+    return;
+  }
   await releaseMedia();
+  if (generation !== lifecycleGeneration) return;
   updateState(
     "analyzing",
     "Reconciling signal windows and preparing the encounter summary."
@@ -2768,8 +3133,9 @@ async function finalizeCapture(): Promise<void> {
   privacyStatus.textContent =
     "Camera and microphone released · no audio or video stored";
   try {
-    await finishEncounter();
+    await finishEncounter(generation);
   } catch {
+    if (generation !== lifecycleGeneration) return;
     updateState(
       "error",
       "The encounter summary could not be completed. Start a new assessment."
@@ -2841,24 +3207,57 @@ function recordReview(decision: ReviewDecision["decision"]): void {
   }
 }
 
-async function resetCapture(): Promise<void> {
+function clearEncounterRuntimeState(): void {
+  conductorSession = null;
+  captureFinalizationScheduled = false;
+  resultsVisible = false;
+  audioFrames = [];
+  receivedFaceFrameCount = 0;
+  usableFaceFrameCount = 0;
+  latestAudioFeature = null;
+  latestAudioFeatureAtMs = Number.NEGATIVE_INFINITY;
+  latestFaceUsable = false;
+  guidedPhaseFaceFrames = [];
+  neutralFacialBaseline = null;
+  quietRmsSamples = [];
+  preflightFaceFrames = [];
+  preflightPitchedFrames = 0;
+  preflightSpeechEnergyFrames = 0;
+  allEvents = [];
+  latestObservation = null;
+  latestOutcomes = null;
+  latestEvidence = null;
+  evidenceReviewReady = false;
+  captureVisitId = "";
+  lastGuidedTransitionId = 0;
+  lastAssistancePhase = null;
+  lastFaceQuality = "unknown";
+  faceWindowOpen = false;
+  latestVisualRuntimeDiagnostics = null;
+  lastOperatorDiagnosticsRenderAtMs = Number.NEGATIVE_INFINITY;
+  testVisualCaptureSuspended = false;
+  guidedDemo.reset(0);
+  operatorOutput.textContent = "";
+}
+
+async function performResetCapture(
+  resetGeneration: number
+): Promise<void> {
   await releaseMedia();
+  if (resetGeneration !== lifecycleGeneration) return;
+  replaceLandmarkOverlayCanvas();
   faceWorker = createFaceWorker();
   bindFaceWorker(faceWorker);
   visualCaptureEpoch += 1;
+  attachLandmarkOverlay(faceWorker);
   visualPipeline = null;
   videoCaptureSettings = defaultVideoCaptureSettings();
   visualSmokeSubmitted = false;
-  latestVisualRuntimeDiagnostics = null;
-  lastOperatorDiagnosticsRenderAtMs = Number.NEGATIVE_INFINITY;
   if (testCaptureMode) {
     faceWorkerReady = true;
   } else {
     initializeVisualWorkerForCurrentEpoch();
   }
-  conductorSession = null;
-  captureFinalizationScheduled = false;
-  resultsVisible = false;
   calibration = null;
   consentCheckbox.checked = false;
   cameraEmpty.hidden = false;
@@ -2954,6 +3353,32 @@ async function resetCapture(): Promise<void> {
   );
 }
 
+function resetCapture(): Promise<void> {
+  consentCheckbox.checked = false;
+  if (resetCaptureOperation) return resetCaptureOperation;
+
+  lifecycleGeneration += 1;
+  const resetGeneration = lifecycleGeneration;
+  clearEncounterRuntimeState();
+  const operation = performResetCapture(resetGeneration).finally(() => {
+    if (resetCaptureOperation === operation) {
+      resetCaptureOperation = null;
+    }
+  });
+  resetCaptureOperation = operation;
+  return operation;
+}
+
+async function discardAssessment(): Promise<void> {
+  if (state !== "capturing") return;
+  const confirmed = window.confirm(
+    "End and discard this assessment? Camera and microphone access will stop immediately, and no report will be created."
+  );
+  if (!confirmed) return;
+  stopButton.disabled = true;
+  await resetCapture();
+}
+
 async function checkSynthesisReadiness(): Promise<void> {
   try {
     const response = await fetch("/api/model-readiness", {
@@ -3021,6 +3446,44 @@ async function submitVisualWorkerSmoke(): Promise<void> {
   faceWorker.postMessage(message, [bitmap]);
 }
 
+function applyVisualPipelineProvenance(
+  provenance: VisualPipelineProvenance,
+  observedAtMs?: number
+): void {
+  const previousProcessorRef = visualPipeline?.processorRef;
+  visualPipeline = provenance;
+  conductorSession?.setVisualPipeline(provenance);
+  if (
+    state !== "capturing" ||
+    !previousProcessorRef ||
+    previousProcessorRef === provenance.processorRef
+  ) {
+    return;
+  }
+
+  const atMs =
+    observedAtMs ??
+    Math.max(
+      0,
+      Math.round(performance.now() - sessionStartedAtPerformance)
+    );
+  const before = guidedDemo.snapshot(atMs);
+  const after = guidedDemo.resetCurrentGate(
+    atMs,
+    provenance.processorRef
+  );
+  guidedPhaseFaceFrames = [];
+  const neutralWasInvalidated =
+    before.confirmations.neutralFace === "confirmed" &&
+    after.confirmations.neutralFace !== "confirmed";
+  if (neutralWasInvalidated) {
+    neutralFacialBaseline = null;
+  }
+  captureFinalizationScheduled = false;
+  lastAssistancePhase = null;
+  updateMilestones(after);
+}
+
 function handleVisualWorkerMessage(event: MessageEvent<unknown>): void {
   const message = event.data as VisualWorkerResponse;
   if (
@@ -3034,7 +3497,7 @@ function handleVisualWorkerMessage(event: MessageEvent<unknown>): void {
   if (message.type === "ready") {
     faceWorkerReady = true;
     visualLaneGuard.markWorkerAvailable(true);
-    visualPipeline = message.provenance;
+    applyVisualPipelineProvenance(message.provenance);
     setLane(
       faceLaneState,
       faceStatus,
@@ -3054,6 +3517,15 @@ function handleVisualWorkerMessage(event: MessageEvent<unknown>): void {
       void submitVisualWorkerSmoke();
     }
     refreshStartAvailability();
+    return;
+  }
+
+  if (message.type === "overlay-status") {
+    landmarkOverlayAttached = message.attached;
+    if (!message.attached) {
+      landmarkOverlay.hidden = true;
+      meshDisclosure.hidden = true;
+    }
     return;
   }
 
@@ -3104,12 +3576,20 @@ function handleVisualWorkerMessage(event: MessageEvent<unknown>): void {
     return;
   }
 
-  const accepted = visualScheduler?.accept({
+  const visualResult = {
     captureEpoch: message.captureEpoch,
     sequence: message.sequence,
     acquisitionTimestampMs: message.acquiredAtMs
-  });
-  if (!accepted) return;
+  };
+  if (!visualResultAcceptanceGuard.accepts(message.acquiredAtMs)) {
+    visualScheduler?.discard(visualResult);
+    return;
+  }
+  const accepted = visualScheduler?.accept(visualResult);
+  if (!accepted) {
+    return;
+  }
+  externalVisualWithholdingActive = false;
   visualLaneGuard.markProcessed(message.acquiredAtMs);
   latestVisualRuntimeDiagnostics = {
     acquiredAtMs: message.frame.acquiredAtMs,
@@ -3126,9 +3606,13 @@ function handleVisualWorkerMessage(event: MessageEvent<unknown>): void {
     const guidance = preflightFaceGuidance(message.frame);
     const ready = guidance === "Face ready";
     updateLiveFace(message.frame, ready, guidance);
-    if (overlayRenderThrottle.shouldRender(message.acquiredAtMs)) {
+    if (!message.boundingBox) {
+      clearAllVisualOverlays();
+    } else if (overlayRenderThrottle.shouldRender(message.acquiredAtMs)) {
       drawFaceOverlay(message.boundingBox, ready);
     }
+    if (ready) showLandmarkOverlay();
+    else clearLandmarkOverlay();
     setLane(
       faceLaneState,
       faceStatus,
@@ -3151,6 +3635,7 @@ function bindFaceWorker(worker: Worker): void {
 }
 
 bindFaceWorker(faceWorker);
+attachLandmarkOverlay(faceWorker);
 
 consentCheckbox.addEventListener("change", () => {
   if (
@@ -3176,6 +3661,7 @@ startButton.addEventListener("click", () => {
   else if (state === "ready") startAssessment();
 });
 resetButton.addEventListener("click", () => void resetCapture());
+stopButton.addEventListener("click", () => void discardAssessment());
 retryEvidenceButton.addEventListener("click", () => void synthesizeEvidence());
 copyReportButton.addEventListener("click", () => void copyClinicalReport());
 acceptButton.addEventListener("click", () => recordReview("approved"));
@@ -3191,6 +3677,37 @@ window.addEventListener("beforeunload", () => {
 });
 
 if (testCaptureMode) {
+  (
+    window as typeof window & {
+      __phenometricVisualLifecycleTest?: {
+        simulateWorkerFailure(): {
+          canvasReplaced: boolean;
+          overlayHidden: boolean;
+        };
+        simulateCameraUnavailable(): {
+          overlayHidden: boolean;
+        };
+      };
+    }
+  ).__phenometricVisualLifecycleTest = {
+    simulateWorkerFailure() {
+      const priorOverlay = landmarkOverlay;
+      handleVisualWorkerFailure();
+      return {
+        canvasReplaced: priorOverlay !== landmarkOverlay,
+        overlayHidden:
+          landmarkOverlay.hidden && meshDisclosure.hidden
+      };
+    },
+    simulateCameraUnavailable() {
+      testVisualCaptureSuspended = true;
+      handleCameraUnavailable();
+      return {
+        overlayHidden:
+          landmarkOverlay.hidden && meshDisclosure.hidden
+      };
+    }
+  };
   faceWorkerReady = true;
   setLane(
     faceLaneState,

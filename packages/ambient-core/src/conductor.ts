@@ -3,12 +3,14 @@ import type {
   EncounterObservation,
   EventEnvelope,
   CaptureQualityPolicy,
+  GuidedTaskEvidenceInterval,
   Measurement,
   MeasurementContext,
   MeasurableWindow,
   Modality,
   VisualQualityReasonCode,
-  VisualTaskContext
+  VisualTaskContext,
+  VisualPipelineProvenance
 } from "@phenometric/contracts";
 import type {
   AudioFeatureFrame,
@@ -62,6 +64,14 @@ interface LaneState {
 export interface ConductorSession {
   ingestAudio(frame: AudioFeatureFrame): void;
   ingestFace(frame: FacialKinematicsFrameV1): void;
+  /**
+   * Replaces the guided controller's accepted evidence snapshot. Replacement
+   * semantics let a controller rewind invalidate neutral-dependent tasks.
+   */
+  setGuidedTaskEvidenceIntervals(
+    intervals: readonly GuidedTaskEvidenceInterval[]
+  ): void;
+  setVisualPipeline(provenance: VisualPipelineProvenance): void;
   ingestVisualWithholding(input: {
     tMs: number;
     reasonCode: VisualQualityReasonCode;
@@ -100,13 +110,17 @@ function processObservation(
   emit: (event: EventEnvelope) => void,
   qualityTransitionCount: number,
   liveAbstentions: Abstention[],
-  faceSplitPointsMs: readonly number[]
+  faceSplitPointsMs: readonly number[],
+  guidedTaskEvidenceIntervals:
+    | readonly GuidedTaskEvidenceInterval[]
+    | undefined
 ): EncounterObservation {
   const measurements: Measurement[] = [];
   const abstentions: Abstention[] = [...liveAbstentions];
   const contextByWindowId = new Map<string, MeasurementContext>();
   const windows = detectMeasurableWindows(stream, {
-    faceSplitPointsMs
+    faceSplitPointsMs,
+    guidedTaskEvidenceIntervals
   });
 
   for (const window of windows) {
@@ -416,6 +430,10 @@ export function createConductorSession(
   const faceState = freshLaneState();
   const liveAbstentions: Abstention[] = [];
   const faceSplitPointsMs: number[] = [];
+  let guidedTaskEvidenceIntervals:
+    | GuidedTaskEvidenceInterval[]
+    | undefined;
+  let visualPipeline = identity.visualPipeline;
   const qualityPolicy =
     options.qualityPolicy ?? DEFAULT_CAPTURE_QUALITY_POLICY;
   let completed = false;
@@ -580,6 +598,28 @@ export function createConductorSession(
   );
 
   return {
+    setVisualPipeline(nextVisualPipeline) {
+      if (completed) throw new Error("Cannot update provenance after completion.");
+      visualPipeline = { ...nextVisualPipeline };
+    },
+
+    setGuidedTaskEvidenceIntervals(intervals) {
+      if (completed) throw new Error("Cannot update evidence after completion.");
+      for (const interval of intervals) {
+        if (
+          !Number.isFinite(interval.startMs) ||
+          !Number.isFinite(interval.endMs) ||
+          interval.startMs < 0 ||
+          interval.endMs < interval.startMs
+        ) {
+          throw new Error("Guided task evidence interval is invalid.");
+        }
+      }
+      guidedTaskEvidenceIntervals = intervals.map((interval) => ({
+        ...interval
+      }));
+    },
+
     ingestAudio(frame) {
       if (completed) throw new Error("Cannot ingest after session completion.");
       audio.push(frame);
@@ -747,7 +787,12 @@ export function createConductorSession(
         )
       );
 
-      const stream: FrameStream = { ...identity, audio, face };
+      const stream: FrameStream = {
+        ...identity,
+        visualPipeline,
+        audio,
+        face
+      };
       const observation = processObservation(
         stream,
         factory,
@@ -755,7 +800,8 @@ export function createConductorSession(
         emit,
         qualityTransitionCount,
         liveAbstentions,
-        faceSplitPointsMs
+        faceSplitPointsMs,
+        guidedTaskEvidenceIntervals
       );
       return { observation, events: [...events] };
     },

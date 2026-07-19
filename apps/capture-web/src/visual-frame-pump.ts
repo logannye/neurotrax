@@ -1,3 +1,5 @@
+import type { VisualTaskContext } from "@phenometric/contracts";
+
 export const FRAME_STREAM_SCHEMA_VERSION =
   "phenometric.visual-frame-stream.v1" as const;
 
@@ -28,6 +30,7 @@ export interface PresentedVisualFrame<TFrame extends CloseableFrame> {
   acquisitionTimestampMs: number;
   width: number;
   height: number;
+  taskContext?: VisualTaskContext;
 }
 
 export interface ScheduledVisualFrame<TFrame extends CloseableFrame>
@@ -399,6 +402,34 @@ export class VisualLaneGuard {
   }
 }
 
+/**
+ * Rejects inference results acquired at or before an external withholding
+ * boundary. This complements capture epochs for interruptions that must
+ * invalidate an already in-flight result without restarting the worker.
+ */
+export class VisualResultAcceptanceGuard {
+  private invalidatedThroughMs = Number.NEGATIVE_INFINITY;
+
+  invalidateThrough(atMs: number): void {
+    if (!finiteNonnegative(atMs)) return;
+    this.invalidatedThroughMs = Math.max(
+      this.invalidatedThroughMs,
+      atMs
+    );
+  }
+
+  accepts(acquiredAtMs: number): boolean {
+    return (
+      finiteNonnegative(acquiredAtMs) &&
+      acquiredAtMs > this.invalidatedThroughMs
+    );
+  }
+
+  reset(): void {
+    this.invalidatedThroughMs = Number.NEGATIVE_INFINITY;
+  }
+}
+
 export class OverlayRenderThrottle {
   private lastRenderedAtMs: number | null = null;
 
@@ -453,6 +484,7 @@ export interface VideoFramePumpOptions<TFrame extends CloseableFrame> {
   source: VideoFrameCallbackSource;
   scheduler: LatestFrameScheduler<TFrame>;
   capture(source: VideoFrameCallbackSource): Promise<TFrame>;
+  taskContextAtAcquisition?: () => VisualTaskContext;
 }
 
 /**
@@ -554,6 +586,8 @@ export class VideoFramePump<TFrame extends CloseableFrame> {
     width: number,
     height: number
   ): void {
+    const taskContext =
+      this.options.taskContextAtAcquisition?.();
     void this.options
       .capture(this.options.source)
       .then((frame) => {
@@ -565,7 +599,8 @@ export class VideoFramePump<TFrame extends CloseableFrame> {
           frame,
           acquisitionTimestampMs,
           width,
-          height
+          height,
+          ...(taskContext ? { taskContext } : {})
         });
       })
       .catch(() => {

@@ -51,6 +51,11 @@
                 aria-label="Live self-facing camera preview"
               ></video>
               <canvas
+                id="landmark-overlay"
+                class="landmark-overlay"
+                aria-hidden="true"
+              ></canvas>
+              <canvas
                 id="face-overlay"
                 class="face-overlay"
                 aria-hidden="true"
@@ -64,16 +69,44 @@
                 <span class="live-dot" aria-hidden="true"></span>
                 Ambient assessment active
               </div>
+              <div
+                class="mesh-disclosure"
+                id="mesh-disclosure"
+                hidden
+              >
+                Live 478-point facial mesh · display only · not stored
+              </div>
+              <button
+                class="end-assessment"
+                id="stop-button"
+                type="button"
+                hidden
+              >
+                End assessment
+              </button>
               <div class="camera-callout" id="camera-callout" hidden>
                 <span aria-hidden="true"></span>
                 <strong id="camera-callout-text"></strong>
               </div>
               <div class="session-clock" id="session-clock">00:00</div>
-              <div class="guidance-card" id="guidance-card" hidden>
+              <div
+                class="guidance-card"
+                id="guidance-card"
+                aria-live="polite"
+                hidden
+              >
                 <span id="guidance-step">System check</span>
                 <strong id="guidance-title">Calibrating environment</strong>
                 <p id="guidance-detail">Remain centered and follow the prompts.</p>
-                <div class="guidance-progress" aria-hidden="true">
+                <div
+                  class="guidance-progress"
+                  id="guidance-progress"
+                  role="progressbar"
+                  aria-label="Current exercise completion"
+                  aria-valuemin="0"
+                  aria-valuemax="100"
+                  aria-valuenow="0"
+                >
                   <span id="guidance-progress-fill"></span>
                 </div>
               </div>
@@ -139,9 +172,6 @@
                   New assessment
                 </button>
               </div>
-              <button id="stop-button" hidden aria-hidden="true" tabindex="-1">
-                Complete assessment
-              </button>
               <p class="capture-hint" id="capture-hint">
                 The system check verifies framing, room conditions, and speech.
               </p>

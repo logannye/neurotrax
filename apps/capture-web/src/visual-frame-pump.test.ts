@@ -4,6 +4,7 @@ import {
   OverlayRenderThrottle,
   VideoFramePump,
   VisualLaneGuard,
+  VisualResultAcceptanceGuard,
   VisualWorkerRestartBudget,
   type ScheduledVisualFrame,
   type VideoFrameCallbackMetadataLike
@@ -218,6 +219,21 @@ describe("LatestFrameScheduler", () => {
 });
 
 describe("visual lane resilience", () => {
+  it("rejects same-epoch results acquired before an external withholding boundary", () => {
+    const guard = new VisualResultAcceptanceGuard();
+
+    expect(guard.accepts(100)).toBe(true);
+    guard.invalidateThrough(150);
+    expect(guard.accepts(100)).toBe(false);
+    expect(guard.accepts(150)).toBe(false);
+    expect(guard.accepts(151)).toBe(true);
+
+    guard.invalidateThrough(125);
+    expect(guard.accepts(149)).toBe(false);
+    guard.reset();
+    expect(guard.accepts(149)).toBe(true);
+  });
+
   it("permits exactly one worker restart per capture", () => {
     const budget = new VisualWorkerRestartBudget();
     expect(budget.requestRestart()).toBe("restart");
@@ -386,5 +402,53 @@ describe("VideoFramePump", () => {
 
     expect(late.closed).toBe(true);
     expect(scheduler.diagnostics(100).submitted).toBe(0);
+  });
+
+  it("preserves task context from acquisition across async capture", async () => {
+    let callback:
+      | ((
+          now: number,
+          metadata: VideoFrameCallbackMetadataLike
+        ) => void)
+      | undefined;
+    let resolveFrame: ((frame: FakeFrame) => void) | undefined;
+    let taskContext: "neutral-face" | "smile" = "neutral-face";
+    const source = {
+      videoWidth: 1280,
+      videoHeight: 720,
+      requestVideoFrameCallback: (
+        next: (
+          now: number,
+          metadata: VideoFrameCallbackMetadataLike
+        ) => void
+      ) => {
+        callback = next;
+        return 1;
+      },
+      cancelVideoFrameCallback: vi.fn()
+    };
+    const submitted: ScheduledVisualFrame<FakeFrame>[] = [];
+    const scheduler = new LatestFrameScheduler<FakeFrame>({
+      captureEpoch: 1,
+      onSubmit: (frame) => submitted.push(frame)
+    });
+    const pump = new VideoFramePump({
+      source,
+      scheduler,
+      taskContextAtAcquisition: () => taskContext,
+      capture: () =>
+        new Promise<FakeFrame>((resolve) => {
+          resolveFrame = resolve;
+        })
+    });
+
+    pump.start();
+    callback?.(100, { presentationTime: 95 });
+    taskContext = "smile";
+    resolveFrame?.(new FakeFrame("captured-before-transition"));
+    await Promise.resolve();
+
+    expect(submitted[0].taskContext).toBe("neutral-face");
+    pump.stop();
   });
 });

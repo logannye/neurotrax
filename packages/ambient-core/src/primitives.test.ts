@@ -25,7 +25,7 @@ describe("primitive frame types", () => {
     expect(frame.anatomicalLaterality).toBe("subject-anatomical");
     expect(frame.eyeAperture?.left).toBe(0.3);
     expect(JSON.stringify(stream)).not.toMatch(
-      /faceLandmarks|blendshapes|transformationMatrix|deviceId|deviceLabel/
+      /faceLandmarks|meshConnections|overlayPixels|offscreenCanvas|screenshot|blendshapes|transformationMatrix|deviceId|deviceLabel/
     );
   });
 });
