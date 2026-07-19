@@ -6,11 +6,9 @@ function measurementContext(kind: MeasurementContext["kind"]): MeasurementContex
   return {
     kind,
     confounds: {
+      kind: "speech",
       snrDb: 20,
-      faceFramingFraction: 0,
-      observedFrameRate: 0,
-      illuminationRelative: 0,
-      yawDegrees: 0
+      clippingFraction: 0
     }
   };
 }
@@ -18,8 +16,10 @@ function measurementContext(kind: MeasurementContext["kind"]): MeasurementContex
 function m(code: string, value: number, contextRef = "speech-0"): Measurement {
   return {
     code, label: code, value, unit: "u", confidence: 0.9,
-    uncertainty: "placeholder", algorithmVersion: "speech-acoustic-0.1",
-    clinicalValidation: "none", contextRef, windowStartMs: 0,
+    uncertainty: { kind: "not-estimated", reason: "not estimated" },
+    algorithmVersion: "speech-acoustic-0.1",
+    processorRef: "speech-acoustic-0.1",
+    clinicalValidation: "none", contextRef, sourceWindowRefs: [contextRef], windowStartMs: 0,
     windowEndMs: 2000, evidenceSnippetRef: null
   };
 }
@@ -40,6 +40,8 @@ describe("aggregateMeasurements", () => {
     expect(result[0].windowCount).toBe(3);
     expect(result[0].contextKind).toBe("spontaneous-speech");
     expect(result[0].label).toBe("Pause count");
+    expect(result[0].processorRef).toBe("speech-acoustic-0.1");
+    expect(result[0].sourceWindowRefs).toEqual(["speech-0"]);
   });
 
   it("throws when a code mixes algorithm versions", () => {
@@ -50,6 +52,17 @@ describe("aggregateMeasurements", () => {
     const a = m("c", 1);
     const b = { ...m("c", 2), algorithmVersion: "speech-acoustic-0.2" };
     expect(() => aggregateMeasurements([a, b], context, labels)).toThrow(/mixes algorithm versions/);
+  });
+
+  it("throws when a code mixes processor references", () => {
+    const context = new Map<string, MeasurementContext>([
+      ["speech-0", measurementContext("spontaneous-speech")]
+    ]);
+    const a = m("c", 1);
+    const b = { ...m("c", 2), processorRef: "different-processor" };
+    expect(() =>
+      aggregateMeasurements([a, b], context, new Map())
+    ).toThrow(/mixes processor references/);
   });
 
   it("keeps the same biomarker separate across measurement contexts", () => {

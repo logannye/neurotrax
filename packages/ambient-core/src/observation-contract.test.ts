@@ -7,7 +7,10 @@ import type {
 describe("observation and event contracts", () => {
   it("models a per-visit aggregate observation", () => {
     const observation: EncounterObservation = {
+      schemaVersion: "phenometric.encounter-observation.v1",
       containsPHI: false,
+      rawMediaRetained: false,
+      nativeVisualObservationsRetained: false,
       captureMode: "fixture-playback",
       visitId: "visit-001",
       participantId: "synthetic-participant-001",
@@ -20,11 +23,9 @@ describe("observation and event contracts", () => {
           context: {
             kind: "spontaneous-speech",
             confounds: {
+              kind: "speech",
               snrDb: 20,
-              faceFramingFraction: 0,
-              observedFrameRate: 0,
-              illuminationRelative: 0,
-              yawDegrees: 0
+              clippingFraction: 0
             }
           }
         }
@@ -36,10 +37,15 @@ describe("observation and event contracts", () => {
           value: 0.95,
           unit: "voiced-fraction",
           confidence: 0.67,
-          uncertainty: "placeholder",
+          uncertainty: {
+            kind: "not-estimated",
+            reason: "not estimated for speech"
+          },
           algorithmVersion: "speech-acoustic-0.2",
+          processorRef: "speech-acoustic-0.2",
           clinicalValidation: "none",
           contextRef: "speech-0",
+          sourceWindowRefs: ["speech-0"],
           windowStartMs: 0,
           windowEndMs: 1900,
           evidenceSnippetRef: null
@@ -56,14 +62,17 @@ describe("observation and event contracts", () => {
           confidence: 0.8,
           windowCount: 4,
           algorithmVersion: "speech-acoustic-0.2",
+          processorRef: "speech-acoustic-0.2",
+          sourceWindowRefs: ["speech-0"],
           confounds: {
+            kind: "speech",
             snrDb: 20,
-            faceFramingFraction: 0,
-            observedFrameRate: 0,
-            illuminationRelative: 0,
-            yawDegrees: 0
+            clippingFraction: 0
           },
-          uncertainty: "placeholder",
+          uncertainty: {
+            kind: "not-estimated",
+            reason: "not estimated for speech"
+          },
           clinicalValidation: "none"
         }
       ],
@@ -71,6 +80,8 @@ describe("observation and event contracts", () => {
       measurementCount: 1,
       occurredAt: "2026-07-18T16:00:00.000Z",
       captureAdapter: { id: "fixture-replay", version: "0.2.0" },
+      visualPipeline: null,
+      videoCaptureSettings: null,
       qualitySummary: {
         speechWindowCount: 1,
         faceWindowCount: 0,
@@ -89,7 +100,10 @@ describe("observation and event contracts", () => {
       }
     };
     expect(observation.containsPHI).toBe(false);
-    expect(observation.windows[0].context.confounds.snrDb).toBe(20);
+    expect(observation.windows[0].context.confounds).toMatchObject({
+      kind: "speech",
+      snrDb: 20
+    });
     expect(observation.measurements[0].contextRef).toBe("speech-0");
     expect(observation.aggregates[0].windowCount).toBe(4);
   });

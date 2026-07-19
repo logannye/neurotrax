@@ -6,15 +6,22 @@ export interface AudioCalibration {
 }
 
 export interface FaceCalibration {
-  baselineBoxWidth: number;
-  baselineBoxHeight: number;
-  baselineIllumination: number;
+  durationMs: number;
+  totalFrameCount: number;
+  usableFrameCount: number;
+  usableFraction: number;
+  analyzedFrameRate: number;
+  baselineBoxWidthPixels: number;
+  baselineBoxHeightPixels: number;
+  baselineIlluminationMean: number;
+  baselineSharpness: number;
 }
 
 export type CalibrationQuality = "strong" | "limited" | "unavailable";
 
 export interface CaptureCalibration {
-  profileId: "macbook-timed-v0.2";
+  schemaVersion: "phenometric.capture-calibration.v1";
+  profileId: "visual-foundation-v1";
   calibratedAt: string;
   audio: AudioCalibration;
   audioQuality: CalibrationQuality;
@@ -27,36 +34,93 @@ export interface CaptureQualityPolicy {
   speechOpenDebounceMs: number;
   maximumSpeechPauseMs: number;
   faceQualityDebounceMs: number;
-  faceFramingFloor: number;
+  minimumAnalyzedFrameRate: number;
+  maximumVisualFrameGapMs: number;
+  maximumSkippedFrameFraction: number;
+  rollingVisualQualityWindowMs: number;
+  minimumFaceWidthPixels: number;
+  minimumFaceHeightPixels: number;
+  maximumFaceWidthFraction: number;
+  maximumFaceHeightFraction: number;
+  minimumEdgeMarginFraction: number;
   maximumFaceYawDegrees: number;
+  maximumFacePitchDegrees: number;
+  maximumFaceRollDegrees: number;
+  minimumIlluminationMean: number;
+  maximumIlluminationMean: number;
+  maximumDarkClippingFraction: number;
+  maximumBrightClippingFraction: number;
+  minimumSharpness: number;
+  calibrationSharpnessFraction: number;
+  minimumFaceCalibrationDurationMs: number;
+  minimumFaceCalibrationUsableFraction: number;
 }
 
-export type TimedEncounterPhase =
+export type VisualTaskContext =
   | "establishing"
   | "turn-away"
-  | "return"
-  | "post-recovery";
+  | "neutral-face"
+  | "smile"
+  | "eye-closure";
+
+export type VisualQualityReasonCode =
+  | "face-not-visible"
+  | "face-too-small"
+  | "face-too-large"
+  | "face-edge-margin"
+  | "pose-out-of-range"
+  | "blur"
+  | "illumination-out-of-range"
+  | "frame-rate-below-minimum"
+  | "visual-frame-gap"
+  | "too-many-skipped-frames"
+  | "worker-unavailable"
+  | "camera-unavailable"
+  | "document-hidden";
+
+export interface VisualQualityAssessment {
+  usable: boolean;
+  reasonCodes: VisualQualityReasonCode[];
+  sharpnessFloor: number;
+}
+
+export type CompletionGatedEncounterPhase = VisualTaskContext;
 
 export type ConfirmationState =
   | "pending"
-  | "confirmed"
-  | "not-confirmed";
+  | "confirmed";
 
-export interface TimedEncounterPhasePolicy {
-  phase: TimedEncounterPhase;
-  minimumDurationMs: number;
-  maximumDurationMs: number;
+export interface CompletionGatedPhasePolicy {
+  phase: CompletionGatedEncounterPhase;
+  evidenceDurationMs: number;
+  adherenceHoldMs: number;
+  assistanceAfterMs: number;
   successCondition: string;
-  timeoutBehavior: "advance-and-record-not-confirmed";
 }
 
-export interface TimedEncounterPolicy {
-  id: "judge-ready-timed-v0.1";
+export interface CompletionGatedEncounterPolicy {
+  id: "completion-gated-v0.3";
   systemCheckMaximumMs: number;
   quietCalibrationMs: number;
+  maximumContinuousSignalGapMs: number;
   reliablePitchFramesForStrong: number;
   minimumSpeechEnergyFrames: number;
   faceFramesForStrong: number;
   faceFramesForLimited: number;
-  phases: readonly TimedEncounterPhasePolicy[];
+  phases: readonly CompletionGatedPhasePolicy[];
+}
+
+export interface CompletionGateProgress {
+  evidenceMs: number;
+  evidenceRequiredMs: number;
+  adherenceMs: number;
+  adherenceRequiredMs: number;
+  fraction: number;
+}
+
+export interface GuidedTaskEvidenceInterval {
+  taskContext: VisualTaskContext;
+  startMs: number;
+  endMs: number;
+  processorRef?: string;
 }

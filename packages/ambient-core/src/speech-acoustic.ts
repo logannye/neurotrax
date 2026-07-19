@@ -70,10 +70,15 @@ function measurement(
     value,
     unit,
     confidence,
-    uncertainty: "placeholder",
+    uncertainty: {
+      kind: "not-estimated",
+      reason: "Speech uncertainty is not estimated by this prototype extractor."
+    },
     algorithmVersion: SPEECH_ACOUSTIC_VERSION,
+    processorRef: SPEECH_ACOUSTIC_VERSION,
     clinicalValidation: "none",
     contextRef: window.windowId,
+    sourceWindowRefs: [window.windowId],
     windowStartMs: window.startMs,
     windowEndMs: window.endMs,
     evidenceSnippetRef: null

@@ -238,9 +238,13 @@ node <<'NODE'
   );
   if (
     correctionEvent.payload?.attempt !== 1 ||
-    correctionEvent.payload?.retryPolicy?.maxAttempts !== 1
+    correctionEvent.payload?.retryPolicy?.maxAttempts !== null ||
+    correctionEvent.payload?.retryPolicy?.onExhaustion !==
+      "remain-on-current-task"
   ) {
-    throw new Error("Guided-capture correction must be bounded to one attempt.");
+    throw new Error(
+      "Guided-capture correction must permit repetition without timeout or skip."
+    );
   }
   if (
     !captureQualityEvent.payload?.processor?.id ||
@@ -288,53 +292,6 @@ node <<'NODE'
     );
   }
 
-  const history = JSON.parse(
-    fs.readFileSync("examples/demo-patient-history.example.json", "utf8")
-  );
-  const compatible = history.history.filter(
-    (encounter) =>
-      encounter.reviewStatus === "accepted" &&
-      encounter.trajectoryEligibility?.status === "compatible"
-  );
-  const excluded = history.history.filter(
-    (encounter) => encounter.trajectoryEligibility?.status === "excluded"
-  );
-  const everyEncounterIsSynthetic = history.history.every(
-    (encounter) => encounter.synthetic === true
-  );
-  if (
-    history.synthetic !== true ||
-    history.captureMode !== "synthetic-fixture" ||
-    history.containsPHI !== false ||
-    history.participant?.synthetic !== true ||
-    !everyEncounterIsSynthetic ||
-    compatible.length !== 3 ||
-    excluded.length !== 1 ||
-    excluded[0].trajectoryEligibility.reasons?.[0]?.code !==
-      "prompt-version-mismatch"
-  ) {
-    throw new Error(
-      "Demo history must be synthetic with 3 accepted compatible encounters and 1 prompt-version exclusion."
-    );
-  }
-
-  const includedHistoryIds = new Set(
-    compatibilityEvent.payload.includedEncounterIds
-  );
-  const compatibleHistoryIds = new Set(
-    compatible.map((encounter) => encounter.encounterId)
-  );
-  if (
-    includedHistoryIds.size !== compatibleHistoryIds.size ||
-    [...includedHistoryIds].some((id) => !compatibleHistoryIds.has(id)) ||
-    compatibilityEvent.payload.excludedEncounters[0].encounterId !==
-      excluded[0].encounterId
-  ) {
-    throw new Error(
-      "Compatibility event selections must match the synthetic history fixture."
-    );
-  }
-
   const packageManifest = JSON.parse(
     fs.readFileSync("package.json", "utf8")
   );
@@ -361,129 +318,249 @@ node <<'NODE'
     throw new Error("The package name must be phenometric.");
   }
 
+  const history = JSON.parse(
+    fs.readFileSync("examples/demo-patient-history.example.json", "utf8")
+  );
   const consentEvent = events.find(
     (event) => event.type === "consent.recorded"
   );
-  const allowedCurrentCaptureModes = new Set([
-    "live",
-    "cached-processor",
-    "fixture-playback",
-    "recorded-demo"
-  ]);
+  const privacySafe = (artifact) =>
+    artifact.containsPHI === false &&
+    artifact.rawMediaRetained === false &&
+    artifact.nativeVisualObservationsRetained === false;
   if (
-    !allowedCurrentCaptureModes.has(consentEvent.payload?.captureMode) ||
+    consentEvent.payload?.captureMode !== "live" ||
     currentObservation.captureMode !== consentEvent.payload.captureMode ||
-    comparison.currentCaptureMode !== currentObservation.captureMode ||
-    card.currentCaptureMode !== currentObservation.captureMode ||
-    comparison.historyMode !== history.captureMode ||
-    card.historyMode !== history.captureMode ||
-    priorObservation.captureMode !== history.captureMode
+    card.captureMode !== currentObservation.captureMode ||
+    priorObservation.captureMode !== history.captureMode ||
+    history.captureMode !== "fixture-playback" ||
+    !privacySafe(consentEvent.payload) ||
+    !privacySafe(currentObservation) ||
+    !privacySafe(priorObservation) ||
+    !privacySafe(comparison) ||
+    !privacySafe(card) ||
+    !privacySafe(history)
   ) {
     throw new Error(
-      "Capture and history modes must be explicit and consistent across the event stream and artifacts."
+      "Capture artifacts must use explicit live/fixture modes and assert ephemeral non-PHI processing."
     );
   }
 
-  const protocolPrompts = new Map(
-    protocol.tasks.map((task) => [task.id, task.promptVersion])
+  const expectedPhases = [
+    ["establishing", 1500],
+    ["turn-away", 750],
+    ["neutral-face", 1500],
+    ["smile", 1500],
+    ["eye-closure", 1500]
+  ];
+  const expectedFaceCodes = [
+    "prototype.face.smile_excursion.left",
+    "prototype.face.smile_excursion.right",
+    "prototype.face.smile_excursion.asymmetry",
+    "prototype.face.eye_closure_fraction.left",
+    "prototype.face.eye_closure_fraction.right",
+    "prototype.face.eye_closure_fraction.asymmetry"
+  ];
+  const expectedSpeechCodes = [
+    "prototype.speech.onset_latency",
+    "prototype.speech.voiced_time_fraction",
+    "prototype.speech.pause_rate",
+    "prototype.speech.pitch_center",
+    "prototype.speech.pitch_variability"
+  ];
+  const expectedMeasurementCodes = new Set([
+    ...expectedSpeechCodes,
+    ...expectedFaceCodes
+  ]);
+  if (
+    protocol.sequence?.length !== expectedPhases.length ||
+    protocol.sequence.some(
+      (phase, index) =>
+        phase.phase !== expectedPhases[index][0] ||
+        phase.evidenceDurationMs !== expectedPhases[index][1] ||
+        phase.assistanceAfterMs !== 12000 ||
+        "durationSeconds" in phase
+    ) ||
+    protocol.sequence[3].adherenceHoldMs !== 500 ||
+    protocol.sequence[4].closureHoldMs !== 300 ||
+    protocol.sequence[4].recoveryHoldMs !== 300 ||
+    protocol.advancement?.mode !== "signal-gated" ||
+    protocol.advancement?.maximumContinuousSignalGapMs !== 200 ||
+    protocol.advancement?.timeoutBehavior !== "never-auto-advance" ||
+    protocol.advancement?.skipAvailable !== false ||
+    protocol.advancement?.acceptedEvidence !==
+      "final-qualifying-interval-only" ||
+    JSON.stringify(protocol.speechMeasurements) !==
+      JSON.stringify(expectedSpeechCodes) ||
+    JSON.stringify(protocol.facialMeasurements) !==
+      JSON.stringify(expectedFaceCodes)
+  ) {
+    throw new Error(
+      "Protocol must define completion-gated exercises and exact 5 speech + 6 facial measurements."
+    );
+  }
+  if (
+    protocol.processing?.rawMediaRetained !== false ||
+    protocol.processing?.nativeVisualObservationsRetained !== false ||
+    protocol.processing?.mediaPipeVersion !== "0.10.35" ||
+    protocol.processing?.lateralityConvention !== "subject-anatomical" ||
+    protocol.processing?.coordinateSpace !==
+      "normalized-unmirrored-image" ||
+    protocol.processing?.liveOverlay?.landmarkCount !== 478 ||
+    protocol.processing?.liveOverlay?.maximumRenderRateHz !== 12 ||
+    protocol.processing?.liveOverlay?.renderedInsideVisualWorker !== true ||
+    protocol.processing?.liveOverlay?.displayOnly !== true ||
+    protocol.processing?.liveOverlay?.stored !== false ||
+    protocol.clinicalClaims?.length !== 0
+  ) {
+    throw new Error(
+      "Protocol processing must remain local, versioned, anatomical, ephemeral, and nonclinical."
+    );
+  }
+
+  const observationCodes = new Set(
+    currentObservation.measurements.map((measurement) => measurement.code)
   );
-  for (const [taskId, promptVersion] of Object.entries(
-    history.compatibilityPolicy.requiredTaskVersions
-  )) {
-    if (protocolPrompts.get(taskId) !== promptVersion) {
-      throw new Error(
-        `Protocol prompt version does not match demo history for ${taskId}.`
-      );
+  const aggregateCodes = new Set(
+    currentObservation.aggregates.map((aggregate) => aggregate.code)
+  );
+  const observationContexts = new Set(
+    currentObservation.windows.map((window) => window.context.kind)
+  );
+  if (
+    currentObservation.schemaVersion !==
+      "phenometric.encounter-observation.v1" ||
+    currentObservation.measurementCount !== 11 ||
+    observationCodes.size !== 11 ||
+    aggregateCodes.size !== 11 ||
+    [...expectedMeasurementCodes].some(
+      (code) => !observationCodes.has(code) || !aggregateCodes.has(code)
+    ) ||
+    ["neutral-face", "smile", "eye-closure"].some(
+      (context) => !observationContexts.has(context)
+    )
+  ) {
+    throw new Error(
+      "Current observation must expose exactly eleven task-context measurements and aggregates."
+    );
+  }
+
+  const visualProcessorRef = currentObservation.visualPipeline?.processorRef;
+  if (
+    !visualProcessorRef ||
+    currentObservation.visualPipeline.mediaPipeVersion !== "0.10.35" ||
+    currentObservation.visualPipeline.modelSha256 !==
+      "64184e229b263107bc2b804c6625db1341ff2bb731874b0bcc2fe6544e0bc9ff" ||
+    currentObservation.visualPipeline.geometryVersion !==
+      "bilateral-geometry-v1" ||
+    currentObservation.videoCaptureSettings?.lateralityConvention !==
+      "subject-anatomical" ||
+    currentObservation.videoCaptureSettings?.coordinateSpace !==
+      "normalized-unmirrored-image"
+  ) {
+    throw new Error(
+      "Observation must carry pinned visual provenance and unmirrored anatomical capture settings."
+    );
+  }
+
+  const forbiddenSerializedKeys = new Set([
+    "deviceId",
+    "deviceLabel",
+    "landmarks",
+    "faceLandmarks",
+    "blendshapes",
+    "faceBlendshapes",
+    "matrices",
+    "transformationMatrix",
+    "facialTransformationMatrixes",
+    "bitmap",
+    "mediaStream",
+    "meshConnections",
+    "overlayPixels",
+    "offscreenCanvas",
+    "screenshot"
+  ]);
+  const findForbiddenKey = (value) => {
+    if (!value || typeof value !== "object") return null;
+    for (const [key, child] of Object.entries(value)) {
+      if (forbiddenSerializedKeys.has(key)) return key;
+      const nested = findForbiddenKey(child);
+      if (nested) return nested;
+    }
+    return null;
+  };
+  for (const [name, artifact] of [
+    ["observation", currentObservation],
+    ["prior observation", priorObservation],
+    ["history", history],
+    ["comparison", comparison],
+    ["evidence card", card],
+    ["event stream", events]
+  ]) {
+    const forbidden = findForbiddenKey(artifact);
+    if (forbidden) {
+      throw new Error(`${name} serializes forbidden visual/media key: ${forbidden}`);
     }
   }
 
-  const tappingTask = currentObservation.tasks.find(
-    (task) => task.taskId === "seated-finger-tap.v0.1"
+  const everyEncounterIsSynthetic = history.history.every(
+    (encounter) =>
+      encounter.synthetic === true &&
+      encounter.containsPHI === false &&
+      encounter.reviewStatus === "accepted"
   );
-  const tappingProtocol = protocol.tasks.find(
-    (task) => task.id === "seated-finger-tap.v0.1"
+  const compatible = history.history.filter((encounter) =>
+    encounter.aggregates
+      .filter((aggregate) => aggregate.code.startsWith("prototype.face."))
+      .every(
+        (aggregate) =>
+          aggregate.algorithmVersion ===
+            history.compatibilityPolicy.requiredVisualAlgorithmVersion &&
+          aggregate.processorRef ===
+            history.compatibilityPolicy.requiredVisualProcessorRef
+      )
+  );
+  const excluded = history.history.filter(
+    (encounter) => !compatible.includes(encounter)
   );
   if (
-    tappingTask?.retryCount !== 1 ||
-    tappingTask.qualityAttempts?.length !== 2 ||
-    tappingTask.qualityAttempts[0].status !== "retry" ||
-    tappingTask.qualityAttempts[1].status !== "pass" ||
-    tappingTask.quality?.status !== "pass"
+    history.synthetic !== true ||
+    history.participant?.synthetic !== true ||
+    !everyEncounterIsSynthetic ||
+    compatible.length !== 3 ||
+    excluded.length !== 1
   ) {
     throw new Error(
-      "Current encounter must show one bounded framing correction and final passing quality."
-    );
-  }
-  if (
-    tappingProtocol?.demoQualityPolicy?.id !==
-      captureQualityEvent.payload.rule.id ||
-    tappingProtocol.demoQualityPolicy.version !==
-      captureQualityEvent.payload.rule.version ||
-    tappingProtocol.demoQualityPolicy.processorId !==
-      captureQualityEvent.payload.processor.id ||
-    tappingProtocol.demoQualityPolicy.processorVersion !==
-      captureQualityEvent.payload.processor.version ||
-    tappingTask.qualityAttempts.some(
-      (attempt) =>
-        attempt.ruleId !== tappingProtocol.demoQualityPolicy.id ||
-        attempt.ruleVersion !== tappingProtocol.demoQualityPolicy.version ||
-        attempt.processorVersion !==
-          tappingProtocol.demoQualityPolicy.processorVersion
-    )
-  ) {
-    throw new Error(
-      "Protocol, quality events, and encounter attempts must share rule and processor versions."
+      "Demo history must contain three exact visual-pipeline matches and one incompatible baseline."
     );
   }
 
+  const compatibleHistoryIds = new Set(
+    compatible.map((encounter) => encounter.visitId)
+  );
   const comparisonIncludedIds = new Set(comparison.includedEncounterIds);
-  if (
-    comparison.currentEncounterId !== currentObservation.encounterId ||
-    comparisonIncludedIds.size !== compatibleHistoryIds.size ||
-    [...comparisonIncludedIds].some((id) => !compatibleHistoryIds.has(id)) ||
-    comparison.excludedEncounters?.[0]?.encounterId !==
-      excluded[0].encounterId ||
-    comparison.excludedEncounters?.[0]?.reasonCode !==
-      "prompt-version-mismatch"
-  ) {
-    throw new Error(
-      "Trajectory comparison must match the current observation and demo history fixture."
-    );
-  }
-
-  const expectedComparisonIds = new Set(comparison.includedEncounterIds);
-  const cardComparisonIds = new Set(card.comparisonEncounterIds);
-  if (
-    card.encounterId !== currentObservation.encounterId ||
-    card.trajectoryComparisonId !== comparison.comparisonId ||
-    cardComparisonIds.size !== expectedComparisonIds.size ||
-    [...cardComparisonIds].some((id) => !expectedComparisonIds.has(id))
-  ) {
-    throw new Error(
-      "Evidence card must reference the same current and comparison encounters."
-    );
-  }
-
-  const assetIds = new Set(
-    [...priorObservation.tasks, ...currentObservation.tasks].map(
-      (task) => task.asset.assetId
-    )
+  const eventIncludedIds = new Set(
+    compatibilityEvent.payload.includedEncounterIds
   );
-  const cardEvidenceRefs = card.items.flatMap((item) => item.evidence);
-  if (cardEvidenceRefs.some((id) => !assetIds.has(id))) {
-    throw new Error("Evidence card contains an unknown source-clip reference.");
-  }
-
-  const cardEventRefs = [
-    ...card.captureQuality.sourceEventIds,
-    card.compatibility.sourceEventId,
-    ...card.items.map((item) => item.groundingEventId),
-    ...card.summarySupport.eventIds,
-    card.review.sourceEventId,
-    ...comparison.sourceEventIds
-  ];
-  if (cardEventRefs.some((id) => !eventIds.has(id))) {
-    throw new Error("Card or comparison contains an unknown event reference.");
+  const excludedId = excluded[0].visitId;
+  if (
+    comparison.currentVisitId !== currentObservation.visitId ||
+    comparisonIncludedIds.size !== compatibleHistoryIds.size ||
+    [...compatibleHistoryIds].some(
+      (id) =>
+        !comparisonIncludedIds.has(id) ||
+        !eventIncludedIds.has(id)
+    ) ||
+    comparison.excludedEncounters?.[0]?.encounterId !== excludedId ||
+    !comparison.excludedEncounters?.[0]?.reasonCodes?.includes(
+      "visual-processor-mismatch"
+    ) ||
+    compatibilityEvent.payload.excludedEncounters?.[0]?.encounterId !==
+      excludedId
+  ) {
+    throw new Error(
+      "Trajectory artifacts must agree on exact processor-compatible history selections."
+    );
   }
 
   const groundedClaimIds = new Set(
@@ -492,38 +569,27 @@ node <<'NODE'
       .map((event) => event.payload.claimId)
   );
   if (
-    card.items.some(
-      (item) =>
-        item.groundingStatus !== "pass" ||
-        !groundedClaimIds.has(item.claimId)
-    )
+    card.visitId !== currentObservation.visitId ||
+    card.claims.length !== 2 ||
+    card.claims.some((claim) => !groundedClaimIds.has(claim.claimId)) ||
+    card.claims.find((claim) => claim.modality === "face")
+      ?.measurementCode !==
+      "prototype.face.smile_excursion.asymmetry" ||
+    card.claims.find((claim) => claim.modality === "face")
+      ?.processorRef !== visualProcessorRef
   ) {
-    throw new Error("Every evidence-card claim must have a grounding event.");
+    throw new Error(
+      "Evidence card must contain grounded speech and primary facial task outcomes."
+    );
   }
   if (!groundedClaimIds.has(evidenceTraceEvents[0].payload?.claimId)) {
     throw new Error("The opened evidence trace must target a grounded claim.");
-  }
-  const cardClaimIds = new Set(card.items.map((item) => item.claimId));
-  const groundedSummaryClaims = [
-    ...card.headlineClaimIds,
-    ...card.summarySupport.claimIds
-  ];
-  if (
-    groundedSummaryClaims.some(
-      (claimId) =>
-        !cardClaimIds.has(claimId) || !groundedClaimIds.has(claimId)
-    )
-  ) {
-    throw new Error(
-      "Evidence-card headline and summary must reference grounded item claims."
-    );
   }
 
   const finalDisposition = reviewDispositionEvents[0];
   if (
     card.review.decision !== finalDisposition.payload.decision ||
-    card.review.acceptedIntoHistory !==
-      finalDisposition.payload.acceptedIntoHistory ||
+    card.review.approvedForSession !== true ||
     card.review.reviewer !== finalDisposition.payload.reviewerId
   ) {
     throw new Error(
@@ -542,16 +608,21 @@ node <<'NODE'
   );
   const modern = currentHistory.filter((record) =>
     record.aggregates.every((aggregate) =>
-      ["speech-acoustic-0.4", "facial-expressivity-0.3"].includes(
+      ["speech-acoustic-0.4", "facial-task-kinematics-1.0"].includes(
         aggregate.algorithmVersion
       )
     )
   );
   const oldAlgorithm = currentHistory.filter((record) =>
     record.aggregates.some((aggregate) =>
-      ["speech-acoustic-0.1", "facial-expressivity-0.0"].includes(
+      !["speech-acoustic-0.4", "facial-task-kinematics-1.0"].includes(
         aggregate.algorithmVersion
-      )
+      ) ||
+      (aggregate.code.startsWith("prototype.face.") &&
+        aggregate.processorRef !==
+          currentHistory[0].aggregates.find((candidate) =>
+            candidate.code.startsWith("prototype.face.")
+          )?.processorRef)
     )
   );
   if (
@@ -567,7 +638,7 @@ node <<'NODE'
     )
   ) {
     throw new Error(
-      "Current trajectory fixture must contain three compatible synthetic visits and one old-algorithm exclusion."
+      "Current trajectory fixture must contain three compatible synthetic visits and one algorithm/processor exclusion."
     );
   }
   if (

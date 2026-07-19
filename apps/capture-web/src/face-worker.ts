@@ -4,131 +4,458 @@ import {
   FaceLandmarker,
   FilesetResolver
 } from "@mediapipe/tasks-vision";
-import { deriveFaceFeature, type FaceFeatureState } from "./face-features.js";
+import {
+  boundingBoxForLandmarks,
+  deriveFaceFeature,
+  type FaceFeatureState
+} from "./face-features.js";
+import { FaceMeshOverlayRenderer } from "./face-mesh-overlay.js";
+import {
+  FACE_LANDMARKER_MODEL_PATH,
+  VISUAL_WORKER_MESSAGE_VERSION,
+  visualPipelineProvenance,
+  type VisualWorkerErrorMessage,
+  type VisualWorkerFrameMessage,
+  type VisualWorkerRequest,
+  type VisualWorkerResponse
+} from "./face-worker-protocol.js";
+import { computeFaceImageQuality } from "./visual-image-quality.js";
 
-const WASM_ROOT =
-  "/mediapipe-runtime";
-const MODEL_PATH = "/models/face_landmarker.task";
+const WASM_ROOT = "/mediapipe-runtime";
+const QUALITY_ROI_SIZE = 64;
+const CADENCE_WINDOW_MS = 2_000;
 
 let landmarker: FaceLandmarker | null = null;
-let featureState: FaceFeatureState = { normalizedMotionPoints: null };
-let lastFrameAtMs: number | null = null;
-const illuminationCanvas = new OffscreenCanvas(32, 18);
-const illuminationContext = illuminationCanvas.getContext("2d", {
+let provenance: ReturnType<typeof visualPipelineProvenance> | null = null;
+let activeCaptureEpoch = 0;
+let lastSequence = 0;
+let lastAcquiredAtMs: number | null = null;
+let featureState: FaceFeatureState = {
+  normalizedMotionPoints: null,
+  acquiredAtMs: null
+};
+let analyzedAcquisitionTimes: number[] = [];
+let initializing: Promise<void> | null = null;
+const meshOverlay = new FaceMeshOverlayRenderer();
+let meshOverlayCaptureEpoch: number | null = null;
+const qualityCanvas = new OffscreenCanvas(
+  QUALITY_ROI_SIZE,
+  QUALITY_ROI_SIZE
+);
+const qualityContext = qualityCanvas.getContext("2d", {
   willReadFrequently: true
 });
 
-function illuminationFor(bitmap: ImageBitmap): number {
-  if (!illuminationContext) return 0;
-  illuminationContext.drawImage(
-    bitmap,
-    0,
-    0,
-    illuminationCanvas.width,
-    illuminationCanvas.height
-  );
-  const pixels = illuminationContext.getImageData(
-    0,
-    0,
-    illuminationCanvas.width,
-    illuminationCanvas.height
-  ).data;
-  let total = 0;
-  for (let index = 0; index < pixels.length; index += 4) {
-    total +=
-      pixels[index] * 0.2126 +
-      pixels[index + 1] * 0.7152 +
-      pixels[index + 2] * 0.0722;
-  }
-  return total / (pixels.length / 4) / 255;
+function post(message: VisualWorkerResponse): void {
+  self.postMessage(message);
 }
 
-async function initialize(): Promise<void> {
-  const vision = await FilesetResolver.forVisionTasks(
-    WASM_ROOT,
-    true
-  );
-  const options = {
-    runningMode: "VIDEO",
-    numFaces: 1,
-    minFaceDetectionConfidence: 0.5,
-    minFacePresenceConfidence: 0.5,
-    minTrackingConfidence: 0.5,
-    outputFaceBlendshapes: true,
-    outputFacialTransformationMatrixes: true
-  } as const;
-  try {
-    landmarker = await FaceLandmarker.createFromOptions(vision, {
-      ...options,
-      baseOptions: { modelAssetPath: MODEL_PATH, delegate: "GPU" }
-    });
-  } catch {
-    landmarker = await FaceLandmarker.createFromOptions(vision, {
-      ...options,
-      baseOptions: { modelAssetPath: MODEL_PATH, delegate: "CPU" }
-    });
+function resetDerivedState(captureEpoch: number): void {
+  meshOverlay.clear();
+  if (meshOverlay.isAttached()) {
+    meshOverlayCaptureEpoch = captureEpoch;
   }
-  self.postMessage({ type: "ready" });
+  activeCaptureEpoch = captureEpoch;
+  lastSequence = 0;
+  lastAcquiredAtMs = null;
+  analyzedAcquisitionTimes = [];
+  featureState = {
+    normalizedMotionPoints: null,
+    acquiredAtMs: null
+  };
 }
 
-self.addEventListener("message", async (event: MessageEvent) => {
-  const message = event.data as
-    | { type: "initialize" }
-    | { type: "frame"; bitmap: ImageBitmap; tMs: number }
-    | { type: "reset" };
+function errorMessage(
+  message: string,
+  input: {
+    code: VisualWorkerErrorMessage["code"];
+    recoverable: boolean;
+    sequence?: number;
+    acquiredAtMs?: number;
+    captureEpoch?: number;
+  }
+): VisualWorkerErrorMessage {
+  return {
+    schemaVersion: VISUAL_WORKER_MESSAGE_VERSION,
+    type: "error",
+    captureEpoch: input.captureEpoch ?? activeCaptureEpoch,
+    sequence: input.sequence ?? null,
+    acquiredAtMs: input.acquiredAtMs ?? null,
+    code: input.code,
+    message,
+    recoverable: input.recoverable
+  };
+}
 
-  if (message.type === "initialize") {
-    try {
-      await initialize();
-    } catch (error) {
-      self.postMessage({
-        type: "error",
-        message:
-          error instanceof Error
-            ? error.message
-            : "Face Landmarker could not initialize."
+function readableError(error: unknown, fallback: string): string {
+  return error instanceof Error ? error.message : fallback;
+}
+
+async function initialize(
+  message: Extract<VisualWorkerRequest, { type: "initialize" }>
+): Promise<void> {
+  resetDerivedState(message.captureEpoch);
+  if (landmarker && provenance) {
+    post({
+      schemaVersion: VISUAL_WORKER_MESSAGE_VERSION,
+      type: "ready",
+      captureEpoch: activeCaptureEpoch,
+      provenance,
+      videoCaptureSettings: message.videoCaptureSettings
+    });
+    return;
+  }
+  if (initializing) {
+    await initializing;
+    if (provenance) {
+      post({
+        schemaVersion: VISUAL_WORKER_MESSAGE_VERSION,
+        type: "ready",
+        captureEpoch: activeCaptureEpoch,
+        provenance,
+        videoCaptureSettings: message.videoCaptureSettings
       });
     }
     return;
   }
 
-  if (message.type === "reset") {
-    featureState = { normalizedMotionPoints: null };
-    lastFrameAtMs = null;
-    return;
-  }
-
-  if (!landmarker) {
-    message.bitmap.close();
-    self.postMessage({ type: "error", message: "Face Landmarker is not ready." });
-    return;
-  }
+  initializing = (async () => {
+    const vision = await FilesetResolver.forVisionTasks(WASM_ROOT, true);
+    const options = {
+      runningMode: "VIDEO",
+      numFaces: 1,
+      minFaceDetectionConfidence: 0.5,
+      minFacePresenceConfidence: 0.5,
+      minTrackingConfidence: 0.5,
+      outputFaceBlendshapes: true,
+      outputFacialTransformationMatrixes: true
+    } as const;
+    try {
+      landmarker = await FaceLandmarker.createFromOptions(vision, {
+        ...options,
+        baseOptions: {
+          modelAssetPath: FACE_LANDMARKER_MODEL_PATH,
+          delegate: "GPU"
+        }
+      });
+      provenance = visualPipelineProvenance("GPU");
+    } catch {
+      landmarker = await FaceLandmarker.createFromOptions(vision, {
+        ...options,
+        baseOptions: {
+          modelAssetPath: FACE_LANDMARKER_MODEL_PATH,
+          delegate: "CPU"
+        }
+      });
+      provenance = visualPipelineProvenance("CPU");
+    }
+  })();
 
   try {
-    const result = landmarker.detectForVideo(message.bitmap, message.tMs);
-    const frameStep =
-      lastFrameAtMs === null ? 100 : Math.max(1, message.tMs - lastFrameAtMs);
-    lastFrameAtMs = message.tMs;
-    const derived = deriveFaceFeature(result, {
+    await initializing;
+    if (!provenance) {
+      throw new Error("Face Landmarker did not report processor provenance.");
+    }
+    post({
+      schemaVersion: VISUAL_WORKER_MESSAGE_VERSION,
+      type: "ready",
+      captureEpoch: activeCaptureEpoch,
+      provenance,
+      videoCaptureSettings: message.videoCaptureSettings
+    });
+  } finally {
+    initializing = null;
+  }
+}
+
+function imageQualityFor(
+  bitmap: ImageBitmap,
+  box: ReturnType<typeof boundingBoxForLandmarks>
+) {
+  if (!qualityContext) {
+    return {
+      illuminationMean: 0,
+      darkClippingFraction: 1,
+      brightClippingFraction: 0,
+      sharpness: 0
+    };
+  }
+
+  const x = box ? Math.max(0, box.x * bitmap.width) : 0;
+  const y = box ? Math.max(0, box.y * bitmap.height) : 0;
+  const width = box
+    ? Math.max(1, Math.min(bitmap.width - x, box.width * bitmap.width))
+    : bitmap.width;
+  const height = box
+    ? Math.max(1, Math.min(bitmap.height - y, box.height * bitmap.height))
+    : bitmap.height;
+  qualityContext.clearRect(0, 0, QUALITY_ROI_SIZE, QUALITY_ROI_SIZE);
+  qualityContext.drawImage(
+    bitmap,
+    x,
+    y,
+    width,
+    height,
+    0,
+    0,
+    QUALITY_ROI_SIZE,
+    QUALITY_ROI_SIZE
+  );
+  return computeFaceImageQuality(
+    qualityContext.getImageData(
+      0,
+      0,
+      QUALITY_ROI_SIZE,
+      QUALITY_ROI_SIZE
+    )
+  );
+}
+
+function cadenceFor(acquiredAtMs: number): {
+  analyzedFrameRate: number;
+  interResultGapMs: number | null;
+} {
+  const interResultGapMs =
+    lastAcquiredAtMs === null
+      ? null
+      : acquiredAtMs - lastAcquiredAtMs;
+  analyzedAcquisitionTimes.push(acquiredAtMs);
+  const floor = acquiredAtMs - CADENCE_WINDOW_MS;
+  analyzedAcquisitionTimes = analyzedAcquisitionTimes.filter(
+    (timestamp) => timestamp >= floor
+  );
+  const analyzedFrameRate =
+    analyzedAcquisitionTimes.length < 2
+      ? 0
+      : ((analyzedAcquisitionTimes.length - 1) * 1_000) /
+        Math.max(
+          1,
+          acquiredAtMs - analyzedAcquisitionTimes[0]
+        );
+  return { analyzedFrameRate, interResultGapMs };
+}
+
+function processFrame(message: VisualWorkerFrameMessage): void {
+  if (
+    message.captureEpoch !== activeCaptureEpoch
+  ) {
+    message.bitmap.close();
+    post({
+      schemaVersion: VISUAL_WORKER_MESSAGE_VERSION,
+      type: "discarded",
+      captureEpoch: message.captureEpoch,
+      sequence: message.sequence,
+      acquiredAtMs: message.acquiredAtMs,
+      reason: "capture-epoch-mismatch"
+    });
+    return;
+  }
+  if (
+    message.sequence <= lastSequence ||
+    (lastAcquiredAtMs !== null &&
+      message.acquiredAtMs <= lastAcquiredAtMs)
+  ) {
+    message.bitmap.close();
+    post({
+      schemaVersion: VISUAL_WORKER_MESSAGE_VERSION,
+      type: "discarded",
+      captureEpoch: message.captureEpoch,
+      sequence: message.sequence,
+      acquiredAtMs: message.acquiredAtMs,
+      reason: "non-monotonic-sequence"
+    });
+    return;
+  }
+  if (!landmarker || !provenance) {
+    message.bitmap.close();
+    meshOverlay.clear();
+    post(
+      errorMessage("Face Landmarker is not ready.", {
+        code: "worker-not-ready",
+        recoverable: true,
+        captureEpoch: message.captureEpoch,
+        sequence: message.sequence,
+        acquiredAtMs: message.acquiredAtMs
+      })
+    );
+    return;
+  }
+
+  const processingStartedAtMs = performance.now();
+  try {
+    // Native landmarks, blendshapes, and the transform remain scoped to this
+    // synchronous turn and are never included in a worker response.
+    const nativeResult = landmarker.detectForVideo(
+      message.bitmap,
+      message.acquiredAtMs
+    );
+    const nativeLandmarks = nativeResult.faceLandmarks[0];
+    const box = nativeLandmarks
+      ? boundingBoxForLandmarks(
+          nativeLandmarks,
+          message.width,
+          message.height
+        )
+      : null;
+    const imageQuality = imageQualityFor(message.bitmap, box);
+    const cadence = cadenceFor(message.acquiredAtMs);
+    const derived = deriveFaceFeature(nativeResult, {
       tMs: message.tMs,
-      illumination: illuminationFor(message.bitmap),
-      observedFrameRate: 1000 / frameStep,
+      acquiredAtMs: message.acquiredAtMs,
+      sequence: message.sequence,
+      captureEpoch: message.captureEpoch,
+      taskContext: message.taskContext,
+      frameWidth: message.width,
+      frameHeight: message.height,
+      imageQuality,
+      analyzedFrameRate: cadence.analyzedFrameRate,
+      interResultGapMs: cadence.interResultGapMs,
+      skippedFrameFraction: message.stream.busyDropFraction,
+      processingLatencyMs:
+        performance.now() - processingStartedAtMs,
+      processorRef: provenance.processorRef,
+      calibration: message.calibration,
       state: featureState
     });
     featureState = derived.nextState;
-    self.postMessage({
+    lastSequence = message.sequence;
+    lastAcquiredAtMs = message.acquiredAtMs;
+    if (
+      nativeLandmarks &&
+      derived.frame.faceVisible &&
+      derived.frame.qualityReasons.length === 0 &&
+      meshOverlayCaptureEpoch === message.captureEpoch
+    ) {
+      meshOverlay.render({
+        landmarks: nativeLandmarks,
+        taskContext: message.taskContext,
+        width: message.width,
+        height: message.height,
+        acquiredAtMs: message.acquiredAtMs
+      });
+    } else {
+      meshOverlay.clear();
+    }
+    post({
+      schemaVersion: VISUAL_WORKER_MESSAGE_VERSION,
       type: "frame",
+      captureEpoch: message.captureEpoch,
+      sequence: message.sequence,
+      acquiredAtMs: message.acquiredAtMs,
       frame: derived.frame,
-      overlayPoints: derived.overlayPoints,
-      boundingBox: derived.boundingBox
+      boundingBox: derived.boundingBox,
+      stream: message.stream
     });
   } catch (error) {
-    self.postMessage({
-      type: "error",
-      message:
-        error instanceof Error ? error.message : "Face inference failed."
-    });
+    meshOverlay.clear();
+    post(
+      errorMessage(readableError(error, "Face inference failed."), {
+        code: "inference-failed",
+        recoverable: true,
+        captureEpoch: message.captureEpoch,
+        sequence: message.sequence,
+        acquiredAtMs: message.acquiredAtMs
+      })
+    );
   } finally {
     message.bitmap.close();
   }
+}
+
+function dispose(captureEpoch: number): void {
+  meshOverlay.detach();
+  meshOverlayCaptureEpoch = null;
+  landmarker?.close();
+  landmarker = null;
+  provenance = null;
+  resetDerivedState(captureEpoch);
+  post({
+    schemaVersion: VISUAL_WORKER_MESSAGE_VERSION,
+    type: "disposed",
+    captureEpoch
+  });
+}
+
+self.addEventListener("message", (event: MessageEvent<unknown>) => {
+  const candidate = event.data as Partial<VisualWorkerRequest> | null;
+  if (
+    !candidate ||
+    candidate.schemaVersion !== VISUAL_WORKER_MESSAGE_VERSION ||
+    typeof candidate.type !== "string"
+  ) {
+    if (
+      candidate &&
+      candidate.type === "frame" &&
+      "bitmap" in candidate &&
+      candidate.bitmap instanceof ImageBitmap
+    ) {
+      candidate.bitmap.close();
+    }
+    post(
+      errorMessage("Unsupported visual worker message.", {
+        code: "invalid-message",
+        recoverable: false
+      })
+    );
+    return;
+  }
+
+  const message = candidate as VisualWorkerRequest;
+  if (message.type === "initialize") {
+    void initialize(message).catch((error) => {
+      meshOverlay.clear();
+      post(
+        errorMessage(
+          readableError(
+            error,
+            "Face Landmarker could not initialize."
+          ),
+          {
+            code: "initialization-failed",
+            recoverable: false,
+            captureEpoch: message.captureEpoch
+          }
+        )
+      );
+    });
+    return;
+  }
+  if (message.type === "reset") {
+    resetDerivedState(message.captureEpoch);
+    return;
+  }
+  if (message.type === "attach-overlay") {
+    if (message.captureEpoch < activeCaptureEpoch) {
+      post({
+        schemaVersion: VISUAL_WORKER_MESSAGE_VERSION,
+        type: "overlay-status",
+        captureEpoch: message.captureEpoch,
+        attached: false
+      });
+      return;
+    }
+    const attached = meshOverlay.attach(
+      message.canvas,
+      message.maxRenderHz
+    );
+    meshOverlayCaptureEpoch = attached ? message.captureEpoch : null;
+    post({
+      schemaVersion: VISUAL_WORKER_MESSAGE_VERSION,
+      type: "overlay-status",
+      captureEpoch: message.captureEpoch,
+      attached
+    });
+    return;
+  }
+  if (message.type === "clear-overlay") {
+    if (message.captureEpoch === meshOverlayCaptureEpoch) {
+      meshOverlay.clear();
+    }
+    return;
+  }
+  if (message.type === "dispose") {
+    dispose(message.captureEpoch);
+    return;
+  }
+  processFrame(message);
 });

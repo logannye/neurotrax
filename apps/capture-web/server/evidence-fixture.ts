@@ -1,5 +1,7 @@
 export const EVIDENCE_SMOKE_REQUEST = {
   containsPHI: false,
+  rawMediaRetained: false,
+  nativeVisualObservationsRetained: false,
   visitId: "service-readiness",
   qualitySummary: {
     speechWindowCount: 1,
@@ -36,16 +38,21 @@ export const EVIDENCE_SMOKE_REQUEST = {
     {
       outcomeId: "outcome-face-measured",
       status: "measured",
-      measurementCode: "prototype.face.expressivity",
-      label: "Facial movement",
+      measurementCode: "prototype.face.smile_excursion.asymmetry",
+      label: "Smile-excursion asymmetry",
       modality: "face",
       statement:
-        "Facial movement was measured before and after a quality-withheld interval.",
+        "Smile-excursion asymmetry was measured across accepted neutral and smile task windows.",
       currentValue: 0.04,
-      unit: "motion-index",
-      qualityFacts: { usableWindows: 2, recoveryConfirmed: true },
-      supportRefs: ["face-0", "face-1"],
-      eventIds: ["measurement-face", "face-restored"],
+      unit: "inter-eye-normalized-distance",
+      qualityFacts: {
+        usableWindows: 2,
+        usableFraction: 0.8,
+        processorRef:
+          "mediapipe-face-landmarker:0.10.35:64184e229b26:bilateral-geometry-v1:gpu"
+      },
+      supportRefs: ["face-neutral", "face-smile"],
+      eventIds: ["measurement-face", "measurement-smile"],
       allowedNumbers: ["0.04"]
     }
   ]

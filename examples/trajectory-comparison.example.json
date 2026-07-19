@@ -1,93 +1,182 @@
 {
   "exampleOnly": true,
   "containsPHI": false,
+  "rawMediaRetained": false,
+  "nativeVisualObservationsRetained": false,
   "comparisonId": "demo-comparison-002",
-  "sourceEventIds": [
-    "evt-012-compatibility-assessed",
-    "evt-013-comparison-completed"
-  ],
   "participantId": "synthetic-participant-001",
-  "currentEncounterId": "demo-encounter-002",
-  "currentCaptureMode": "live",
-  "historyMode": "synthetic-fixture",
+  "currentVisitId": "demo-encounter-002",
+  "policyId": "exact-algorithm-and-visual-processor.v1",
+  "decisions": [
+    {
+      "encounterId": "demo-history-2026-04",
+      "status": "included",
+      "reasonCodes": []
+    },
+    {
+      "encounterId": "demo-history-2026-05",
+      "status": "included",
+      "reasonCodes": []
+    },
+    {
+      "encounterId": "demo-history-2026-06",
+      "status": "included",
+      "reasonCodes": []
+    },
+    {
+      "encounterId": "demo-history-incompatible-processor",
+      "status": "excluded",
+      "reasonCodes": [
+        "visual-processor-mismatch"
+      ]
+    }
+  ],
   "includedEncounterIds": [
-    "demo-encounter-history-003",
-    "demo-encounter-history-002",
-    "demo-encounter-001"
+    "demo-history-2026-04",
+    "demo-history-2026-05",
+    "demo-history-2026-06"
   ],
   "excludedEncounters": [
     {
-      "encounterId": "demo-encounter-history-004",
-      "reasonCode": "prompt-version-mismatch",
-      "taskId": "standard-speech.v0.1",
-      "expected": "prototype-sentence.v0.1",
-      "observed": "prototype-sentence.v0.0"
+      "encounterId": "demo-history-incompatible-processor",
+      "reasonCodes": [
+        "visual-processor-mismatch"
+      ]
     }
   ],
-  "compatibility": {
-    "protocolId": "macbook-check-in.v0.1",
-    "captureAdapter": {
-      "id": "macbook-browser",
-      "version": "0.1.0"
-    },
-    "rules": [
-      "exact-protocol-task-and-prompt-versions",
-      "compatible-capture-adapter",
-      "passing-quality",
-      "known-measurement-version"
-    ],
-    "contextWarnings": [
-      "Medication phase was not collected in the current or synthetic historical encounters."
-    ]
-  },
-  "measurements": [
+  "biomarkers": [
     {
-      "code": "prototype.speech.duration",
-      "algorithmVersion": "placeholder-0.1",
-      "currentValue": 14.8,
-      "priorReference": {
-        "count": 3,
-        "median": 14.7,
-        "minimum": 14.6,
-        "maximum": 14.8
-      },
-      "unit": "seconds",
-      "deltaFromMedian": 0.1,
-      "direction": "stable",
-      "uncertainty": "placeholder",
-      "currentEvidence": "current-standard-speech-clip",
-      "representativePriorEvidence": "prior-standard-speech-clip",
-      "referenceMeasurementRefs": [
-        "demo-encounter-history-003:prototype.speech.duration",
-        "demo-encounter-history-002:prototype.speech.duration",
-        "demo-encounter-001:prototype.speech.duration"
+      "code": "prototype.speech.pitch_variability",
+      "label": "Pitch variability",
+      "unit": "semitone-stddev",
+      "contextKind": "spontaneous-speech",
+      "algorithmVersion": "speech-acoustic-0.4",
+      "processorRef": "speech-acoustic-0.4",
+      "currentValue": 1.9,
+      "priorValues": [
+        {
+          "encounterId": "demo-history-2026-04",
+          "occurredAt": "2026-04-18T16:00:00.000Z",
+          "value": 1.8,
+          "synthetic": true
+        },
+        {
+          "encounterId": "demo-history-2026-05",
+          "occurredAt": "2026-05-18T16:00:00.000Z",
+          "value": 1.95,
+          "synthetic": true
+        },
+        {
+          "encounterId": "demo-history-2026-06",
+          "occurredAt": "2026-06-18T16:00:00.000Z",
+          "value": 1.82,
+          "synthetic": true
+        }
       ],
-      "clinicalInterpretation": null
+      "priorMedian": 1.82,
+      "priorMinimum": 1.8,
+      "priorMaximum": 1.95,
+      "priorMad": 0.02,
+      "deltaFromMedian": 0.08,
+      "direction": "within-reference",
+      "currentEvidenceRefs": [
+        "speech-0"
+      ],
+      "referenceMeasurementRefs": [
+        "demo-history-2026-04:prototype.speech.pitch_variability",
+        "demo-history-2026-05:prototype.speech.pitch_variability",
+        "demo-history-2026-06:prototype.speech.pitch_variability"
+      ]
     },
     {
-      "code": "prototype.tap.count",
-      "algorithmVersion": "placeholder-0.1",
-      "currentValue": 31,
-      "priorReference": {
-        "count": 3,
-        "median": 27,
-        "minimum": 26,
-        "maximum": 28
-      },
-      "unit": "count",
-      "deltaFromMedian": 4,
-      "direction": "higher",
-      "uncertainty": "placeholder",
-      "currentEvidence": "current-finger-tap-clip",
-      "representativePriorEvidence": "prior-finger-tap-clip",
-      "referenceMeasurementRefs": [
-        "demo-encounter-history-003:prototype.tap.count",
-        "demo-encounter-history-002:prototype.tap.count",
-        "demo-encounter-001:prototype.tap.count"
+      "code": "prototype.face.smile_excursion.asymmetry",
+      "label": "Smile-excursion asymmetry",
+      "unit": "inter-eye-normalized-distance",
+      "contextKind": "smile",
+      "algorithmVersion": "facial-task-kinematics-1.0",
+      "processorRef": "mediapipe-face-landmarker:0.10.35:64184e229b26:bilateral-geometry-v1:gpu",
+      "currentValue": 0.01,
+      "priorValues": [
+        {
+          "encounterId": "demo-history-2026-04",
+          "occurredAt": "2026-04-18T16:00:00.000Z",
+          "value": 0.009,
+          "synthetic": true
+        },
+        {
+          "encounterId": "demo-history-2026-05",
+          "occurredAt": "2026-05-18T16:00:00.000Z",
+          "value": 0.011,
+          "synthetic": true
+        },
+        {
+          "encounterId": "demo-history-2026-06",
+          "occurredAt": "2026-06-18T16:00:00.000Z",
+          "value": 0.008,
+          "synthetic": true
+        }
       ],
-      "clinicalInterpretation": null
+      "priorMedian": 0.009,
+      "priorMinimum": 0.008,
+      "priorMaximum": 0.011,
+      "priorMad": 0.001,
+      "deltaFromMedian": 0.001,
+      "direction": "within-reference",
+      "currentEvidenceRefs": [
+        "face-1",
+        "face-2"
+      ],
+      "referenceMeasurementRefs": [
+        "demo-history-2026-04:prototype.face.smile_excursion.asymmetry",
+        "demo-history-2026-05:prototype.face.smile_excursion.asymmetry",
+        "demo-history-2026-06:prototype.face.smile_excursion.asymmetry"
+      ]
+    },
+    {
+      "code": "prototype.face.eye_closure_fraction.asymmetry",
+      "label": "Eye-closure fraction asymmetry",
+      "unit": "fraction",
+      "contextKind": "eye-closure",
+      "algorithmVersion": "facial-task-kinematics-1.0",
+      "processorRef": "mediapipe-face-landmarker:0.10.35:64184e229b26:bilateral-geometry-v1:gpu",
+      "currentValue": 0.04,
+      "priorValues": [
+        {
+          "encounterId": "demo-history-2026-04",
+          "occurredAt": "2026-04-18T16:00:00.000Z",
+          "value": 0.035,
+          "synthetic": true
+        },
+        {
+          "encounterId": "demo-history-2026-05",
+          "occurredAt": "2026-05-18T16:00:00.000Z",
+          "value": 0.038,
+          "synthetic": true
+        },
+        {
+          "encounterId": "demo-history-2026-06",
+          "occurredAt": "2026-06-18T16:00:00.000Z",
+          "value": 0.03,
+          "synthetic": true
+        }
+      ],
+      "priorMedian": 0.035,
+      "priorMinimum": 0.03,
+      "priorMaximum": 0.038,
+      "priorMad": 0.003,
+      "deltaFromMedian": 0.005,
+      "direction": "within-reference",
+      "currentEvidenceRefs": [
+        "face-1",
+        "face-3"
+      ],
+      "referenceMeasurementRefs": [
+        "demo-history-2026-04:prototype.face.eye_closure_fraction.asymmetry",
+        "demo-history-2026-05:prototype.face.eye_closure_fraction.asymmetry",
+        "demo-history-2026-06:prototype.face.eye_closure_fraction.asymmetry"
+      ]
     }
   ],
   "status": "provisional",
-  "claimBoundary": "No disease progression, cause, or treatment inference."
+  "claimBoundary": "No disease progression, diagnosis, cause, or treatment inference was made."
 }

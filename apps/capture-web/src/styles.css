@@ -218,6 +218,7 @@ h1 {
 }
 
 #camera-preview,
+.landmark-overlay,
 .face-overlay {
   position: absolute;
   inset: 0;
@@ -227,8 +228,17 @@ h1 {
   transform: scaleX(-1);
 }
 
+.landmark-overlay,
 .face-overlay {
   pointer-events: none;
+}
+
+.landmark-overlay {
+  z-index: 2;
+}
+
+.face-overlay {
+  z-index: 1;
 }
 
 .camera-empty {
@@ -285,6 +295,46 @@ h1 {
 
 .live-strip {
   left: 18px;
+}
+
+.mesh-disclosure {
+  position: absolute;
+  top: 62px;
+  left: 18px;
+  z-index: 4;
+  max-width: calc(100% - 190px);
+  padding: 7px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 9px;
+  color: rgba(255, 255, 255, 0.78);
+  background: rgba(7, 29, 34, 0.68);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.025em;
+  backdrop-filter: blur(10px);
+}
+
+.end-assessment {
+  position: absolute;
+  top: 62px;
+  right: 18px;
+  z-index: 6;
+  min-height: 31px;
+  padding: 0 11px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 9px;
+  color: rgba(255, 255, 255, 0.9);
+  background: rgba(7, 29, 34, 0.72);
+  font: inherit;
+  font-size: 10px;
+  font-weight: 760;
+  cursor: pointer;
+  backdrop-filter: blur(10px);
+}
+
+.end-assessment:hover {
+  border-color: rgba(240, 170, 98, 0.68);
+  background: rgba(91, 54, 30, 0.86);
 }
 
 .live-dot {
@@ -345,6 +395,7 @@ h1 {
 }
 
 .guidance-progress span {
+  display: block;
   width: 0;
   height: 100%;
   margin: 0;
@@ -537,7 +588,7 @@ body[data-capture-state="capturing"] .button-row {
 
 .milestone-rail {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(5, 1fr);
   gap: 7px;
   margin-bottom: 12px;
 }
@@ -1554,6 +1605,10 @@ body[data-capture-state="capturing"] .signal-standby {
 
 body[data-capture-state="capturing"] .capture-controls {
   display: none;
+}
+
+body[data-capture-state="capturing"] .camera-callout {
+  top: 106px;
 }
 
 .agent-node:not(.is-processing, .is-warning) {

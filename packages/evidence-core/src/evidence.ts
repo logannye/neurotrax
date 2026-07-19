@@ -21,9 +21,8 @@ const SPEECH_PRIORITY = [
   "prototype.speech.pause_rate"
 ];
 const FACE_PRIORITY = [
-  "prototype.face.expressivity",
-  "prototype.face.blink_rate",
-  "prototype.face.brow_amplitude"
+  "prototype.face.smile_excursion.asymmetry",
+  "prototype.face.eye_closure_fraction.asymmetry"
 ];
 
 function formatNumber(value: number): string {
@@ -37,6 +36,28 @@ function priorityFor(code: string, modality: Modality): number {
   return index === -1 ? Number.MAX_SAFE_INTEGER : index;
 }
 
+function isOutcomeCandidate(code: string, modality: Modality): boolean {
+  if (!code.startsWith(`prototype.${modality}.`)) return false;
+  return modality === "speech" || FACE_PRIORITY.includes(code);
+}
+
+function sourceWindowRefsFor(
+  aggregate: EncounterObservation["aggregates"][number],
+  observation: EncounterObservation
+): string[] {
+  const measurements = observation.measurements.filter(
+    (measurement) => measurement.code === aggregate.code
+  );
+  return [
+    ...new Set([
+      ...aggregate.sourceWindowRefs,
+      ...measurements.flatMap(
+        (measurement) => measurement.sourceWindowRefs
+      )
+    ])
+  ];
+}
+
 export function createEncounterClaimFacts(
   observation: EncounterObservation,
   events: EventEnvelope[]
@@ -46,7 +67,7 @@ export function createEncounterClaimFacts(
   for (const modality of ["speech", "face"] as const) {
     const aggregate = observation.aggregates
       .filter((candidate) =>
-        candidate.code.startsWith(`prototype.${modality}.`)
+        isOutcomeCandidate(candidate.code, modality)
       )
       .sort(
         (left, right) =>
@@ -56,12 +77,7 @@ export function createEncounterClaimFacts(
       )[0];
     if (!aggregate) continue;
 
-    const measurements = observation.measurements.filter(
-      (measurement) => measurement.code === aggregate.code
-    );
-    const measurementRefs = [
-      ...new Set(measurements.map((measurement) => measurement.contextRef))
-    ];
+    const measurementRefs = sourceWindowRefsFor(aggregate, observation);
     const supportingEvents = events.filter(
       (event) => {
         if (event.type === "encounter-observation.created") return true;
@@ -96,7 +112,7 @@ export function createEncounterClaimFacts(
     const statement =
       modality === "speech"
         ? `${aggregate.label} was measured across accepted speech analysis windows.`
-        : `${aggregate.label} was measured across accepted facial analysis windows.`;
+        : `${aggregate.label} was measured across accepted neutral and active-task facial windows.`;
 
     facts.push({
       claimId: `claim-${aggregate.code.replaceAll(".", "-")}`,
@@ -163,7 +179,7 @@ export function createModalityOutcomes(
   const createOutcome = (modality: Modality): ModalityOutcome => {
     const aggregate = observation.aggregates
       .filter((candidate) =>
-        candidate.code.startsWith(`prototype.${modality}.`)
+        isOutcomeCandidate(candidate.code, modality)
       )
       .sort(
         (left, right) =>
@@ -184,28 +200,26 @@ export function createModalityOutcomes(
             usableFraction:
               observation.qualitySummary.usableFaceFraction,
             withholdingMs:
-              observation.qualitySummary.faceWithholdingDurationMs,
-            recoveryConfirmed:
-              observation.qualitySummary.faceRecoveryObserved
+              observation.qualitySummary.faceWithholdingDurationMs
           };
+    if (modality === "face") {
+      const processorRef =
+        aggregate?.processorRef ??
+        observation.visualPipeline?.processorRef;
+      if (processorRef) qualityFacts.processorRef = processorRef;
+    }
 
     if (aggregate) {
-      const measurements = observation.measurements.filter(
-        (measurement) => measurement.code === aggregate.code
+      const measurementRefs = sourceWindowRefsFor(
+        aggregate,
+        observation
       );
-      const measurementRefs = [
-        ...new Set(measurements.map((measurement) => measurement.contextRef))
-      ];
       const supportingEvents = supportingEventsFor(
         modality,
         aggregate.code,
         measurementRefs,
         events
       );
-      const beforeAndAfter =
-        modality === "face" &&
-        observation.qualitySummary.faceRecoveryObserved &&
-        observation.qualitySummary.postRecoveryFaceWindowCount > 0;
       return {
         outcomeId: `outcome-${modality}-measured`,
         status: "measured",
@@ -215,9 +229,7 @@ export function createModalityOutcomes(
         statement:
           modality === "speech"
             ? `${aggregate.label}: ${formatNumber(aggregate.value)} ${aggregate.unit}, measured across accepted speech analysis windows.`
-            : beforeAndAfter
-              ? `${aggregate.label}: ${formatNumber(aggregate.value)} ${aggregate.unit}, measured across accepted facial analysis windows.`
-              : `${aggregate.label}: ${formatNumber(aggregate.value)} ${aggregate.unit}, measured across the encounter.`,
+            : `${aggregate.label}: ${formatNumber(aggregate.value)} ${aggregate.unit}, measured across accepted neutral and active-task facial windows.`,
         currentValue: aggregate.value,
         unit: aggregate.unit,
         qualityFacts,
@@ -233,6 +245,13 @@ export function createModalityOutcomes(
     const abstention = [...observation.abstentions]
       .reverse()
       .find((candidate) => candidate.modality === modality);
+    if (
+      modality === "face" &&
+      abstention?.processorRef &&
+      !qualityFacts.processorRef
+    ) {
+      qualityFacts.processorRef = abstention.processorRef;
+    }
     const supportingEvents = supportingEventsFor(
       modality,
       null,
@@ -253,11 +272,15 @@ export function createModalityOutcomes(
       } interval was captured.`,
       reasonCode,
       qualityFacts,
-      supportRefs: [
-        abstention
-          ? `abstention:${modality}:${abstention.windowStartMs}-${abstention.windowEndMs}`
-          : `observation:${observation.visitId}`
-      ],
+      supportRefs:
+        abstention?.sourceWindowRefs &&
+        abstention.sourceWindowRefs.length > 0
+          ? [...new Set(abstention.sourceWindowRefs)]
+          : [
+              abstention
+                ? `abstention:${modality}:${abstention.windowStartMs}-${abstention.windowEndMs}`
+                : `observation:${observation.visitId}`
+            ],
       eventIds: supportingEvents.map((event) => event.eventId)
     };
   };

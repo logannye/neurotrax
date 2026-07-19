@@ -235,32 +235,41 @@ The working demonstration uses a laptop camera and microphone and implements:
 
 - explicit consent and a bounded system check;
 - quiet-room voice calibration and adaptive voice activity detection;
-- local MediaPipe facial landmarks and blendshape proxies in a browser worker;
+- local MediaPipe facial geometry in a versioned browser-worker pipeline;
+- acquisition-time video scheduling, anatomical laterality, camera and model
+  provenance, and reason-coded visual quality;
+- a worker-rendered 478-point facial mesh that is visible during usable
+  capture but never enters application data;
+- completion-gated coaching that advances only after each exercise is
+  technically observed;
 - independent, quality-gated speech and facial measurement windows;
-- ten prototype encounter metrics;
+- eleven prototype encounter metrics;
 - robust per-visit aggregation with algorithm-version checks;
 - reason-coded abstention and append-only workflow events;
 - a deterministic evidence layer with bounded server-side synthesis;
 - a clinician-facing quantitative profile and provenance drawer; and
 - explicit approval or dismissal.
 
-The ten current features are:
+The eleven current features are:
 
 - speech initiation latency;
 - voiced-time fraction;
 - bounded pause rate;
 - pitch center and pitch variability;
-- overall facial movement;
-- blink-rate proxy;
-- brow excursion;
-- mouth-aperture range; and
-- eye-aperture range.
+- left and right smile excursion plus their absolute difference; and
+- left and right eye-closure fraction plus their absolute difference.
 
 They are engineering features, not validated biomarkers. Measurements
-explicitly carry placeholder uncertainty and `clinicalValidation: "none"`.
+explicitly carry technical uncertainty state and
+`clinicalValidation: "none"`.
 
-The live demonstration still uses the original NeuroTrax 24-second
-neurological presentation workflow as its first protocol-shaped example.
+The live demonstration uses a completion-gated nonclinical task sequence:
+establish the audiovisual signals, demonstrate independent facial withholding,
+capture a quiet neutral reference, hold a comfortable smile, and gently close
+and reopen the eyes. A quality break resets only the current evidence streak;
+elapsed time never advances an unfinished exercise. After twelve seconds the
+interface provides criterion-specific guidance, while the participant can
+keep retrying or end and discard the assessment.
 Personal Trajectory exists as a tested internal package but is not connected
 to persistent patient history. No authentication, clinical data store, FHIR
 integration, EHR write, or production deployment is implemented.
@@ -272,6 +281,8 @@ The production direction is **ephemeral media, durable measurements**:
 - request explicit, purpose-specific consent before analysis;
 - process raw audio and video locally when technically feasible;
 - retain the minimum structured measurements needed for the intended use;
+- keep the live mesh presentation-only inside the visual worker, with no
+  landmark, connection, screenshot, or overlay-pixel serialization;
 - keep raw media and conversation content away from narrative generation;
 - make device, context, quality, uncertainty, and algorithm version visible;
 - permit every modality and measurement to abstain;

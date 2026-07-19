@@ -15,11 +15,9 @@ const window: MeasurableWindow = {
   context: {
     kind: "spontaneous-speech",
     confounds: {
+      kind: "speech",
       snrDb: 20,
-      faceFramingFraction: 1,
-      observedFrameRate: 30,
-      illuminationRelative: 0.8,
-      yawDegrees: 0
+      clippingFraction: 0
     }
   }
 };
@@ -47,7 +45,9 @@ describe("extractSpeechAcoustic", () => {
     expect(byCode.get("prototype.speech.pitch_variability")!.value).toBeGreaterThan(0);
     for (const m of result) {
       expect(m.algorithmVersion).toBe(SPEECH_ACOUSTIC_VERSION);
-      expect(m.uncertainty).toBe("placeholder");
+      expect(m.uncertainty.kind).toBe("not-estimated");
+      expect(m.processorRef).toBe(SPEECH_ACOUSTIC_VERSION);
+      expect(m.sourceWindowRefs).toEqual([window.windowId]);
       expect(m.clinicalValidation).toBe("none");
       expect(m.contextRef).toBe(window.windowId);
     }

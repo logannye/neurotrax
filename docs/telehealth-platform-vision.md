@@ -145,6 +145,26 @@ The preferred long-term workflow combines ambient collection with one or two
 brief microtasks selected by the care context. The encounter should remain
 clinically usable when a modality or task fails.
 
+### Current prototype foundation
+
+The current implementation is a nonclinical engineering demonstration of that
+hybrid shape. It uses MediaPipe as its only visual model and runs a
+completion-gated sequence: establishing speech and face capture, intentional
+turn-away, quiet neutral reference, smile, and eye closure with reopening. Each
+exercise must satisfy its engineering signal criterion; elapsed time cannot
+advance or skip it. It reports bilateral smile excursion and eye-closure
+fraction plus absolute left-right asymmetry, alongside five speech
+measurements. These are descriptive prototype measurements, not validated
+clinical endpoints or scores.
+
+Subject-left and subject-right are anatomical labels and do not change when the
+preview is mirrored. Visual acquisition timestamps, processor provenance, and
+quality observations remain attached to derived frames. Native landmarks,
+blendshapes, transformation matrices, and video frames remain ephemeral inside
+the browser worker and are not observation data. A live 478-point mesh is
+drawn directly inside that worker for presentation only; its coordinates and
+pixels are not returned, retained, or serialized.
+
 ## Measurement domains
 
 ### Facial geometry and morphology
@@ -334,6 +354,10 @@ The production direction remains:
 Raw audio and video should be processed locally where feasible and discarded
 when the encounter ends. Durable records should contain only the minimum
 derived information necessary for the approved context of use.
+
+The current browser implementation applies the same rule to native visual
+model output: full landmarks, blendshapes, and transformation matrices are
+temporary inference inputs, not durable derived measurements.
 
 ### Research requirement
 

@@ -2,46 +2,137 @@
   "id": "macbook-check-in.v0.1",
   "status": "non-clinical-prototype",
   "captureAdapter": "macbook-browser",
-  "description": "A seated PhenoMetric demo check-in used to test capture, bounded correction, comparison, and review infrastructure.",
+  "description": "A one-screen, completion-gated PhenoMetric face-and-voice demonstration for quality-aware telehealth measurement.",
+  "supportedTarget": "Chrome desktop on the reference MacBook",
   "consentRequired": true,
-  "maxRetriesPerTask": 1,
-  "tasks": [
+  "processing": {
+    "location": "browser-worker",
+    "rawMediaRetained": false,
+    "nativeVisualObservationsRetained": false,
+    "visualRuntime": "mediapipe-tasks-vision",
+    "mediaPipeVersion": "0.10.35",
+    "visualModelAsset": "/models/face_landmarker.task",
+    "requestedVideo": {
+      "width": 1280,
+      "height": 720,
+      "frameRate": 30
+    },
+    "coordinateSpace": "normalized-unmirrored-image",
+    "displayMirrored": true,
+    "lateralityConvention": "subject-anatomical",
+    "liveOverlay": {
+      "landmarkCount": 478,
+      "maximumRenderRateHz": 12,
+      "renderedInsideVisualWorker": true,
+      "displayOnly": true,
+      "stored": false
+    }
+  },
+  "qualityPolicy": {
+    "minimumAnalyzedFrameRate": 20,
+    "maximumVisualFrameGapMs": 200,
+    "maximumSkippedFrameFraction": 0.25,
+    "rollingVisualQualityWindowMs": 2000,
+    "minimumFaceWidthPixels": 180,
+    "minimumFaceHeightPixels": 220,
+    "maximumFaceWidthFraction": 0.7,
+    "maximumFaceHeightFraction": 0.9,
+    "minimumEdgeMarginFraction": 0.02,
+    "maximumAbsoluteYawDegrees": 15,
+    "maximumAbsolutePitchDegrees": 15,
+    "maximumAbsoluteRollDegrees": 10,
+    "minimumIlluminationMean": 0.12,
+    "maximumIlluminationMean": 0.9,
+    "maximumDarkClippingFraction": 0.2,
+    "maximumBrightClippingFraction": 0.2,
+    "minimumNormalizedLaplacianSharpness": 0.0008,
+    "calibrationSharpnessFraction": 0.5,
+    "minimumCalibrationDurationMs": 1500,
+    "minimumCalibrationUsableFraction": 0.8
+  },
+  "sequence": [
     {
-      "id": "standard-speech.v0.1",
-      "promptVersion": "prototype-sentence.v0.1",
-      "modality": "audio-video",
-      "durationSeconds": 15,
-      "instruction": "Read the displayed prototype sentence at a comfortable pace.",
-      "qualityChecks": [
-        "microphone-not-clipped",
-        "background-noise-acceptable",
-        "face-visible",
-        "duration-complete"
-      ]
+      "phase": "establishing",
+      "evidenceDurationMs": 1500,
+      "assistanceAfterMs": 12000,
+      "successCondition": "continuous-usable-face-and-voiced-unclipped-speech",
+      "instruction": "Keep your face centered while speaking naturally.",
+      "speechAnalysis": true,
+      "facialAnalysis": "quality-gated"
     },
     {
-      "id": "seated-finger-tap.v0.1",
-      "promptVersion": "finger-tap-instruction.v0.1",
-      "modality": "video",
-      "durationSeconds": 10,
-      "instruction": "With the selected hand visible, tap the index finger and thumb as comfortably and consistently as possible.",
-      "demoQualityPolicy": {
-        "id": "tap-hand-visibility.v0.1",
-        "version": "0.1.0",
-        "processorId": "hand-landmark-visibility",
-        "processorVersion": "placeholder-0.1",
-        "handLandmarkVisibilityFractionAtLeast": 0.85,
-        "maxCorrectionAttempts": 1,
-        "onExhaustion": "not-measurable"
-      },
-      "qualityChecks": [
-        "camera-stable",
-        "hand-visible",
-        "fingers-not-occluded",
-        "observed-frame-rate-acceptable",
-        "duration-complete"
-      ]
+      "phase": "turn-away",
+      "evidenceDurationMs": 750,
+      "assistanceAfterMs": 12000,
+      "successCondition": "intentional-face-not-visible-or-pose-out-of-range-while-speech-remains-voiced",
+      "instruction": "Turn away from the camera and continue speaking.",
+      "speechAnalysis": true,
+      "facialAnalysis": "withheld"
+    },
+    {
+      "phase": "neutral-face",
+      "evidenceDurationMs": 1500,
+      "assistanceAfterMs": 12000,
+      "successCondition": "continuous-usable-face-and-non-voiced-audio",
+      "instruction": "Face the camera, stop speaking, and hold a quiet neutral reference.",
+      "speechAnalysis": false,
+      "facialAnalysis": "neutral-baseline"
+    },
+    {
+      "phase": "smile",
+      "evidenceDurationMs": 1500,
+      "adherenceHoldMs": 500,
+      "assistanceAfterMs": 12000,
+      "successCondition": "usable-silent-evidence-with-observed-smile-excursion",
+      "instruction": "Smile comfortably and hold.",
+      "speechAnalysis": false,
+      "facialAnalysis": "active-task",
+      "engineeringAdherenceCheck": {
+        "eitherMouthCornerExcursionAtLeast": 0.02,
+        "unit": "inter-eye-normalized-distance"
+      }
+    },
+    {
+      "phase": "eye-closure",
+      "evidenceDurationMs": 1500,
+      "closureHoldMs": 300,
+      "recoveryHoldMs": 300,
+      "assistanceAfterMs": 12000,
+      "successCondition": "usable-silent-evidence-with-same-eye-close-then-reopen",
+      "instruction": "Gently close your eyes, hold briefly, then reopen.",
+      "speechAnalysis": false,
+      "facialAnalysis": "active-task",
+      "engineeringAdherenceCheck": {
+        "eitherEyeApertureDecreaseAtLeast": 0.2,
+        "sameEyeRecoveryFractionAtLeast": 0.9,
+        "unit": "fraction-from-neutral"
+      }
     }
+  ],
+  "advancement": {
+    "mode": "signal-gated",
+    "maximumContinuousSignalGapMs": 200,
+    "timeoutBehavior": "never-auto-advance",
+    "skipAvailable": false,
+    "qualityBreakBehavior": "reset-current-continuous-streak",
+    "failedAttemptRetention": "transient-only",
+    "acceptedEvidence": "final-qualifying-interval-only"
+  },
+  "minimumUsableEvidencePerFacialTaskMs": 1500,
+  "speechMeasurements": [
+    "prototype.speech.onset_latency",
+    "prototype.speech.voiced_time_fraction",
+    "prototype.speech.pause_rate",
+    "prototype.speech.pitch_center",
+    "prototype.speech.pitch_variability"
+  ],
+  "facialMeasurements": [
+    "prototype.face.smile_excursion.left",
+    "prototype.face.smile_excursion.right",
+    "prototype.face.smile_excursion.asymmetry",
+    "prototype.face.eye_closure_fraction.left",
+    "prototype.face.eye_closure_fraction.right",
+    "prototype.face.eye_closure_fraction.asymmetry"
   ],
   "clinicalClaims": []
 }

@@ -2,6 +2,8 @@ import { expect, test, type Page } from "@playwright/test";
 
 const boundary =
   "For clinician review. This summary does not provide a diagnosis or treatment recommendation.";
+const forbiddenSerializedData =
+  /deviceId|deviceLabel|faceLandmarks|landmarks|meshConnections|overlayPixels|offscreenCanvas|screenshot|blendshapes|transformationMatrix|bitmap|mediaStream/i;
 
 async function expectCleanPresentationCopy(page: Page): Promise<void> {
   const body = (await page.locator("body").innerText()).toLowerCase();
@@ -44,10 +46,17 @@ async function installReadinessMock(page: Page): Promise<void> {
   });
 }
 
-async function installEvidenceMock(page: Page): Promise<void> {
+async function installEvidenceMock(
+  page: Page,
+  onEvidenceRequest?: () => void
+): Promise<void> {
   await installReadinessMock(page);
   await page.route("**/api/evidence-card", async (route) => {
+    onEvidenceRequest?.();
     const payload = route.request().postDataJSON() as {
+      containsPHI: boolean;
+      rawMediaRetained: boolean;
+      nativeVisualObservationsRetained: boolean;
       outcomes: Array<{
         outcomeId: string;
         label: string;
@@ -56,6 +65,10 @@ async function installEvidenceMock(page: Page): Promise<void> {
         statement: string;
       }>;
     };
+    expect(payload.containsPHI).toBe(false);
+    expect(payload.rawMediaRetained).toBe(false);
+    expect(payload.nativeVisualObservationsRetained).toBe(false);
+    expect(JSON.stringify(payload)).not.toMatch(forbiddenSerializedData);
     expect(payload.outcomes).toHaveLength(2);
     expect(
       new Set(payload.outcomes.map((outcome) => outcome.modality)).size
@@ -71,7 +84,7 @@ async function installEvidenceMock(page: Page): Promise<void> {
           headline: "Two encounter signals are ready for review",
           summary:
             reportable.length === 2
-              ? "Pitch variability and facial movement were measured during technically usable portions of the encounter."
+              ? "Pitch variability and bilateral facial task measurements were captured during technically usable portions of the encounter."
               : `${reportable[0]?.label ?? "No audiovisual metric"} was included in the encounter report.`,
           claims: reportable.map((outcome) => ({
             claimId: outcome.outcomeId,
@@ -117,15 +130,19 @@ async function runGuidedCapture(
     page.locator('[data-milestone="withheld"]')
   ).toHaveClass(/is-complete/);
   await expect(
-    page.locator('[data-milestone="recovered"]')
+    page.locator('[data-milestone="neutral"]')
+  ).toHaveClass(/is-complete/);
+  await expect(
+    page.locator('[data-milestone="smile"]')
+  ).toHaveClass(/is-complete/);
+  await expect(
+    page.locator('[data-milestone="eye-closure"]')
   ).toHaveClass(/is-complete/);
   await expect(page.locator("#results-panel")).toBeVisible({
     timeout: 10_000
   });
   await expect(page.locator("#evidence-card")).toBeVisible();
-  await expect(page.locator(".evidence-claim")).toHaveCount(
-    ["missing-face", "missing-speech"].includes(scenario) ? 1 : 2
-  );
+  await expect(page.locator(".evidence-claim")).toHaveCount(2);
   await expect(page.locator("#evidence-status-chip")).toContainText(
     "grounded"
   );
@@ -143,6 +160,55 @@ test("loads the local facial analysis and keeps presentation copy clean", async 
     "Ambient face and voice measurement"
   );
   await expectCleanPresentationCopy(page);
+});
+
+test("runs local visual worker inference on a generated blank bitmap", async ({
+  page
+}) => {
+  await installReadinessMock(page);
+  await page.goto("/?visualWorkerSmoke=1&operator=1");
+  await expect(page.locator("body")).toHaveAttribute(
+    "data-visual-worker-smoke",
+    "complete",
+    { timeout: 15_000 }
+  );
+  await expect(page.locator("body")).toHaveAttribute(
+    "data-visual-worker-smoke-face",
+    "not-visible"
+  );
+  const diagnostics = JSON.parse(
+    (await page.locator("#operator-output").textContent()) ?? "{}"
+  ) as {
+    visualPipeline: {
+      mediaPipeVersion: string;
+      modelSha256: string;
+      delegate: string;
+    };
+    videoCaptureSettings: {
+      requested: { width: number; height: number; frameRate: number };
+    };
+    latestVisualResult: {
+      analyzedFrameRate: number;
+      interResultGapMs: number | null;
+      processingLatencyMs: number;
+    };
+  };
+  expect(diagnostics.visualPipeline.mediaPipeVersion).toBe("0.10.35");
+  expect(diagnostics.visualPipeline.modelSha256).toMatch(/^[a-f0-9]{64}$/);
+  expect(["GPU", "CPU"]).toContain(diagnostics.visualPipeline.delegate);
+  expect(diagnostics.videoCaptureSettings.requested).toEqual({
+    width: 1280,
+    height: 720,
+    frameRate: 30
+  });
+  expect(diagnostics.latestVisualResult.analyzedFrameRate).toBe(0);
+  expect(diagnostics.latestVisualResult.interResultGapMs).toBeNull();
+  expect(diagnostics.latestVisualResult.processingLatencyMs).toBeGreaterThanOrEqual(
+    0
+  );
+  expect(JSON.stringify(diagnostics)).not.toMatch(
+    forbiddenSerializedData
+  );
 });
 
 test("keeps the opening focused and reports device privacy accurately", async ({
@@ -171,12 +237,206 @@ test("keeps the opening focused and reports device privacy accurately", async ({
   );
 });
 
+test("consent withdrawal stops a media request that resolves late", async ({
+  page
+}) => {
+  await installReadinessMock(page);
+  await page.addInitScript(() => {
+    let resolveRequest: ((stream: MediaStream) => void) | null = null;
+    const state = { stoppedTracks: 0 };
+    const track = () => ({
+      readyState: "live",
+      muted: false,
+      stop() {
+        state.stoppedTracks += 1;
+        this.readyState = "ended";
+      },
+      getSettings: () => ({}),
+      addEventListener: () => undefined
+    });
+    const videoTrack = track();
+    const audioTrack = track();
+    const stream = {
+      getTracks: () => [videoTrack, audioTrack],
+      getVideoTracks: () => [videoTrack],
+      getAudioTracks: () => [audioTrack]
+    } as unknown as MediaStream;
+    Object.defineProperty(navigator, "mediaDevices", {
+      configurable: true,
+      value: {
+        getUserMedia: () =>
+          new Promise<MediaStream>((resolve) => {
+            resolveRequest = resolve;
+          })
+      }
+    });
+    Object.assign(window, {
+      __resolveDelayedMedia: () => resolveRequest?.(stream),
+      __delayedMediaState: state
+    });
+  });
+  await page.goto("/");
+  await page.locator("#consent-checkbox").check();
+  await page.locator("#start-button").click();
+  await expect(page.locator("body")).toHaveAttribute(
+    "data-capture-state",
+    "requesting"
+  );
+
+  await page.locator("#consent-checkbox").uncheck();
+  await page.evaluate(() => {
+    (
+      window as typeof window & {
+        __resolveDelayedMedia: () => void;
+      }
+    ).__resolveDelayedMedia();
+  });
+
+  await expect(page.locator("body")).toHaveAttribute(
+    "data-capture-state",
+    "idle"
+  );
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          (
+            window as typeof window & {
+              __delayedMediaState: { stoppedTracks: number };
+            }
+          ).__delayedMediaState.stoppedTracks
+      )
+    )
+    .toBe(2);
+  await expect(page.locator("#camera-preview")).toHaveJSProperty(
+    "srcObject",
+    null
+  );
+});
+
+test("consent withdrawal stops tracks while video playback is still pending", async ({
+  page
+}) => {
+  await installReadinessMock(page);
+  await page.addInitScript(() => {
+    let resolvePlay: (() => void) | null = null;
+    const state = { playStarted: false, stoppedTracks: 0 };
+    const track = () => {
+      let readyState: MediaStreamTrackState = "live";
+      return {
+        get readyState() {
+          return readyState;
+        },
+        muted: false,
+        stop() {
+          if (readyState === "ended") return;
+          readyState = "ended";
+          state.stoppedTracks += 1;
+        },
+        getSettings: () => ({}),
+        addEventListener: () => undefined
+      };
+    };
+    const videoTrack = track();
+    const audioTrack = track();
+    const stream = {
+      getTracks: () => [videoTrack, audioTrack],
+      getVideoTracks: () => [videoTrack],
+      getAudioTracks: () => [audioTrack]
+    } as unknown as MediaStream;
+    const attachedStreams = new WeakMap<HTMLMediaElement, MediaStream | null>();
+    Object.defineProperty(HTMLMediaElement.prototype, "srcObject", {
+      configurable: true,
+      get() {
+        return attachedStreams.get(this) ?? null;
+      },
+      set(value: MediaStream | null) {
+        attachedStreams.set(this, value);
+      }
+    });
+    Object.defineProperty(navigator, "mediaDevices", {
+      configurable: true,
+      value: {
+        getUserMedia: async () => stream
+      }
+    });
+    Object.defineProperty(HTMLMediaElement.prototype, "play", {
+      configurable: true,
+      value: () =>
+        new Promise<void>((resolve) => {
+          state.playStarted = true;
+          resolvePlay = resolve;
+        })
+    });
+    Object.assign(window, {
+      __resolveDelayedPlay: () => resolvePlay?.(),
+      __delayedPlayState: state
+    });
+  });
+
+  await page.goto("/");
+  await page.locator("#consent-checkbox").check();
+  await page.locator("#start-button").click();
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          (
+            window as typeof window & {
+              __delayedPlayState: { playStarted: boolean };
+            }
+          ).__delayedPlayState.playStarted
+      )
+    )
+    .toBe(true);
+
+  await page.locator("#consent-checkbox").uncheck();
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          (
+            window as typeof window & {
+              __delayedPlayState: { stoppedTracks: number };
+            }
+          ).__delayedPlayState.stoppedTracks
+      )
+    )
+    .toBe(2);
+  await expect(page.locator("body")).toHaveAttribute(
+    "data-capture-state",
+    "idle"
+  );
+  await expect(page.locator("#camera-preview")).toHaveJSProperty(
+    "srcObject",
+    null
+  );
+
+  await page.evaluate(() => {
+    (
+      window as typeof window & {
+        __resolveDelayedPlay: () => void;
+      }
+    ).__resolveDelayedPlay();
+  });
+});
+
 test("runs guided capture, traces both claims, and approves the summary", async ({
   page
 }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: {
+        writeText: async (text: string) => {
+          sessionStorage.setItem("copied-report", text);
+        }
+      }
+    });
+  });
   await runGuidedCapture(page);
   await expect(page.locator("#result-summary")).toContainText(
-    "10 encounter biomarkers"
+    "11 encounter biomarkers"
   );
   await expect(page.getByRole("heading", {
     name: "Clinician encounter summary"
@@ -244,6 +504,12 @@ test("runs guided capture, traces both claims, and approves the summary", async 
   await expect(page.locator("#accept-button")).toBeHidden();
   await expect(page.locator("#reject-button")).toBeHidden();
   await expect(page.locator("#copy-report-button")).toBeVisible();
+  await page.locator("#copy-report-button").click();
+  const copiedReport = await page.evaluate(() =>
+    sessionStorage.getItem("copied-report")
+  );
+  expect(copiedReport).not.toBeNull();
+  expect(copiedReport ?? "").not.toMatch(forbiddenSerializedData);
   await expect(page.locator("#baseline-panel")).toBeVisible();
   await expect(page.locator("#baseline-panel")).toHaveAttribute(
     "data-event-id",
@@ -293,7 +559,7 @@ test("prefetches synthesis and exposes measured evidence during service latency"
         draft: {
           headline: "Two encounter signals are ready for review",
           summary:
-            "Pitch variability and facial movement were measured during technically usable portions of the encounter.",
+            "Pitch variability and bilateral facial task measurements were captured during technically usable portions of the encounter.",
           claims: payload.outcomes.map((outcome) => ({
             claimId: outcome.outcomeId,
             modality: outcome.modality,
@@ -333,7 +599,7 @@ test("prefetches synthesis and exposes measured evidence during service latency"
     "data-event-id",
     /coordinator\.decision\.recorded/
   );
-  await expect(page.locator(".aggregate-card")).toHaveCount(10);
+  await expect(page.locator(".aggregate-card")).toHaveCount(11);
   await expect(page.locator("#evidence-loading")).toBeVisible();
   await expect(page.locator("#evidence-loading")).toHaveAttribute(
     "data-event-id",
@@ -351,39 +617,52 @@ test("prefetches synthesis and exposes measured evidence during service latency"
     "data-event-id",
     /evidence-card\.drafted/
   );
-  await expect(page.locator(".report-metric")).toHaveCount(10);
+  await expect(page.locator(".report-metric")).toHaveCount(11);
 });
 
 test("shows facial analysis pausing while speech continues", async ({ page }) => {
   await installEvidenceMock(page);
-  await page.goto("/?testCapture=1&fast=1&observe=1");
+  await page.goto(
+    "/?testCapture=1&fast=1&observe=1&scenario=unfinished-smile"
+  );
   await page.locator("#consent-checkbox").check();
   await page.locator("#start-button").click();
   await page.locator("#start-button").click();
-  await expect(page.locator("#evidence-packet")).toBeVisible();
-  await expect(page.locator("#evidence-packet")).toHaveAttribute(
-    "data-event-id",
-    /capture\.window\.opened/
-  );
-  await expect(page.locator("#face-lane-state")).toHaveText("Paused");
-  await expect(page.locator("#speech-state")).toHaveText("Active");
-  await expect(page.locator("#coordinator-decision")).toContainText(
-    "Speech continues"
-  );
-  await expect(page.locator("#coordinator-decision")).toHaveAttribute(
-    "data-event-id",
-    /capture\.quality\.changed/
-  );
-  await expect(page.locator("#camera-callout")).toContainText(
-    "Facial Analysis paused · Speech continues"
-  );
-  await expect(page.locator("#camera-callout")).toHaveAttribute(
-    "data-event-id",
-    /capture\.quality\.changed/
-  );
-  await expect(
-    page.locator('[data-lane="facial-expressivity"]')
-  ).toHaveAttribute("data-event-id", /capture\.quality\.changed/);
+  await expect
+    .poll(
+      () =>
+        page.evaluate(() => ({
+          face: document.querySelector("#face-lane-state")?.textContent,
+          speech: document.querySelector("#speech-state")?.textContent,
+          decision:
+            document.querySelector("#coordinator-decision")?.textContent,
+          decisionEvent:
+            document
+              .querySelector("#coordinator-decision")
+              ?.getAttribute("data-event-id"),
+          callout: document.querySelector("#camera-callout")?.textContent,
+          calloutEvent:
+            document
+              .querySelector("#camera-callout")
+              ?.getAttribute("data-event-id"),
+          faceEvent:
+            document
+              .querySelector('[data-lane="facial-expressivity"]')
+              ?.getAttribute("data-event-id")
+        })),
+      { intervals: [20], timeout: 5_000 }
+    )
+    .toMatchObject({
+      face: "Paused",
+      speech: "Active",
+      decision: "Facial Analysis paused · Speech continues",
+      decisionEvent: expect.stringMatching(/capture\.quality\.changed/),
+      callout: expect.stringContaining(
+        "Facial Analysis paused · Speech continues"
+      ),
+      calloutEvent: expect.stringMatching(/capture\.quality\.changed/),
+      faceEvent: expect.stringMatching(/capture\.quality\.changed/)
+    });
   await expect(page.locator("#face-lane-state")).toHaveText("Connected", {
     timeout: 5_000
   });
@@ -402,10 +681,25 @@ test("shows facial analysis pausing while speech continues", async ({ page }) =>
   await expect(visibleDecisions).toHaveCount(3);
 });
 
-test("missed turn-away advances without exposing acquisition detail", async ({
+test("corrective guidance appears without skipping and a later retry succeeds", async ({
   page
 }) => {
-  await runGuidedCapture(page, "missed-turn");
+  await installEvidenceMock(page);
+  await page.goto(
+    "/?testCapture=1&fast=1&observe=1&scenario=missed-turn"
+  );
+  await page.locator("#consent-checkbox").check();
+  await page.locator("#start-button").click();
+  await page.locator("#start-button").click();
+  await expect(page.locator("#guidance-detail")).toContainText(
+    "Keep speaking while turning far enough away"
+  );
+  await expect(
+    page.locator('[data-milestone="withheld"]')
+  ).not.toHaveClass(/is-complete/);
+  await expect(page.locator("#coordinator-decision")).toContainText(
+    "needs a little adjustment"
+  );
   await expect(
     page.locator('[data-milestone="withheld"]')
   ).toHaveClass(/is-complete/);
@@ -413,16 +707,288 @@ test("missed turn-away advances without exposing acquisition detail", async ({
   await expectCleanPresentationCopy(page);
 });
 
-test("a modality without a metric is omitted from the encounter report", async ({
+test("elapsed time alone never advances an unfinished exercise", async ({
   page
 }) => {
-  await runGuidedCapture(page, "missing-face");
-  await expect(page.locator(".aggregate-card")).toHaveCount(5);
+  await installEvidenceMock(page);
+  await page.goto("/?testCapture=1&fast=1&scenario=unfinished-task");
+  await page.locator("#consent-checkbox").check();
+  await page.locator("#start-button").click();
+  await page.locator("#start-button").click();
+
+  await expect(page.locator("#guidance-step")).toHaveText("Step 2 of 5");
+  await expect(page.locator("#guidance-detail")).toContainText(
+    "Keep speaking while turning far enough away"
+  );
   await expect(
-    page.locator('.aggregate-card[data-measurement-code$="pitch_variability"]')
-  ).toContainText("Pitch variability");
-  await expect(page.locator(".evidence-claim")).toHaveCount(1);
-  await expectCleanPresentationCopy(page);
+    page.locator('[data-milestone="withheld"]')
+  ).not.toHaveClass(/is-complete/);
+  await expect(page.locator("#results-panel")).toBeHidden();
+  page.once("dialog", (dialog) => dialog.accept());
+  await page.locator("#stop-button").click();
+});
+
+test("technical visual withholding cannot satisfy intentional turn-away", async ({
+  page
+}) => {
+  await installEvidenceMock(page);
+  await page.goto(
+    "/?testCapture=1&fast=1&scenario=technical-turn-away"
+  );
+  await page.locator("#consent-checkbox").check();
+  await page.locator("#start-button").click();
+  await page.locator("#start-button").click();
+
+  await expect(page.locator("#face-lane-state")).toHaveText("Paused");
+  await expect(page.locator("#guidance-step")).toHaveText("Step 2 of 5");
+  await expect(page.locator("#guidance-detail")).toContainText(
+    "Camera, lighting, and connection problems do not count"
+  );
+  await expect(
+    page.locator('[data-milestone="withheld"]')
+  ).not.toHaveClass(/is-complete/);
+  await expect(page.locator("#results-panel")).toBeHidden();
+});
+
+test("end assessment requires confirmation and discards without a report", async ({
+  page
+}) => {
+  let evidenceRequestCount = 0;
+  await installEvidenceMock(page, () => {
+    evidenceRequestCount += 1;
+  });
+  await page.goto(
+    "/?testCapture=1&fast=1&operator=1&scenario=unfinished-smile"
+  );
+  await page.locator("#consent-checkbox").check();
+  await page.locator("#start-button").click();
+  await page.locator("#start-button").click();
+  await expect(page.locator("#guidance-step")).toHaveText("Step 4 of 5");
+  await expect(page.locator("#stop-button")).toBeVisible();
+  const originalOverlay =
+    await page.locator("#landmark-overlay").elementHandle();
+
+  page.once("dialog", (dialog) => dialog.dismiss());
+  await page.locator("#stop-button").click();
+  await expect(page.locator("#header-mode")).toHaveText("Assessment live");
+
+  page.once("dialog", (dialog) => dialog.accept());
+  await page.locator("#stop-button").click();
+  await expect(page.locator("#header-mode")).toHaveText("Ready");
+  await expect(page.locator("#header-privacy-state")).toContainText(
+    "Devices off"
+  );
+  await expect(page.locator("#consent-checkbox")).not.toBeChecked();
+  await expect(page.locator("#results-panel")).toBeHidden();
+  await expect(page.locator(".evidence-claim")).toHaveCount(0);
+  await expect(page.locator("#event-list .event-item")).toHaveCount(0);
+  await expect(page.locator("#operator-output")).toHaveText("");
+  expect(evidenceRequestCount).toBe(0);
+  const replacementOverlay =
+    await page.locator("#landmark-overlay").elementHandle();
+  expect(
+    await originalOverlay!.evaluate(
+      (original, replacement) => original !== replacement,
+      replacementOverlay
+    )
+  ).toBe(true);
+});
+
+test("discard wins over the completion handoff and creates no report", async ({
+  page
+}) => {
+  await page.addInitScript(() => {
+    const nativeSetTimeout = window.setTimeout.bind(window);
+    window.setTimeout = ((
+      handler: TimerHandler,
+      timeout?: number,
+      ...arguments_: unknown[]
+    ) =>
+      nativeSetTimeout(
+        handler,
+        timeout === 320 ? 2_000 : timeout,
+        ...arguments_
+      )) as typeof window.setTimeout;
+  });
+  let evidenceRequestCount = 0;
+  await installEvidenceMock(page, () => {
+    evidenceRequestCount += 1;
+  });
+  await page.goto("/?testCapture=1&fast=1");
+  await page.locator("#consent-checkbox").check();
+  await page.locator("#start-button").click();
+  await page.locator("#start-button").click();
+  await expect(
+    page.locator('[data-milestone="eye-closure"]')
+  ).toHaveClass(/is-complete/);
+
+  page.once("dialog", (dialog) => dialog.accept());
+  await page.locator("#stop-button").click();
+  await page.waitForTimeout(500);
+
+  await expect(page.locator("body")).toHaveAttribute(
+    "data-capture-state",
+    "idle"
+  );
+  await expect(page.locator("#header-mode")).toHaveText("Ready");
+  await expect(page.locator("#results-panel")).toBeHidden();
+  expect(evidenceRequestCount).toBe(0);
+});
+
+test("a processor change after completion rewinds to neutral before finalization", async ({
+  page
+}) => {
+  let evidenceRequestCount = 0;
+  await installEvidenceMock(page, () => {
+    evidenceRequestCount += 1;
+  });
+  await page.goto(
+    "/?testCapture=1&observe=1&scenario=processor-change-after-completion"
+  );
+  await page.locator("#consent-checkbox").check();
+  await page.locator("#start-button").click();
+  await page.locator("#start-button").click();
+
+  await expect(page.locator("body")).toHaveAttribute(
+    "data-test-processor-change-rewound",
+    "true"
+  );
+  await expect(page.locator("#guidance-step")).toHaveText("Step 3 of 5");
+  await expect(
+    page.locator('[data-milestone="eye-closure"]')
+  ).not.toHaveClass(/is-complete/);
+  expect(evidenceRequestCount).toBe(0);
+
+  await expect(page.locator("#results-panel")).toBeVisible({
+    timeout: 10_000
+  });
+  await expect(page.locator(".aggregate-card")).toHaveCount(11);
+  expect(evidenceRequestCount).toBe(1);
+});
+
+test("labels, mirrors, and restores the worker-only mesh across lifecycle boundaries", async ({
+  page
+}) => {
+  await installEvidenceMock(page);
+  await page.goto(
+    "/?testCapture=1&fast=1&scenario=technical-turn-away"
+  );
+  await page.locator("#consent-checkbox").check();
+  await page.locator("#start-button").click();
+  await page.locator("#start-button").click();
+  await expect(page.locator("#mesh-disclosure")).toContainText(
+    "Live 478-point facial mesh · display only · not stored"
+  );
+  await expect(page.locator("#mesh-disclosure")).toBeVisible();
+  const transforms = await page.evaluate(() => ({
+    preview: getComputedStyle(
+      document.querySelector("#camera-preview")!
+    ).transform,
+    mesh: getComputedStyle(
+      document.querySelector("#landmark-overlay")!
+    ).transform,
+    box: getComputedStyle(
+      document.querySelector("#face-overlay")!
+    ).transform,
+    meshLayer: Number(
+      getComputedStyle(
+        document.querySelector("#landmark-overlay")!
+      ).zIndex
+    ),
+    boxLayer: Number(
+      getComputedStyle(
+        document.querySelector("#face-overlay")!
+      ).zIndex
+    )
+  }));
+  expect(transforms.mesh).toBe(transforms.preview);
+  expect(transforms.box).toBe(transforms.preview);
+  expect(transforms.meshLayer).toBeGreaterThan(transforms.boxLayer);
+
+  await expect
+    .poll(() =>
+      page.evaluate(() => ({
+        face: document.querySelector("#face-lane-state")?.textContent,
+        meshHidden:
+          (document.querySelector("#mesh-disclosure") as HTMLElement)
+            ?.hidden ?? false
+      }))
+    )
+    .toEqual({ face: "Paused", meshHidden: true });
+
+  await page.goto(
+    "/?testCapture=1&fast=1&scenario=unfinished-smile"
+  );
+  await page.locator("#consent-checkbox").check();
+  await page.locator("#start-button").click();
+  await page.locator("#start-button").click();
+  await expect(page.locator("#guidance-step")).toHaveText("Step 4 of 5");
+  await expect(page.locator("#face-lane-state")).toHaveText("Connected");
+  await expect(page.locator("#mesh-disclosure")).toBeVisible();
+
+  await page.evaluate(() => {
+    Object.defineProperty(document, "hidden", {
+      configurable: true,
+      value: true
+    });
+    document.dispatchEvent(new Event("visibilitychange"));
+  });
+  await expect(page.locator("#mesh-disclosure")).toBeHidden();
+  await expect(page.locator("#landmark-overlay")).toBeHidden();
+
+  await page.evaluate(() => {
+    Object.defineProperty(document, "hidden", {
+      configurable: true,
+      value: false
+    });
+    document.dispatchEvent(new Event("visibilitychange"));
+  });
+  await expect(page.locator("#mesh-disclosure")).toBeVisible();
+
+  const overlayBeforeRestart =
+    await page.locator("#landmark-overlay").elementHandle();
+  const workerFailure = await page.evaluate(() =>
+    (
+      window as typeof window & {
+        __phenometricVisualLifecycleTest: {
+          simulateWorkerFailure(): {
+            canvasReplaced: boolean;
+            overlayHidden: boolean;
+          };
+        };
+      }
+    ).__phenometricVisualLifecycleTest.simulateWorkerFailure()
+  );
+  expect(workerFailure).toEqual({
+    canvasReplaced: true,
+    overlayHidden: true
+  });
+  const overlayAfterRestart =
+    await page.locator("#landmark-overlay").elementHandle();
+  expect(
+    await overlayBeforeRestart!.evaluate(
+      (previous, replacement) => previous !== replacement,
+      overlayAfterRestart
+    )
+  ).toBe(true);
+  await expect(page.locator("#mesh-disclosure")).toBeVisible({
+    timeout: 15_000
+  });
+
+  const cameraUnavailable = await page.evaluate(() =>
+    (
+      window as typeof window & {
+        __phenometricVisualLifecycleTest: {
+          simulateCameraUnavailable(): {
+            overlayHidden: boolean;
+          };
+        };
+      }
+    ).__phenometricVisualLifecycleTest.simulateCameraUnavailable()
+  );
+  expect(cameraUnavailable.overlayHidden).toBe(true);
+  await expect(page.locator("#mesh-disclosure")).toBeHidden();
+  await expect(page.locator("#landmark-overlay")).toBeHidden();
 });
 
 test("narrative failure preserves grounded evidence and approval", async ({

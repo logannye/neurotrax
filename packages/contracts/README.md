@@ -12,12 +12,27 @@ in
 ## Ambient Capture
 
 - `MeasurableWindow` carries modality, time range, detected context, and
-  quality/confound envelope.
+  a discriminated speech or visual quality/confound envelope.
 - `Measurement` carries a `prototype.*` code, value, unit, confidence,
-  algorithm version, placeholder uncertainty, and source-window reference.
+  algorithm version, structured uncertainty, `processorRef`, and all
+  `sourceWindowRefs`. A facial task measurement can therefore cite both its
+  neutral reference and active-task window.
 - `Abstention` preserves a reason-coded no-value interval.
-- `EncounterObservation` adds occurrence time, capture-adapter provenance,
+- `EncounterObservation` adds its schema version, occurrence time,
+  capture-adapter and visual-pipeline provenance, privacy-safe camera settings,
   aggregate confounds, quality summary, windows, measurements, and abstentions.
+- `neutral-face`, `smile`, and `eye-closure` are explicit measurement
+  contexts. Anatomical subject-left and subject-right do not depend on preview
+  mirroring.
+- Observation privacy assertions require `containsPHI: false`,
+  `rawMediaRetained: false`, and
+  `nativeVisualObservationsRetained: false`. Camera identifiers, device labels,
+  media, landmarks, blendshapes, and transformation matrices are not contract
+  fields.
+
+Visual measurements use `estimated` uncertainty derived from within-task
+median absolute deviation. Existing speech measurements use `not-estimated`
+with an explicit reason; neither form implies clinical validation.
 
 ## Personal Trajectory
 
@@ -27,6 +42,8 @@ in
 - `TrajectoryComparison` preserves robust personal-reference statistics,
   nonclinical direction, evidence references, and the provisional claim
   boundary.
+- Compatible measurements must exactly match both algorithm version and visual
+  processor reference. A new visual processor begins a new baseline.
 
 ## Evidence and review
 

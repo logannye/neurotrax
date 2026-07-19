@@ -4,7 +4,8 @@ import { describe, expect, it } from "vitest";
 import { runConductor, type FrameStream } from "@phenometric/ambient-core";
 import type {
   EncounterObservation,
-  TrajectoryHistoryRecord
+  TrajectoryHistoryRecord,
+  VisualConfoundEnvelope
 } from "@phenometric/contracts";
 import {
   compareTrajectory,
@@ -26,38 +27,31 @@ function currentObservation(): EncounterObservation {
     )
   );
   const stream = JSON.parse(readFileSync(path, "utf8")) as FrameStream;
-  const observation = runConductor(
+  return runConductor(
     {
       ...stream,
       visitId: "live-current",
       participantId: "developer-self-demo",
       captureMode: "live",
       occurredAt: "2026-07-18T16:00:00.000Z",
-      captureAdapter: { id: "macbook-browser", version: "0.2.0" }
+      captureAdapter: { id: "macbook-browser", version: "0.3.0" }
     },
     { baseTimeMs: Date.parse("2026-07-18T16:00:00.000Z") }
   ).observation;
+}
 
+function faceOnly(current = currentObservation()): EncounterObservation {
   return {
-    ...observation,
-    aggregates: observation.aggregates.map((aggregate) =>
-      aggregate.code.startsWith("prototype.face.")
-        ? {
-            ...aggregate,
-            confounds: {
-              ...aggregate.confounds,
-              observedFrameRate: 10,
-              illuminationRelative: 0.59,
-              faceFramingFraction: 0.85
-            }
-          }
-        : aggregate
+    ...current,
+    aggregates: current.aggregates.filter(
+      (aggregate) =>
+        aggregate.code === "prototype.face.smile_excursion.asymmetry"
     )
   };
 }
 
 describe("compareTrajectory", () => {
-  it("includes three compatible synthetic encounters and excludes the old algorithm", () => {
+  it("includes three compatible synthetic encounters and excludes old algorithms", () => {
     const result = compareTrajectory(
       currentObservation(),
       history(),
@@ -74,12 +68,15 @@ describe("compareTrajectory", () => {
     ]);
     expect(
       result.comparison.biomarkers.map((biomarker) => biomarker.code)
-    ).toEqual(
-      expect.arrayContaining([
-        "prototype.speech.pitch_variability",
-        "prototype.face.expressivity"
-      ])
-    );
+    ).toEqual([
+      "prototype.face.smile_excursion.asymmetry",
+      "prototype.speech.pitch_variability"
+    ]);
+    expect(
+      result.comparison.biomarkers.find((biomarker) =>
+        biomarker.code.startsWith("prototype.face.")
+      )?.processorRef
+    ).toContain("mediapipe-face-landmarker");
     expect(result.events.map((event) => event.type)).toEqual([
       "trajectory.compatibility.assessed",
       "trajectory.comparison.completed"
@@ -88,10 +85,10 @@ describe("compareTrajectory", () => {
 
   it("excludes speech values outside the SNR tolerance", () => {
     const current = currentObservation();
-    const degraded = {
+    const degraded: EncounterObservation = {
       ...current,
       aggregates: current.aggregates.map((aggregate) =>
-        aggregate.code.startsWith("prototype.speech.")
+        aggregate.confounds.kind === "speech"
           ? {
               ...aggregate,
               confounds: { ...aggregate.confounds, snrDb: 2 }
@@ -153,7 +150,7 @@ describe("compareTrajectory", () => {
           contextKind:
             aggregate.contextKind === "spontaneous-speech"
               ? ("sustained-vowel" as const)
-              : ("reading-aloud" as const)
+              : ("listening-expressive" as const)
         }))
       })
     },
@@ -180,44 +177,64 @@ describe("compareTrajectory", () => {
     ]);
   });
 
+  it("requires an exact visual processor reference", () => {
+    const prior: TrajectoryHistoryRecord = {
+      ...history()[0],
+      aggregates: history()[0].aggregates
+        .filter((aggregate) => aggregate.code.startsWith("prototype.face."))
+        .map((aggregate) => ({
+          ...aggregate,
+          processorRef: "different-visual-processor"
+        }))
+    };
+
+    const comparison = compareTrajectory(faceOnly(), [prior]).comparison;
+    expect(comparison.biomarkers).toEqual([]);
+    expect(comparison.excludedEncounters[0].reasonCodes).toContain(
+      "visual-processor-mismatch"
+    );
+  });
+
   it.each([
     {
       name: "face framing",
       reason: "face-framing-out-of-tolerance",
-      confounds: { faceFramingFraction: 0.55 }
+      confounds: { faceWidthFraction: 0.1 }
     },
     {
       name: "frame rate",
       reason: "frame-rate-out-of-tolerance",
-      confounds: { observedFrameRate: 6 }
+      confounds: { analyzedFrameRate: 15 }
     },
     {
       name: "illumination",
       reason: "illumination-out-of-tolerance",
-      confounds: { illuminationRelative: 0.3 }
+      confounds: { illuminationMean: 0.2 }
     }
-  ])("applies the $name tolerance per face biomarker", ({ reason, confounds }) => {
-    const current = currentObservation();
-    const faceOnly: EncounterObservation = {
-      ...current,
-      aggregates: current.aggregates.filter(
-        (aggregate) => aggregate.code === "prototype.face.expressivity"
-      )
-    };
+  ])("applies the $name tolerance per face metric", ({ reason, confounds }) => {
     const prior: TrajectoryHistoryRecord = {
       ...history()[0],
       aggregates: history()[0].aggregates
-        .filter(
-          (aggregate) => aggregate.code === "prototype.face.expressivity"
-        )
+        .filter((aggregate) => aggregate.code.startsWith("prototype.face."))
         .map((aggregate) => ({
           ...aggregate,
-          confounds: { ...aggregate.confounds, ...confounds }
+          confounds: {
+            ...(aggregate.confounds as VisualConfoundEnvelope),
+            ...confounds
+          }
         }))
     };
 
-    const comparison = compareTrajectory(faceOnly, [prior]).comparison;
+    const comparison = compareTrajectory(faceOnly(), [prior]).comparison;
     expect(comparison.excludedEncounters[0].reasonCodes).toContain(reason);
     expect(comparison.biomarkers).toEqual([]);
+  });
+
+  it("uses both neutral and active windows as current evidence references", () => {
+    const comparison = compareTrajectory(
+      faceOnly(),
+      history().slice(0, 1)
+    ).comparison;
+    expect(comparison.biomarkers[0].currentEvidenceRefs).toHaveLength(2);
   });
 });
