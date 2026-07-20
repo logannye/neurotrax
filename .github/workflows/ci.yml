@@ -45,7 +45,7 @@ jobs:
         with:
           version: "0.11.2"
           enable-cache: true
-      - uses: actions/setup-python@v7
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.11"
       - run: uv sync --project services/voice-inference --extra dev --locked
