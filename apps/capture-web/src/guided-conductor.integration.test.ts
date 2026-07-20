@@ -5,6 +5,7 @@ import {
   evaluateSmileAdherence,
   syntheticFacialFrame,
   syntheticFrameStream,
+  syntheticVoiceFrame,
   type FacialKinematicsFrameV1
 } from "@phenometric/ambient-core";
 import { describe, expect, it } from "vitest";
@@ -12,6 +13,7 @@ import {
   createGuidedDemoController,
   type GuidedGateSignal
 } from "./guided-demo.js";
+import { createVoiceGuidedController } from "./voice-guided-demo.js";
 
 function times(startMs: number, endMs: number): number[] {
   const result: number[] = [];
@@ -46,25 +48,21 @@ describe("guided controller and conductor integration", () => {
       });
 
     for (const tMs of times(0, 1_500)) {
-      session.ingestAudio({
-        tMs,
-        voiced: true,
-        rms: 0.08,
-        pitchHz: 125,
-        clipped: false,
-        snrDb: 24
-      });
+      session.ingestAudio(
+        syntheticVoiceFrame(tMs, {
+          taskContext: "natural-speech-check",
+          f0Hz: 125
+        })
+      );
       observe(tMs, { audioVoiced: true });
     }
     for (const tMs of times(1_600, 2_350)) {
-      session.ingestAudio({
-        tMs,
-        voiced: true,
-        rms: 0.08,
-        pitchHz: 130,
-        clipped: false,
-        snrDb: 24
-      });
+      session.ingestAudio(
+        syntheticVoiceFrame(tMs, {
+          taskContext: "natural-speech-check",
+          f0Hz: 130
+        })
+      );
       observe(tMs, {
         audioVoiced: true,
         visualUsable: false,
@@ -257,5 +255,131 @@ describe("guided controller and conductor integration", () => {
           "prototype.face.eye_closure_fraction.left"
       )?.value
     ).toBeCloseTo(0.5);
+  });
+
+  it("routes exact accepted voice intervals without starting the facial lane", () => {
+    const source = syntheticFrameStream({
+      selectedProtocolId: "voice-foundation.v1",
+      visualPipeline: null,
+      videoCaptureSettings: null,
+      audioPipeline: {
+        processorRef: "browser-voice-dsp@1.0",
+        runtime: "audio-worklet-voice-worker",
+        workletSchemaVersion: "phenometric.voice-worklet-message.v1",
+        workerSchemaVersion: "phenometric.voice-worker-message.v1",
+        signalFrameSchemaVersion: "phenometric.voice-signal-frame.v1",
+        analysisWindowMs: 40,
+        analysisHopMs: 10,
+        ringBufferSeconds: 30,
+        algorithmVersion: "voice-analysis-1.0"
+      },
+      audioCaptureSettings: {
+        requested: {
+          channelCount: 1,
+          sampleRate: 48_000,
+          echoCancellation: false,
+          noiseSuppression: false,
+          autoGainControl: false
+        },
+        actual: {
+          channelCount: 1,
+          sampleRate: 48_000,
+          browserProcessing: {
+            echoCancellation: false,
+            noiseSuppression: false,
+            autoGainControl: false
+          }
+        }
+      }
+    });
+    const { audio: _audio, face: _face, ...identity } = source;
+    const session = createConductorSession(identity, { baseTimeMs: 0 });
+    const controller = createVoiceGuidedController();
+    let tMs = 0;
+    let sequence = 0;
+
+    while (!controller.snapshot(tMs).canComplete && tMs < 30_000) {
+      const snapshot = controller.snapshot(tMs);
+      if (snapshot.phase === "complete") break;
+      const naturalPause =
+        snapshot.phase === "spontaneous-response" &&
+        snapshot.phaseElapsedMs % 1_600 >= 1_250;
+      const voiced = !naturalPause;
+      const syllabicNucleus =
+        snapshot.phase === "rapid-syllables" &&
+        snapshot.phaseElapsedMs % 400 === 0;
+      sequence += 1;
+      const frame = syntheticVoiceFrame(tMs, {
+        taskContext: snapshot.phase,
+        sequence,
+        absoluteSampleIndex: sequence * 480,
+        voiced,
+        f0Hz: voiced ? 180 + Math.sin(tMs / 300) * 5 : null,
+        f0Confidence: voiced ? 0.93 : 0,
+        cppsDb: voiced ? 14 + Math.sin(tMs / 500) : null,
+        hnrDb: voiced ? 22 + Math.sin(tMs / 600) : null,
+        syllabicNucleus
+      });
+      session.ingestAudio(frame);
+      controller.observe({
+        tMs,
+        voiced,
+        periodicityReliable: voiced,
+        syllabicNucleus,
+        qualityUsable: voiced,
+        quietPauseUsable: true,
+        processorRef: frame.processorRef
+      });
+      tMs += 10;
+    }
+
+    const snapshot = controller.snapshot(tMs);
+    expect(snapshot.canComplete).toBe(true);
+    expect(snapshot.acceptedEvidenceIntervals).toHaveLength(5);
+    session.setGuidedVoiceTaskEvidenceIntervals(
+      snapshot.acceptedEvidenceIntervals
+    );
+    const { observation } = session.complete();
+    expect(observation.selectedProtocolId).toBe("voice-foundation.v1");
+    expect(observation.visualPipeline).toBeNull();
+    expect(observation.videoCaptureSettings).toBeNull();
+    expect(observation.windows).toHaveLength(5);
+    expect(
+      observation.windows.every(
+        (window) => window.modality === "speech"
+      )
+    ).toBe(true);
+    expect(
+      new Set(
+        observation.measurements.map((measurement) => measurement.code)
+      ).size
+    ).toBe(18);
+    expect(
+      observation.measurements.some((measurement) =>
+        measurement.code.startsWith("prototype.speech.")
+      )
+    ).toBe(false);
+    const sustainedWindowIds = new Set(
+      observation.windows
+        .filter((window) => window.context.kind === "sustained-vowel")
+        .map((window) => window.windowId)
+    );
+    const repeatedCpps = observation.measurements.filter(
+      (measurement) =>
+        measurement.code === "prototype.voice.cpps" &&
+        sustainedWindowIds.has(measurement.contextRef) &&
+        measurement.uncertainty.kind === "estimated"
+    );
+    expect(repeatedCpps).toHaveLength(2);
+    expect(
+      observation.aggregates.find(
+        (aggregate) =>
+          aggregate.code === "prototype.voice.cpps" &&
+          aggregate.contextKind === "sustained-vowel"
+      )?.sourceWindowRefs
+    ).toHaveLength(2);
+    expect(JSON.stringify(observation)).not.toMatch(
+      /"(?:pcm|waveform|pitchCycles|fftBins|cepstra|mfccs|formantTracks|transcript|spectrogram|embeddings|voiceprint)"\s*:/
+    );
   });
 });

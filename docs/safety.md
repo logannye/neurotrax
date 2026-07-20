@@ -18,6 +18,13 @@ workflow defined in a versioned protocol pack.
 - A test capture can never silently replace a live-device encounter.
 - Camera and microphone tracks stop when the encounter ends or the page exits.
 - Raw frames and samples are processed ephemerally; no recording path exists.
+- Voice Foundation requests no camera and must not start the visual worker.
+- PCM is bounded to an in-memory worker ring and is released on consent
+  withdrawal, discard, microphone mute/end, hidden tab, or worker termination.
+- PCM, waveform/FFT/cepstral/MFCC arrays, pitch cycles, formant tracks,
+  spectrograms, transcripts, embeddings, voiceprints, and microphone
+  identifiers never enter observations, events, diagnostics, evidence, or
+  trajectory artifacts.
 - Native facial landmarks, blendshapes, and transformation matrices remain
   inside the browser worker for one inference and are never serialized.
 - The live facial mesh is rendered directly into a transferred worker-owned
@@ -44,7 +51,14 @@ workflow defined in a versioned protocol pack.
 
 The Evidence Agent receives bounded structured non-PHI facts only. It never
 receives microphone samples, camera frames, landmarks, blendshapes,
-transformation matrices, screenshots, transcripts, or conversation content.
+transformation matrices, screenshots, transcripts, embeddings, or conversation
+content.
+
+The optional WavLM service is loopback-only and disabled by default. It accepts
+only bounded 16 kHz mono PCM, logs no request body, writes no audio, and
+retains no embedding. Embeddings remain transient research primitives and
+cannot enter evidence or trajectory data. Service failure must not block
+browser measurements or report creation.
 
 The model cannot create measurements or select evidence outcomes. A
 deterministic validator blocks unsupported or clinical language. If narrative
@@ -106,10 +120,12 @@ misuse review.
 
 ## Research-media boundary
 
-The current application has no raw-media or native-visual-observation retention
-path. Serialized observations explicitly assert `rawMediaRetained: false` and
-`nativeVisualObservationsRetained: false`; that must remain true for this
-prototype. The presentation-only mesh does not create a new retention path.
+The current application has no raw-media or native-observation retention path.
+Serialized observations explicitly assert `rawMediaRetained: false`,
+`rawAudioRetained: false`, `nativeAudioObservationsRetained: false`,
+`transcriptRetained: false`, `voiceEmbeddingsRetained: false`, and
+`nativeVisualObservationsRetained: false`. The presentation-only mesh and
+optional representation service do not create retention paths.
 
 Future analytical or clinical validation may require an independently deployed
 research environment with explicitly consented media retention. Such a system
@@ -124,6 +140,10 @@ must define:
 - a hard boundary preventing research media from silently entering production.
 
 ## Deployment deferrals
+
+ASR, transcripts, HeAR, Omnilingual W2V, diarization, speaker recognition,
+retained research audio, clinical scores, diagnostic claims, FHIR/EHR
+integration, and face–voice fusion are explicitly deferred.
 
 Before research or production use, complete technical verification, analytical
 repeatability, clinical validation for an intended population, privacy and

@@ -18,9 +18,37 @@ function aggregateConfounds(confounds: ConfoundEnvelope[]): ConfoundEnvelope {
     const speech = confounds as SpeechConfoundEnvelope[];
     return {
       kind: "speech",
+      sampleRateHz: Math.round(
+        median(speech.map((value) => value.sampleRateHz))
+      ),
+      sampleRateClass: speech[0].sampleRateClass,
+      browserProcessing: {
+        echoCancellation: speech.some(
+          (value) => value.browserProcessing.echoCancellation
+        ),
+        noiseSuppression: speech.some(
+          (value) => value.browserProcessing.noiseSuppression
+        ),
+        autoGainControl: speech.some(
+          (value) => value.browserProcessing.autoGainControl
+        )
+      },
       snrDb: median(speech.map((value) => value.snrDb)),
       clippingFraction: median(
         speech.map((value) => value.clippingFraction)
+      ),
+      dcOffset: median(speech.map((value) => value.dcOffset)),
+      lostBlockFraction: median(
+        speech.map((value) => value.lostBlockFraction)
+      ),
+      maximumBlockGapMs: Math.max(
+        ...speech.map((value) => value.maximumBlockGapMs)
+      ),
+      usableCoverage: median(
+        speech.map((value) => value.usableCoverage)
+      ),
+      periodicityCoverage: median(
+        speech.map((value) => value.periodicityCoverage)
       )
     };
   }

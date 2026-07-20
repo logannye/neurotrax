@@ -1,6 +1,9 @@
 # Live demonstration experience
 
-## Presenter sequence
+Choose a protocol before consent. Facial Foundation requests camera and
+microphone; Voice Foundation is microphone-only.
+
+## Facial Foundation presenter sequence
 
 | Moment | Presenter action | Visible system behavior |
 | --- | --- | --- |
@@ -29,18 +32,34 @@
   leaving the video interface partially visible.
 - An event-backed handoff shows Signals analyzed → Evidence grounding →
   Clinician review.
-- An eleven-measurement encounter profile sits beside and inside the clinician
-  note so the complete deliverable is understandable at a glance.
+- A six-measurement facial profile sits beside and inside the clinician note.
 - Detailed provenance appears only when a primary statement or quantitative
   profile item is selected.
+
+## Voice Foundation presenter sequence
+
+| Moment | Presenter action | Visible system behavior |
+| --- | --- | --- |
+| System check | Remain quiet for two seconds, then speak naturally. | PhenoMetric calibrates room noise, confirms continuous voice quality, and keeps the camera off. |
+| Vowel 1 | Sustain a comfortable `/a/` for three seconds. | Progress reflects continuous voicing and reliable periodicity. |
+| Vowel 2 | Repeat the same task. | A second accepted trial supports between-trial uncertainty. |
+| Reading | Read the displayed nonclinical sentence. | Four seconds of usable voiced evidence are accepted without claiming reading accuracy. |
+| Rapid syllables | Repeat `/pa-ta-ka/`. | Progress requires four seconds plus six estimated envelope nuclei. |
+| Spontaneous response | Describe a familiar routine. | Eight seconds of usable evidence are collected while brief natural pauses remain allowed. |
+| Summary | Review the voice profile. | A single primary voice outcome is grounded; task-specific measurements and abstentions remain inspectable. |
+
+Live engineering feedback shows microphone level, pitch coverage, SNR, quality,
+and criterion progress. It is display-only. The optional WavLM path is not
+required for completion and does not expose embeddings in the report.
 
 ## Presentation behavior
 
 - Every guided exercise must be recognized before the next begins. There is no
   timeout, automatic skip, or elapsed-time advancement.
 - Technical acquisition classifications remain in operator diagnostics.
-- A quality break or visual-result gap over 200 ms resets only the current
-  continuous evidence streak. The
+- A quality break resets only the current continuous evidence streak. Facial
+  mode also resets on a visual-result gap over 200 ms; voice mode resets on an
+  audio block gap over 40 ms. The
   presenter retries by repeating the action, and criterion-specific guidance
   appears after twelve seconds without completion.
 - **End assessment** remains available throughout capture. Confirming it

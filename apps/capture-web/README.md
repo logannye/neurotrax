@@ -1,13 +1,22 @@
 # Capture web application
 
-The web application owns the consented system check, guided audiovisual
-assessment, clinician encounter summary, grounding trace, and human review.
+The web application owns protocol selection, the consented system check,
+guided facial or microphone-only voice assessment, clinician encounter
+summary, grounding trace, and human review.
 
 ## Runtime responsibilities
 
-- Requests and releases camera and microphone access.
-- Calibrates room noise, speech thresholds, visual cadence, face geometry,
-  illumination, and sharpness.
+- Requests camera plus microphone for Facial Foundation or microphone only for
+  Voice Foundation, then releases every track and processing resource.
+- Calibrates room noise and continuous voice quality; facial mode additionally
+  calibrates visual cadence, face geometry, illumination, and sharpness.
+- Captures continuous 20 ms audio blocks in an `AudioWorklet`, transfers them
+  to a dedicated worker, and analyzes 40 ms windows every 10 ms with bounded
+  memory and explicit discontinuity handling.
+- Runs two sustained vowels, reading, rapid syllables, and spontaneous response
+  as completion-gated Voice Foundation tasks.
+- Produces task-specific `prototype.voice.*` measurements and independent
+  abstentions without retaining native audio observations.
 - Schedules camera analysis from presented video frames with bounded
   latest-frame-wins backpressure.
 - Runs MediaPipe facial inference in an isolated browser worker and keeps
@@ -26,6 +35,11 @@ assessment, clinician encounter summary, grounding trace, and human review.
   a report.
 - Sends bounded current-encounter facts to the server-side synthesis endpoint.
 - Displays only deterministically grounded statements.
+
+The optional loopback WavLM service is disabled by default. Representation
+summaries remain transient; only processor provenance can enter the
+observation. See
+[`../../docs/voice-foundation.md`](../../docs/voice-foundation.md).
 
 ## Commands
 

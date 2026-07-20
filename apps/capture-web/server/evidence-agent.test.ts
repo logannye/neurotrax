@@ -9,17 +9,17 @@ const outcomes = [
   {
     outcomeId: "outcome-speech-measured",
     status: "measured",
-    measurementCode: "prototype.speech.pitch_variability",
-    label: "Pitch variability",
+    measurementCode: "prototype.voice.cpps",
+    label: "Cepstral peak prominence",
     modality: "speech",
     statement:
-      "Pitch variability was measured from a technically usable speech interval.",
-    currentValue: 1.9,
-    unit: "semitone-stddev",
+      "Cepstral peak prominence was measured from a technically usable voice interval.",
+    currentValue: 14.2,
+    unit: "decibels",
     qualityFacts: { usableWindows: 1, pitchCoverage: 0.875 },
     supportRefs: ["speech-0"],
     eventIds: ["measurement-pitch"],
-    allowedNumbers: ["1.9"]
+    allowedNumbers: ["14.2"]
   },
   {
     outcomeId: "outcome-face-measured",
@@ -46,6 +46,10 @@ const outcomes = [
 const request = {
   containsPHI: false,
   rawMediaRetained: false,
+  rawAudioRetained: false,
+  nativeAudioObservationsRetained: false,
+  transcriptRetained: false,
+  voiceEmbeddingsRetained: false,
   nativeVisualObservationsRetained: false,
   visitId: "visit-test",
   qualitySummary: {
@@ -57,6 +61,9 @@ const request = {
     speechActiveFrameCount: 48,
     pitchedFrameCount: 42,
     pitchCoverage: 0.875,
+    audioLostBlockFraction: 0,
+    maximumAudioBlockGapMs: 20,
+    medianAudioSnrDb: 24,
     faceFrameCount: 60,
     usableFaceFrameCount: 48,
     usableFaceFraction: 0.8,
@@ -71,7 +78,7 @@ function validNarrative() {
   return {
     headline: "Two encounter signals are ready for review",
     summary:
-      "Pitch variability and smile-excursion asymmetry were measured during technically usable portions of the encounter."
+      "Cepstral peak prominence and smile-excursion asymmetry were measured during technically usable portions of the encounter."
   };
 }
 
@@ -248,7 +255,7 @@ describe("runEvidenceAgent", () => {
         {
           headline: "Speech metric ready for review",
           summary:
-            "Pitch variability was measured during a technically usable portion of the encounter."
+            "Cepstral peak prominence was measured during a technically usable portion of the encounter."
         },
         "response-speech-only"
       )

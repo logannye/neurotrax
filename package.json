@@ -12,6 +12,7 @@
     "check": "bash scripts/validate-structure.sh",
     "test:unit": "pnpm -r --if-present run test:unit",
     "test:browser": "pnpm --filter @phenometric/capture-web test:browser",
+    "test:python": "uv run --project services/voice-inference --extra dev pytest services/voice-inference/tests",
     "typecheck": "pnpm -r --if-present run typecheck",
     "test": "npm run check && npm run test:unit && npm run typecheck && npm run build"
   },

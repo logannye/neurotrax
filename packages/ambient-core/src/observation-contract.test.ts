@@ -3,14 +3,20 @@ import type {
   EncounterObservation,
   EventEnvelope
 } from "@phenometric/contracts";
+import { syntheticSpeechConfounds } from "./test-helpers.js";
 
 describe("observation and event contracts", () => {
   it("models a per-visit aggregate observation", () => {
     const observation: EncounterObservation = {
-      schemaVersion: "phenometric.encounter-observation.v1",
+      schemaVersion: "phenometric.encounter-observation.v2",
       containsPHI: false,
       rawMediaRetained: false,
+      rawAudioRetained: false,
+      nativeAudioObservationsRetained: false,
+      transcriptRetained: false,
+      voiceEmbeddingsRetained: false,
       nativeVisualObservationsRetained: false,
+      selectedProtocolId: "voice-foundation.v1",
       captureMode: "fixture-playback",
       visitId: "visit-001",
       participantId: "synthetic-participant-001",
@@ -22,17 +28,13 @@ describe("observation and event contracts", () => {
           endMs: 1900,
           context: {
             kind: "spontaneous-speech",
-            confounds: {
-              kind: "speech",
-              snrDb: 20,
-              clippingFraction: 0
-            }
+            confounds: syntheticSpeechConfounds({ snrDb: 20 })
           }
         }
       ],
       measurements: [
         {
-          code: "prototype.speech.voiced_time_fraction",
+          code: "prototype.voice.voiced_fraction",
           label: "Voiced-time fraction",
           value: 0.95,
           unit: "voiced-fraction",
@@ -41,8 +43,8 @@ describe("observation and event contracts", () => {
             kind: "not-estimated",
             reason: "not estimated for speech"
           },
-          algorithmVersion: "speech-acoustic-0.2",
-          processorRef: "speech-acoustic-0.2",
+          algorithmVersion: "voice-analysis-1.0",
+          processorRef: "browser-voice-dsp@1.0",
           clinicalValidation: "none",
           contextRef: "speech-0",
           sourceWindowRefs: ["speech-0"],
@@ -53,7 +55,7 @@ describe("observation and event contracts", () => {
       ],
       aggregates: [
         {
-          code: "prototype.speech.voiced_time_fraction",
+          code: "prototype.voice.voiced_fraction",
           label: "Voiced-time fraction",
           unit: "ratio",
           contextKind: "spontaneous-speech",
@@ -61,14 +63,10 @@ describe("observation and event contracts", () => {
           spread: 0.03,
           confidence: 0.8,
           windowCount: 4,
-          algorithmVersion: "speech-acoustic-0.2",
-          processorRef: "speech-acoustic-0.2",
+          algorithmVersion: "voice-analysis-1.0",
+          processorRef: "browser-voice-dsp@1.0",
           sourceWindowRefs: ["speech-0"],
-          confounds: {
-            kind: "speech",
-            snrDb: 20,
-            clippingFraction: 0
-          },
+          confounds: syntheticSpeechConfounds({ snrDb: 20 }),
           uncertainty: {
             kind: "not-estimated",
             reason: "not estimated for speech"
@@ -80,6 +78,10 @@ describe("observation and event contracts", () => {
       measurementCount: 1,
       occurredAt: "2026-07-18T16:00:00.000Z",
       captureAdapter: { id: "fixture-replay", version: "0.2.0" },
+      audioPipeline: null,
+      audioCaptureSettings: null,
+      voiceModel: null,
+      audioStreamDiagnostics: null,
       visualPipeline: null,
       videoCaptureSettings: null,
       qualitySummary: {
@@ -91,6 +93,9 @@ describe("observation and event contracts", () => {
         speechActiveFrameCount: 16,
         pitchedFrameCount: 14,
         pitchCoverage: 0.875,
+        audioLostBlockFraction: 0,
+        maximumAudioBlockGapMs: 20,
+        medianAudioSnrDb: 20,
         faceFrameCount: 0,
         usableFaceFrameCount: 0,
         usableFaceFraction: 0,

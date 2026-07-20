@@ -1,6 +1,6 @@
 {
   "exampleOnly": true,
-  "schemaVersion": "phenometric.encounter-observation.v1",
+  "schemaVersion": "phenometric.encounter-observation.v2",
   "containsPHI": false,
   "rawMediaRetained": false,
   "nativeVisualObservationsRetained": false,
@@ -38,20 +38,6 @@
     "lateralityConvention": "subject-anatomical"
   },
   "windows": [
-    {
-      "windowId": "speech-0",
-      "modality": "speech",
-      "startMs": 400,
-      "endMs": 4900,
-      "context": {
-        "kind": "spontaneous-speech",
-        "confounds": {
-          "kind": "speech",
-          "snrDb": 21.4,
-          "clippingFraction": 0
-        }
-      }
-    },
     {
       "windowId": "face-0",
       "modality": "face",
@@ -162,111 +148,6 @@
     }
   ],
   "measurements": [
-    {
-      "code": "prototype.speech.onset_latency",
-      "label": "Speech initiation latency",
-      "value": 0.4,
-      "unit": "seconds",
-      "confidence": 0.89,
-      "uncertainty": {
-        "kind": "not-estimated",
-        "reason": "Speech uncertainty is not estimated by this prototype extractor."
-      },
-      "algorithmVersion": "speech-acoustic-0.4",
-      "processorRef": "speech-acoustic-0.4",
-      "clinicalValidation": "none",
-      "contextRef": "speech-0",
-      "sourceWindowRefs": [
-        "speech-0"
-      ],
-      "windowStartMs": 0,
-      "windowEndMs": 400,
-      "evidenceSnippetRef": null
-    },
-    {
-      "code": "prototype.speech.voiced_time_fraction",
-      "label": "Voiced-time fraction",
-      "value": 0.82,
-      "unit": "ratio",
-      "confidence": 0.88,
-      "uncertainty": {
-        "kind": "not-estimated",
-        "reason": "Speech uncertainty is not estimated by this prototype extractor."
-      },
-      "algorithmVersion": "speech-acoustic-0.4",
-      "processorRef": "speech-acoustic-0.4",
-      "clinicalValidation": "none",
-      "contextRef": "speech-0",
-      "sourceWindowRefs": [
-        "speech-0"
-      ],
-      "windowStartMs": 400,
-      "windowEndMs": 4900,
-      "evidenceSnippetRef": null
-    },
-    {
-      "code": "prototype.speech.pause_rate",
-      "label": "Pause rate",
-      "value": 13.333,
-      "unit": "pauses-per-minute",
-      "confidence": 0.88,
-      "uncertainty": {
-        "kind": "not-estimated",
-        "reason": "Speech uncertainty is not estimated by this prototype extractor."
-      },
-      "algorithmVersion": "speech-acoustic-0.4",
-      "processorRef": "speech-acoustic-0.4",
-      "clinicalValidation": "none",
-      "contextRef": "speech-0",
-      "sourceWindowRefs": [
-        "speech-0"
-      ],
-      "windowStartMs": 400,
-      "windowEndMs": 4900,
-      "evidenceSnippetRef": null
-    },
-    {
-      "code": "prototype.speech.pitch_center",
-      "label": "Pitch center",
-      "value": 137.2,
-      "unit": "hertz",
-      "confidence": 0.91,
-      "uncertainty": {
-        "kind": "not-estimated",
-        "reason": "Speech uncertainty is not estimated by this prototype extractor."
-      },
-      "algorithmVersion": "speech-acoustic-0.4",
-      "processorRef": "speech-acoustic-0.4",
-      "clinicalValidation": "none",
-      "contextRef": "speech-0",
-      "sourceWindowRefs": [
-        "speech-0"
-      ],
-      "windowStartMs": 400,
-      "windowEndMs": 4900,
-      "evidenceSnippetRef": null
-    },
-    {
-      "code": "prototype.speech.pitch_variability",
-      "label": "Pitch variability",
-      "value": 1.9,
-      "unit": "semitone-stddev",
-      "confidence": 0.91,
-      "uncertainty": {
-        "kind": "not-estimated",
-        "reason": "Speech uncertainty is not estimated by this prototype extractor."
-      },
-      "algorithmVersion": "speech-acoustic-0.4",
-      "processorRef": "speech-acoustic-0.4",
-      "clinicalValidation": "none",
-      "contextRef": "speech-0",
-      "sourceWindowRefs": [
-        "speech-0"
-      ],
-      "windowStartMs": 400,
-      "windowEndMs": 4900,
-      "evidenceSnippetRef": null
-    },
     {
       "code": "prototype.face.smile_excursion.left",
       "label": "Left smile excursion",
@@ -413,131 +294,6 @@
     }
   ],
   "aggregates": [
-    {
-      "code": "prototype.speech.onset_latency",
-      "label": "Speech initiation latency",
-      "unit": "seconds",
-      "contextKind": "spontaneous-speech",
-      "value": 0.4,
-      "spread": 0,
-      "confidence": 0.89,
-      "windowCount": 1,
-      "algorithmVersion": "speech-acoustic-0.4",
-      "processorRef": "speech-acoustic-0.4",
-      "sourceWindowRefs": [
-        "speech-0"
-      ],
-      "confounds": {
-        "kind": "speech",
-        "snrDb": 21.4,
-        "clippingFraction": 0
-      },
-      "uncertainty": {
-        "kind": "not-estimated",
-        "reason": "Speech uncertainty is not estimated by this prototype extractor."
-      },
-      "clinicalValidation": "none"
-    },
-    {
-      "code": "prototype.speech.voiced_time_fraction",
-      "label": "Voiced-time fraction",
-      "unit": "ratio",
-      "contextKind": "spontaneous-speech",
-      "value": 0.82,
-      "spread": 0,
-      "confidence": 0.88,
-      "windowCount": 1,
-      "algorithmVersion": "speech-acoustic-0.4",
-      "processorRef": "speech-acoustic-0.4",
-      "sourceWindowRefs": [
-        "speech-0"
-      ],
-      "confounds": {
-        "kind": "speech",
-        "snrDb": 21.4,
-        "clippingFraction": 0
-      },
-      "uncertainty": {
-        "kind": "not-estimated",
-        "reason": "Speech uncertainty is not estimated by this prototype extractor."
-      },
-      "clinicalValidation": "none"
-    },
-    {
-      "code": "prototype.speech.pause_rate",
-      "label": "Pause rate",
-      "unit": "pauses-per-minute",
-      "contextKind": "spontaneous-speech",
-      "value": 13.333,
-      "spread": 0,
-      "confidence": 0.88,
-      "windowCount": 1,
-      "algorithmVersion": "speech-acoustic-0.4",
-      "processorRef": "speech-acoustic-0.4",
-      "sourceWindowRefs": [
-        "speech-0"
-      ],
-      "confounds": {
-        "kind": "speech",
-        "snrDb": 21.4,
-        "clippingFraction": 0
-      },
-      "uncertainty": {
-        "kind": "not-estimated",
-        "reason": "Speech uncertainty is not estimated by this prototype extractor."
-      },
-      "clinicalValidation": "none"
-    },
-    {
-      "code": "prototype.speech.pitch_center",
-      "label": "Pitch center",
-      "unit": "hertz",
-      "contextKind": "spontaneous-speech",
-      "value": 137.2,
-      "spread": 0,
-      "confidence": 0.91,
-      "windowCount": 1,
-      "algorithmVersion": "speech-acoustic-0.4",
-      "processorRef": "speech-acoustic-0.4",
-      "sourceWindowRefs": [
-        "speech-0"
-      ],
-      "confounds": {
-        "kind": "speech",
-        "snrDb": 21.4,
-        "clippingFraction": 0
-      },
-      "uncertainty": {
-        "kind": "not-estimated",
-        "reason": "Speech uncertainty is not estimated by this prototype extractor."
-      },
-      "clinicalValidation": "none"
-    },
-    {
-      "code": "prototype.speech.pitch_variability",
-      "label": "Pitch variability",
-      "unit": "semitone-stddev",
-      "contextKind": "spontaneous-speech",
-      "value": 1.9,
-      "spread": 0,
-      "confidence": 0.91,
-      "windowCount": 1,
-      "algorithmVersion": "speech-acoustic-0.4",
-      "processorRef": "speech-acoustic-0.4",
-      "sourceWindowRefs": [
-        "speech-0"
-      ],
-      "confounds": {
-        "kind": "speech",
-        "snrDb": 21.4,
-        "clippingFraction": 0
-      },
-      "uncertainty": {
-        "kind": "not-estimated",
-        "reason": "Speech uncertainty is not estimated by this prototype extractor."
-      },
-      "clinicalValidation": "none"
-    },
     {
       "code": "prototype.face.smile_excursion.left",
       "label": "Left smile excursion",
@@ -796,9 +552,9 @@
       "processorRef": "mediapipe-face-landmarker:0.10.35:64184e229b26:bilateral-geometry-v1:gpu"
     }
   ],
-  "measurementCount": 11,
+  "measurementCount": 6,
   "qualitySummary": {
-    "speechWindowCount": 1,
+    "speechWindowCount": 0,
     "faceWindowCount": 4,
     "abstentionCount": 1,
     "qualityTransitionCount": 4,
@@ -812,5 +568,14 @@
     "faceWithholdingDurationMs": 3000,
     "faceRecoveryObserved": true,
     "postRecoveryFaceWindowCount": 3
-  }
+  },
+  "rawAudioRetained": false,
+  "nativeAudioObservationsRetained": false,
+  "transcriptRetained": false,
+  "voiceEmbeddingsRetained": false,
+  "selectedProtocolId": "facial-foundation.v1",
+  "audioPipeline": null,
+  "audioCaptureSettings": null,
+  "voiceModel": null,
+  "audioStreamDiagnostics": null
 }

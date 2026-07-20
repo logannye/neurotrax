@@ -16,16 +16,16 @@ import {
 const facts: EvidenceClaimFact[] = [
   {
     claimId: "claim-pitch",
-    measurementCode: "prototype.speech.pitch_variability",
-    label: "Pitch variability",
+    measurementCode: "prototype.voice.cpps",
+    label: "Cepstral peak prominence",
     modality: "speech",
     statement:
-      "Pitch variability was measured from a technically usable speech interval.",
-    currentValue: 1.9,
-    unit: "semitone-stddev",
+      "Cepstral peak prominence was measured from a technically usable voice interval.",
+    currentValue: 14.2,
+    unit: "decibels",
     supportRefs: ["speech-0"],
     eventIds: ["measurement-pitch"],
-    allowedNumbers: ["1.9"]
+    allowedNumbers: ["14.2"]
   },
   {
     claimId: "claim-face",
@@ -46,7 +46,7 @@ function validDraft(): EvidenceCardDraft {
   return {
     headline: "Two encounter signals are ready for review",
     summary:
-      "Pitch variability and smile excursion asymmetry were measured during technically usable portions of the encounter.",
+      "Cepstral peak prominence and smile excursion asymmetry were measured during technically usable portions of the encounter.",
     claims: facts.map((fact) => ({
       claimId: fact.claimId,
       statement: fact.statement
@@ -78,15 +78,24 @@ function visualConfounds() {
 
 function createObservation(): EncounterObservation {
   return {
-    schemaVersion: "phenometric.encounter-observation.v1",
+    schemaVersion: "phenometric.encounter-observation.v2",
     containsPHI: false,
     rawMediaRetained: false,
+    rawAudioRetained: false,
+    nativeAudioObservationsRetained: false,
+    transcriptRetained: false,
+    voiceEmbeddingsRetained: false,
     nativeVisualObservationsRetained: false,
+    selectedProtocolId: "voice-foundation.v1",
     captureMode: "live",
     visitId: "visit-outcomes",
     participantId: "participant",
     occurredAt: "2026-07-18T18:00:00.000Z",
     captureAdapter: { id: "browser", version: "1" },
+    audioPipeline: null,
+    audioCaptureSettings: null,
+    voiceModel: null,
+    audioStreamDiagnostics: null,
     visualPipeline: {
       processorRef:
         "mediapipe-face-landmarker@visual-foundation-v1",
@@ -109,21 +118,33 @@ function createObservation(): EncounterObservation {
     measurements: [],
     aggregates: [
       {
-        code: "prototype.speech.pitch_variability",
-        label: "Pitch variability",
-        unit: "semitone-stddev",
+        code: "prototype.voice.cpps",
+        label: "Cepstral peak prominence",
+        unit: "decibels",
         contextKind: "spontaneous-speech",
-        value: 1.9,
+        value: 14.2,
         spread: 0,
         confidence: 0.9,
         windowCount: 1,
-        algorithmVersion: "speech-acoustic-0.3",
-        processorRef: "speech-acoustic@0.3",
+        algorithmVersion: "voice-analysis-1.0",
+        processorRef: "browser-voice-dsp@1.0",
         sourceWindowRefs: ["speech-0"],
         confounds: {
           kind: "speech",
+          sampleRateHz: 48000,
+          sampleRateClass: "48khz-or-higher",
+          browserProcessing: {
+            echoCancellation: false,
+            noiseSuppression: false,
+            autoGainControl: false
+          },
           snrDb: 20,
-          clippingFraction: 0
+          clippingFraction: 0,
+          dcOffset: 0,
+          lostBlockFraction: 0,
+          maximumBlockGapMs: 20,
+          usableCoverage: 1,
+          periodicityCoverage: 0.9
         },
         uncertainty: {
           kind: "not-estimated",
@@ -144,6 +165,9 @@ function createObservation(): EncounterObservation {
       speechActiveFrameCount: 100,
       pitchedFrameCount: 80,
       pitchCoverage: 0.8,
+      audioLostBlockFraction: 0,
+      maximumAudioBlockGapMs: 20,
+      medianAudioSnrDb: 20,
       faceFrameCount: 140,
       usableFaceFrameCount: 0,
       usableFaceFraction: 0,
@@ -205,7 +229,7 @@ describe("validateEvidenceCardDraft", () => {
     expect(validateEvidenceCardDraft(draft, facts).status).toBe("fail");
   });
 
-  it("requires both modalities", () => {
+  it("rejects duplicate modality claims", () => {
     const draft = validDraft();
     draft.claims[1] = { ...draft.claims[0] };
     expect(validateEvidenceCardDraft(draft, facts).status).toBe("fail");
@@ -213,6 +237,7 @@ describe("validateEvidenceCardDraft", () => {
 
   it("prioritizes smile asymmetry and falls back to eye-closure asymmetry", () => {
     const observation = createObservation();
+    observation.selectedProtocolId = "facial-foundation.v1";
     observation.aggregates.push(
       {
         code: "prototype.face.eye_closure_fraction.asymmetry",
@@ -266,8 +291,8 @@ describe("validateEvidenceCardDraft", () => {
         supportRefs: ["face-neutral", "face-smile"]
       }
     );
-    expect(outcomes).toHaveLength(2);
-    expect(outcomes[1]).toMatchObject({
+    expect(outcomes).toHaveLength(1);
+    expect(outcomes[0]).toMatchObject({
       status: "measured",
       modality: "face",
       measurementCode: "prototype.face.smile_excursion.asymmetry",
@@ -283,7 +308,7 @@ describe("validateEvidenceCardDraft", () => {
         aggregate.code !==
         "prototype.face.smile_excursion.asymmetry"
     );
-    expect(createModalityOutcomes(observation, [])[1]).toMatchObject({
+    expect(createModalityOutcomes(observation, [])[0]).toMatchObject({
       status: "measured",
       measurementCode:
         "prototype.face.eye_closure_fraction.asymmetry",
@@ -317,7 +342,7 @@ describe("validateEvidenceCardDraft", () => {
       },
       clinicalValidation: "none"
     });
-    expect(createModalityOutcomes(observation, [])[1]).toMatchObject({
+    expect(createModalityOutcomes(observation, [])[0]).toMatchObject({
       status: "withheld",
       modality: "face"
     });
@@ -325,6 +350,8 @@ describe("validateEvidenceCardDraft", () => {
 
   it("creates a traceable withheld outcome when one modality is unavailable", () => {
     const observation = createObservation();
+    observation.selectedProtocolId = "facial-foundation.v1";
+    observation.aggregates = [];
     observation.abstentions.push({
       modality: "face",
       windowStartMs: 4_000,
@@ -357,10 +384,9 @@ describe("validateEvidenceCardDraft", () => {
 
     const outcomes = createModalityOutcomes(observation, events);
     expect(outcomes.map((outcome) => outcome.status)).toEqual([
-      "measured",
       "withheld"
     ]);
-    expect(outcomes[1]).toMatchObject({
+    expect(outcomes[0]).toMatchObject({
       modality: "face",
       reasonCode: "face-not-visible"
     });

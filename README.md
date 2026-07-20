@@ -233,8 +233,12 @@ and population
 
 The working demonstration uses a laptop camera and microphone and implements:
 
+- a pre-consent selector between the existing Facial Foundation protocol and
+  a microphone-only Voice Foundation protocol;
 - explicit consent and a bounded system check;
-- quiet-room voice calibration and adaptive voice activity detection;
+- a continuous 48 kHz voice path built on 20 ms `AudioWorklet` PCM blocks,
+  40 ms analysis windows, a 10 ms hop, a bounded worker ring buffer, and
+  reason-coded audio quality;
 - local MediaPipe facial geometry in a versioned browser-worker pipeline;
 - acquisition-time video scheduling, anatomical laterality, camera and model
   provenance, and reason-coded visual quality;
@@ -242,34 +246,54 @@ The working demonstration uses a laptop camera and microphone and implements:
   capture but never enters application data;
 - completion-gated coaching that advances only after each exercise is
   technically observed;
-- independent, quality-gated speech and facial measurement windows;
-- eleven prototype encounter metrics;
+- independent, quality-gated voice and facial measurement windows;
+- six bilateral facial measurements in Facial Foundation and eighteen named
+  measurement types across task-specific Voice Foundation windows;
+- an optional, loopback-only WavLM Large representation service that is
+  disabled by default and never turns embeddings into clinical measurements;
 - robust per-visit aggregation with algorithm-version checks;
 - reason-coded abstention and append-only workflow events;
 - a deterministic evidence layer with bounded server-side synthesis;
 - a clinician-facing quantitative profile and provenance drawer; and
 - explicit approval or dismissal.
 
-The eleven current features are:
+Facial Foundation produces left and right smile excursion, smile asymmetry,
+left and right eye-closure fraction, and eye-closure asymmetry. Its microphone
+signal is used only to gate behavior; it no longer produces the removed
+`prototype.speech.*` metrics.
 
-- speech initiation latency;
-- voiced-time fraction;
-- bounded pause rate;
-- pitch center and pitch variability;
-- left and right smile excursion plus their absolute difference; and
-- left and right eye-closure fraction plus their absolute difference.
+Voice Foundation runs two sustained `/a/` trials, standardized reading, rapid
+`/pa-ta-ka/`, and a spontaneous response. Depending on task support and
+quality, it can produce:
+
+- median F0 and F0 variability, CPPS, HNR, intensity variability, voiced
+  fraction, pause and speech-run timing, and estimated syllabic rate;
+- sustained-vowel jitter, shimmer, phonation-break fraction, and robust
+  F1/F2 medians;
+- estimated DDK rate and interval variability; and
+- spontaneous-response onset latency.
+
+Fine acoustic values abstain when browser audio processing remains enabled,
+sample rate is below 44.1 kHz, continuity fails, clipping is excessive, or SNR
+is insufficient. Timing measurements can remain available when technically
+defensible.
 
 They are engineering features, not validated biomarkers. Measurements
 explicitly carry technical uncertainty state and
 `clinicalValidation: "none"`.
 
-The live demonstration uses a completion-gated nonclinical task sequence:
-establish the audiovisual signals, demonstrate independent facial withholding,
-capture a quiet neutral reference, hold a comfortable smile, and gently close
-and reopen the eyes. A quality break resets only the current evidence streak;
-elapsed time never advances an unfinished exercise. After twelve seconds the
-interface provides criterion-specific guidance, while the participant can
-keep retrying or end and discard the assessment.
+Both protocols are completion-gated. A quality break resets only the current
+evidence streak; elapsed time never advances an unfinished exercise. After
+twelve seconds the interface provides criterion-specific guidance, while the
+participant can keep retrying or end and discard the assessment. Only final
+qualifying intervals reach extraction.
+
+The optional Python 3.11 WavLM service accepts only 16 kHz mono Float32 PCM
+from the local browser worker, returns mean and standard-deviation summaries
+for layers 6, 12, 18, and 24, and retains neither audio nor embeddings. Those
+summaries are transient research primitives: only processor provenance may
+enter the encounter observation. Browser DSP and report creation do not
+depend on model availability.
 Personal Trajectory exists as a tested internal package but is not connected
 to persistent patient history. No authentication, clinical data store, FHIR
 integration, EHR write, or production deployment is implemented.
@@ -284,6 +308,8 @@ The production direction is **ephemeral media, durable measurements**:
 - keep the live mesh presentation-only inside the visual worker, with no
   landmark, connection, screenshot, or overlay-pixel serialization;
 - keep raw media and conversation content away from narrative generation;
+- keep PCM, FFT bins, pitch cycles, cepstra, MFCCs, formant tracks,
+  spectrograms, transcripts, and representation embeddings transient;
 - make device, context, quality, uncertainty, and algorithm version visible;
 - permit every modality and measurement to abstain;
 - separate measurement, interpretation, review, and action;
@@ -417,6 +443,7 @@ Requirements:
 - pnpm 9.12.3
 - Chrome
 - a Mac with a camera and microphone
+- Python 3.11 and `uv` only for the optional local representation service
 - completion of the local operator configuration
 
 ```bash
@@ -437,9 +464,14 @@ pnpm test:unit
 pnpm typecheck
 pnpm build
 pnpm test:browser
+pnpm test:python
 pnpm demo:smoke
 pnpm test
 ```
+
+The browser demo does not require WavLM. Optional service setup and the
+generated-audio real-model smoke command are in
+[`services/voice-inference/README.md`](services/voice-inference/README.md).
 
 ## Repository map
 

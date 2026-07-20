@@ -147,15 +147,16 @@ clinically usable when a modality or task fails.
 
 ### Current prototype foundation
 
-The current implementation is a nonclinical engineering demonstration of that
-hybrid shape. It uses MediaPipe as its only visual model and runs a
-completion-gated sequence: establishing speech and face capture, intentional
-turn-away, quiet neutral reference, smile, and eye closure with reopening. Each
-exercise must satisfy its engineering signal criterion; elapsed time cannot
-advance or skip it. It reports bilateral smile excursion and eye-closure
-fraction plus absolute left-right asymmetry, alongside five speech
-measurements. These are descriptive prototype measurements, not validated
-clinical endpoints or scores.
+The current implementation offers two independent nonclinical protocols.
+Facial Foundation uses MediaPipe as its only visual model and reports six
+bilateral smile and eye-closure measurements; its microphone signal is used
+only for behavioral gating. Voice Foundation is microphone-only and uses a
+continuous `AudioWorklet`/worker path for completion-gated sustained vowel,
+reading, rapid-syllable, and spontaneous-response tasks. It exposes eighteen
+task-specific measurement types under `prototype.voice.*`. Each exercise must
+satisfy its engineering signal criterion; elapsed time cannot advance or skip
+it. These are descriptive prototype measurements, not validated clinical
+endpoints or scores.
 
 Subject-left and subject-right are anatomical labels and do not change when the
 preview is mirrored. Visual acquisition timestamps, processor provenance, and
@@ -164,6 +165,12 @@ blendshapes, transformation matrices, and video frames remain ephemeral inside
 the browser worker and are not observation data. A live 478-point mesh is
 drawn directly inside that worker for presentation only; its coordinates and
 pixels are not returned, retained, or serialized.
+
+Native audio has the same boundary. PCM, waveform and spectral arrays, pitch
+cycles, cepstra, MFCCs, formant tracks, spectrograms, transcripts, and
+embeddings remain transient. An optional loopback WavLM Large service can
+produce layer summaries for research, but the summaries are not measurements
+and do not enter evidence or trajectory artifacts.
 
 ## Measurement domains
 
@@ -355,9 +362,10 @@ Raw audio and video should be processed locally where feasible and discarded
 when the encounter ends. Durable records should contain only the minimum
 derived information necessary for the approved context of use.
 
-The current browser implementation applies the same rule to native visual
-model output: full landmarks, blendshapes, and transformation matrices are
-temporary inference inputs, not durable derived measurements.
+The current browser implementation applies the same rule to native model
+output: full visual landmarks, blendshapes, matrices, PCM, spectral
+intermediates, and WavLM embeddings are temporary inputs, not durable derived
+measurements.
 
 ### Research requirement
 
@@ -456,10 +464,14 @@ flowchart TD
 
 1. Introduce extractor plug-ins with explicit input and output contracts.
 2. Add facial symmetry, eyelid, oral-motor, and dynamic-task measurements.
-3. Add clinical-grade voice-quality and articulation measurements.
-4. Add patient-versus-clinician speaker attribution.
-5. Add configurable ambient and prompted contexts.
-6. Add repeatability-based uncertainty and device calibration.
+3. Validate and refine the new quality-aware voice measurements against
+   reference implementations and clinically collected data.
+4. Add configurable ambient and prompted contexts.
+5. Add repeatability-based uncertainty and device calibration.
+
+ASR, transcripts, HeAR, Omnilingual W2V, diarization, speaker recognition,
+retained research audio, and face–voice fusion remain separate future
+milestones rather than hidden dependencies of the voice foundation.
 
 ### Longitudinal platform
 

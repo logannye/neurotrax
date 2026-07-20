@@ -1,15 +1,17 @@
 import type {
   ConfoundEnvelope,
+  GuidedVoiceTaskEvidenceInterval,
   GuidedTaskEvidenceInterval,
   MeasurementContextKind,
   MeasurableWindow,
   Modality,
   SpeechConfoundEnvelope,
   VisualConfoundEnvelope,
-  VisualTaskContext
+  VisualTaskContext,
+  VoiceTaskContext
 } from "@phenometric/contracts";
 import type {
-  AudioFeatureFrame,
+  VoiceSignalFrameV1,
   FacialKinematicsFrameV1,
   FrameStream
 } from "./primitives.js";
@@ -30,46 +32,9 @@ interface Run<T> {
   endMs: number;
 }
 
-function speechRuns(frames: AudioFeatureFrame[]): Run<AudioFeatureFrame>[] {
-  const runs: Run<AudioFeatureFrame>[] = [];
-  let current: AudioFeatureFrame[] = [];
-  let lastVoicedAtMs: number | null = null;
-  let lastVoicedIndex = -1;
-
-  const flush = () => {
-    if (lastVoicedIndex >= 0) {
-      const trimmed = current.slice(0, lastVoicedIndex + 1);
-      const startMs = trimmed[0].tMs;
-      const endMs = trimmed[trimmed.length - 1].tMs;
-      if (endMs - startMs >= MIN_WINDOW_MS) {
-        runs.push({ frames: trimmed, startMs, endMs });
-      }
-    }
-    current = [];
-    lastVoicedAtMs = null;
-    lastVoicedIndex = -1;
-  };
-
-  for (const frame of frames) {
-    if (!frame.voiced && current.length === 0) continue;
-
-    if (
-      lastVoicedAtMs !== null &&
-      frame.tMs - lastVoicedAtMs > MAX_SPEECH_PAUSE_MS
-    ) {
-      flush();
-      if (!frame.voiced) continue;
-    }
-
-    current.push(frame);
-    if (frame.voiced) {
-      lastVoicedAtMs = frame.tMs;
-      lastVoicedIndex = current.length - 1;
-    }
-  }
-
-  flush();
-  return runs;
+interface VoiceRun extends Run<VoiceSignalFrameV1> {
+  taskContext: VoiceTaskContext;
+  taskStartedAtMs: number;
 }
 
 interface FaceRun extends Run<FacialKinematicsFrameV1> {
@@ -83,6 +48,82 @@ export interface WindowDetectionOptions {
    * final accepted evidence intervals. Omit this option for non-guided streams.
    */
   guidedTaskEvidenceIntervals?: readonly GuidedTaskEvidenceInterval[];
+  guidedVoiceTaskEvidenceIntervals?:
+    | readonly GuidedVoiceTaskEvidenceInterval[];
+}
+
+function voiceRuns(
+  stream: FrameStream,
+  acceptedIntervals:
+    | readonly GuidedVoiceTaskEvidenceInterval[]
+    | undefined
+): VoiceRun[] {
+  if (stream.selectedProtocolId !== "voice-foundation.v1") return [];
+  if (acceptedIntervals !== undefined) {
+    return acceptedIntervals.flatMap((interval) => {
+      const frames = stream.audio.filter(
+        (frame) =>
+          frame.taskContext === interval.taskContext &&
+          frame.processorRef === interval.processorRef &&
+          frame.tMs >= interval.startMs &&
+          frame.tMs <= interval.endMs
+      );
+      if (
+        frames.length < 2 ||
+        frames[0].tMs > interval.startMs + 40 ||
+        frames.at(-1)!.tMs < interval.endMs - 40
+      ) {
+        return [];
+      }
+      return [{
+        frames,
+        startMs: interval.startMs,
+        endMs: interval.endMs,
+        taskContext: interval.taskContext,
+        taskStartedAtMs: interval.taskStartedAtMs
+      }];
+    });
+  }
+
+  const runs: VoiceRun[] = [];
+  let current: VoiceSignalFrameV1[] = [];
+  let taskContext: VoiceTaskContext | null = null;
+  const flush = (): void => {
+    if (
+      current.length >= 2 &&
+      taskContext !== null &&
+      current.at(-1)!.tMs - current[0].tMs >= MIN_WINDOW_MS &&
+      !["quiet-calibration", "natural-speech-check"].includes(
+        taskContext
+      )
+    ) {
+      runs.push({
+        frames: current,
+        startMs: current[0].tMs,
+        endMs: current.at(-1)!.tMs,
+        taskContext,
+        taskStartedAtMs: current[0].tMs
+      });
+    }
+    current = [];
+    taskContext = null;
+  };
+  for (const frame of stream.audio) {
+    const prior = current.at(-1);
+    if (
+      prior &&
+      (frame.taskContext !== taskContext ||
+        frame.captureEpoch !== prior.captureEpoch ||
+        frame.processorRef !== prior.processorRef ||
+        frame.tMs - prior.tMs > 40)
+    ) {
+      flush();
+    }
+    taskContext = frame.taskContext;
+    current.push(frame);
+  }
+  flush();
+  return runs;
 }
 
 function validGuidedTaskEvidenceIntervals(
@@ -213,14 +254,50 @@ function faceRuns(
 }
 
 function speechConfounds(
-  frames: AudioFeatureFrame[]
+  frames: VoiceSignalFrameV1[]
 ): SpeechConfoundEnvelope {
+  const sampleRateHz = Math.round(
+    mean(frames.map((frame) => frame.sampleRateHz))
+  );
+  const browserProcessing =
+    frames[0]?.browserProcessing ?? {
+      echoCancellation: false,
+      noiseSuppression: false,
+      autoGainControl: false
+    };
   return {
     kind: "speech",
+    sampleRateHz,
+    sampleRateClass:
+      sampleRateHz >= 48_000
+        ? "48khz-or-higher"
+        : sampleRateHz >= 44_100
+          ? "44.1khz"
+          : "below-44.1khz",
+    browserProcessing: { ...browserProcessing },
     snrDb: mean(frames.map((frame) => frame.snrDb)),
     clippingFraction:
-      frames.filter((frame) => frame.clipped).length /
-      Math.max(1, frames.length)
+      mean(frames.map((frame) => frame.clippedSampleFraction)),
+    dcOffset: mean(frames.map((frame) => Math.abs(frame.dcOffset))),
+    lostBlockFraction: Math.max(
+      0,
+      ...frames.map((frame) => frame.lostBlockFraction)
+    ),
+    maximumBlockGapMs: Math.max(
+      0,
+      ...frames.map((frame) => frame.blockGapMs)
+    ),
+    usableCoverage:
+      frames.filter((frame) => frame.qualityReasons.length === 0).length /
+      Math.max(1, frames.length),
+    periodicityCoverage:
+      frames.filter(
+        (frame) =>
+          frame.voiced &&
+          frame.f0Hz !== null &&
+          frame.f0Confidence >= 0.55
+      ).length /
+      Math.max(1, frames.filter((frame) => frame.voiced).length)
   };
 }
 
@@ -281,20 +358,37 @@ function contextKindForTask(
   return "listening-expressive";
 }
 
+function contextKindForVoiceTask(
+  taskContext: VoiceTaskContext
+): MeasurementContextKind {
+  if (
+    taskContext === "sustained-vowel-1" ||
+    taskContext === "sustained-vowel-2"
+  ) {
+    return "sustained-vowel";
+  }
+  if (taskContext === "standardized-reading") return "reading-aloud";
+  if (taskContext === "rapid-syllables") return "rapid-syllables";
+  return "spontaneous-speech";
+}
+
 export function detectMeasurableWindows(
   stream: FrameStream,
   options: WindowDetectionOptions = {}
 ): MeasurableWindow[] {
   const windows: MeasurableWindow[] = [];
 
-  speechRuns(stream.audio).forEach((run, index) => {
+  voiceRuns(
+    stream,
+    options.guidedVoiceTaskEvidenceIntervals
+  ).forEach((run, index) => {
     windows.push({
       windowId: `speech-${index}`,
       modality: "speech",
       startMs: run.startMs,
       endMs: run.endMs,
       context: {
-        kind: "spontaneous-speech",
+        kind: contextKindForVoiceTask(run.taskContext),
         confounds: speechConfounds(run.frames)
       }
     });
@@ -326,10 +420,10 @@ export function detectMeasurableWindows(
 }
 
 export function confoundsForWindow(
-  frames: AudioFeatureFrame[] | FacialKinematicsFrameV1[],
+  frames: VoiceSignalFrameV1[] | FacialKinematicsFrameV1[],
   modality: Modality
 ): ConfoundEnvelope {
   return modality === "speech"
-    ? speechConfounds(frames as AudioFeatureFrame[])
+    ? speechConfounds(frames as VoiceSignalFrameV1[])
     : faceConfounds(frames as FacialKinematicsFrameV1[]);
 }

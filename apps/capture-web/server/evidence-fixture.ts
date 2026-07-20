@@ -1,6 +1,10 @@
 export const EVIDENCE_SMOKE_REQUEST = {
   containsPHI: false,
   rawMediaRetained: false,
+  rawAudioRetained: false,
+  nativeAudioObservationsRetained: false,
+  transcriptRetained: false,
+  voiceEmbeddingsRetained: false,
   nativeVisualObservationsRetained: false,
   visitId: "service-readiness",
   qualitySummary: {
@@ -12,6 +16,9 @@ export const EVIDENCE_SMOKE_REQUEST = {
     speechActiveFrameCount: 48,
     pitchedFrameCount: 42,
     pitchCoverage: 0.875,
+    audioLostBlockFraction: 0,
+    maximumAudioBlockGapMs: 20,
+    medianAudioSnrDb: 24,
     faceFrameCount: 60,
     usableFaceFrameCount: 48,
     usableFaceFraction: 0.8,
@@ -20,21 +27,6 @@ export const EVIDENCE_SMOKE_REQUEST = {
     postRecoveryFaceWindowCount: 1
   },
   outcomes: [
-    {
-      outcomeId: "outcome-speech-measured",
-      status: "measured",
-      measurementCode: "prototype.speech.pitch_variability",
-      label: "Pitch variability",
-      modality: "speech",
-      statement:
-        "Pitch variability was measured from a technically usable speech interval.",
-      currentValue: 1.9,
-      unit: "semitone-stddev",
-      qualityFacts: { usableWindows: 1, pitchCoverage: 0.875 },
-      supportRefs: ["speech-0"],
-      eventIds: ["measurement-pitch"],
-      allowedNumbers: ["1.9"]
-    },
     {
       outcomeId: "outcome-face-measured",
       status: "measured",

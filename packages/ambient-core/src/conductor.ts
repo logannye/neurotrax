@@ -3,6 +3,9 @@ import type {
   EncounterObservation,
   EventEnvelope,
   CaptureQualityPolicy,
+  AudioStreamDiagnostics,
+  VoiceModelProvenance,
+  GuidedVoiceTaskEvidenceInterval,
   GuidedTaskEvidenceInterval,
   Measurement,
   MeasurementContext,
@@ -13,17 +16,18 @@ import type {
   VisualPipelineProvenance
 } from "@phenometric/contracts";
 import type {
-  AudioFeatureFrame,
+  VoiceSignalFrameV1,
   FacialKinematicsFrameV1,
   FrameStream
 } from "./primitives.js";
 import { detectMeasurableWindows } from "./windowing.js";
 import {
-  extractSpeechAcoustic,
-  SPEECH_ACOUSTIC_VERSION
-} from "./speech-acoustic.js";
+  extractVoiceMeasurements,
+  VOICE_MEASUREMENT_LABELS
+} from "./voice-analysis.js";
 import { extractFacialTaskMeasurements } from "./facial-task.js";
 import { aggregateMeasurements } from "./aggregate.js";
+import { medianAbsoluteDeviation } from "./stats.js";
 import { createEventFactory, type EventFactory } from "./events.js";
 import {
   DEFAULT_CAPTURE_QUALITY_POLICY,
@@ -31,11 +35,7 @@ import {
 } from "./visual-quality.js";
 
 const LABELS = new Map<string, { label: string; unit: string }>([
-  ["prototype.speech.voiced_time_fraction", { label: "Voiced-time fraction", unit: "ratio" }],
-  ["prototype.speech.pause_rate", { label: "Pause rate", unit: "pauses-per-minute" }],
-  ["prototype.speech.onset_latency", { label: "Speech initiation latency", unit: "seconds" }],
-  ["prototype.speech.pitch_center", { label: "Pitch center", unit: "hertz" }],
-  ["prototype.speech.pitch_variability", { label: "Pitch variability", unit: "semitone-stddev" }],
+  ...VOICE_MEASUREMENT_LABELS,
   ["prototype.face.smile_excursion.left", { label: "Left smile excursion", unit: "inter-eye-normalized-distance" }],
   ["prototype.face.smile_excursion.right", { label: "Right smile excursion", unit: "inter-eye-normalized-distance" }],
   ["prototype.face.smile_excursion.asymmetry", { label: "Smile-excursion asymmetry", unit: "inter-eye-normalized-distance" }],
@@ -62,7 +62,7 @@ interface LaneState {
 }
 
 export interface ConductorSession {
-  ingestAudio(frame: AudioFeatureFrame): void;
+  ingestAudio(frame: VoiceSignalFrameV1): void;
   ingestFace(frame: FacialKinematicsFrameV1): void;
   /**
    * Replaces the guided controller's accepted evidence snapshot. Replacement
@@ -71,7 +71,14 @@ export interface ConductorSession {
   setGuidedTaskEvidenceIntervals(
     intervals: readonly GuidedTaskEvidenceInterval[]
   ): void;
+  setGuidedVoiceTaskEvidenceIntervals(
+    intervals: readonly GuidedVoiceTaskEvidenceInterval[]
+  ): void;
   setVisualPipeline(provenance: VisualPipelineProvenance): void;
+  setVoiceModel(provenance: VoiceModelProvenance | null): void;
+  setAudioStreamDiagnostics(
+    diagnostics: AudioStreamDiagnostics | null
+  ): void;
   ingestVisualWithholding(input: {
     tMs: number;
     reasonCode: VisualQualityReasonCode;
@@ -97,12 +104,6 @@ function slice<T extends { tMs: number }>(
   );
 }
 
-function isAbstention(
-  result: Measurement[] | Abstention
-): result is Abstention {
-  return !Array.isArray(result);
-}
-
 function processObservation(
   stream: FrameStream,
   factory: EventFactory,
@@ -113,6 +114,9 @@ function processObservation(
   faceSplitPointsMs: readonly number[],
   guidedTaskEvidenceIntervals:
     | readonly GuidedTaskEvidenceInterval[]
+    | undefined,
+  guidedVoiceTaskEvidenceIntervals:
+    | readonly GuidedVoiceTaskEvidenceInterval[]
     | undefined
 ): EncounterObservation {
   const measurements: Measurement[] = [];
@@ -120,7 +124,8 @@ function processObservation(
   const contextByWindowId = new Map<string, MeasurementContext>();
   const windows = detectMeasurableWindows(stream, {
     faceSplitPointsMs,
-    guidedTaskEvidenceIntervals
+    guidedTaskEvidenceIntervals,
+    guidedVoiceTaskEvidenceIntervals
   });
 
   for (const window of windows) {
@@ -142,7 +147,7 @@ function processObservation(
 
     const actorId =
       window.modality === "speech"
-        ? "speech-acoustic"
+        ? "voice-analysis"
         : "facial-expressivity";
     emit(
       factory.next(
@@ -156,25 +161,34 @@ function processObservation(
     );
 
     if (window.modality === "face") continue;
-    const result = extractSpeechAcoustic(
-      window,
-      slice(stream.audio, window)
+    const voiceInterval = guidedVoiceTaskEvidenceIntervals?.find(
+      (interval) =>
+        interval.startMs === window.startMs &&
+        interval.endMs === window.endMs
     );
-    if (isAbstention(result)) {
-      abstentions.push(result);
+    const result = extractVoiceMeasurements(
+      window,
+      slice(stream.audio, window),
+      voiceInterval?.taskStartedAtMs
+    );
+    for (const voiceAbstention of result.abstentions) {
+      abstentions.push(voiceAbstention);
       emit(
         factory.next(
           actorId,
           "measurement.abstained",
           "ambient-capture",
-          `Withheld ${window.modality} measurement: ${result.reasonCode}.`,
+          `Withheld ${window.modality} measurement: ${voiceAbstention.reasonCode}.`,
           window.endMs,
-          { windowId: window.windowId, reasonCode: result.reasonCode }
+          {
+            windowId: window.windowId,
+            reasonCode: voiceAbstention.reasonCode,
+            measurementCodes: voiceAbstention.measurementCodes
+          }
         )
       );
-      continue;
     }
-    for (const measurement of result) {
+    for (const measurement of result.measurements) {
       measurements.push(measurement);
       emit(
         factory.next(
@@ -232,57 +246,31 @@ function processObservation(
     );
   }
 
-  const firstSpeechWindow = windows.find(
-    (window) => window.modality === "speech"
-  );
-  if (
-    firstSpeechWindow &&
-    measurements.some((measurement) =>
-      measurement.code.startsWith("prototype.speech.")
-    )
-  ) {
-    const onsetMeasurement: Measurement = {
-      code: "prototype.speech.onset_latency",
-      label: "Speech initiation latency",
-      value: firstSpeechWindow.startMs / 1000,
-      unit: "seconds",
-      confidence:
-        firstSpeechWindow.context.confounds.kind === "speech"
-          ? Math.min(
-              1,
-              Math.max(0, firstSpeechWindow.context.confounds.snrDb / 24)
-            )
-          : 0,
-      uncertainty: {
-        kind: "not-estimated",
-        reason:
-          "Speech uncertainty is not estimated by this prototype extractor."
-      },
-      algorithmVersion: SPEECH_ACOUSTIC_VERSION,
-      processorRef: SPEECH_ACOUSTIC_VERSION,
-      clinicalValidation: "none",
-      contextRef: firstSpeechWindow.windowId,
-      sourceWindowRefs: [firstSpeechWindow.windowId],
-      windowStartMs: 0,
-      windowEndMs: firstSpeechWindow.startMs,
-      evidenceSnippetRef: null
-    };
-    measurements.push(onsetMeasurement);
-    emit(
-      factory.next(
-        "speech-acoustic",
-        "measurement.recorded",
-        "ambient-capture",
-        "Recorded speech initiation latency.",
-        firstSpeechWindow.startMs,
-        {
-          windowId: firstSpeechWindow.windowId,
-          code: onsetMeasurement.code,
-          value: onsetMeasurement.value
-        },
-        [firstSpeechWindow.windowId]
-      )
+  const repeatedVowelMeasurements = measurements.filter((measurement) => {
+    const context = contextByWindowId.get(measurement.contextRef);
+    return (
+      measurement.code.startsWith("prototype.voice.") &&
+      context?.kind === "sustained-vowel"
     );
+  });
+  for (const code of new Set(
+    repeatedVowelMeasurements.map((measurement) => measurement.code)
+  )) {
+    const repeated = repeatedVowelMeasurements.filter(
+      (measurement) => measurement.code === code
+    );
+    if (repeated.length < 2) continue;
+    const betweenTrialMad = medianAbsoluteDeviation(
+      repeated.map((measurement) => measurement.value)
+    );
+    for (const measurement of repeated) {
+      measurement.uncertainty = {
+        kind: "estimated",
+        method: "median-absolute-deviation",
+        value: betweenTrialMad,
+        unit: measurement.unit
+      };
+    }
   }
 
   const aggregates = aggregateMeasurements(
@@ -304,10 +292,15 @@ function processObservation(
       ).usable
   ).length;
   const observation: EncounterObservation = {
-    schemaVersion: "phenometric.encounter-observation.v1",
+    schemaVersion: "phenometric.encounter-observation.v2",
     containsPHI: stream.containsPHI,
     rawMediaRetained: false,
+    rawAudioRetained: false,
+    nativeAudioObservationsRetained: false,
+    transcriptRetained: false,
+    voiceEmbeddingsRetained: false,
     nativeVisualObservationsRetained: false,
+    selectedProtocolId: stream.selectedProtocolId,
     captureMode: stream.captureMode,
     visitId: stream.visitId,
     participantId: stream.participantId,
@@ -316,6 +309,10 @@ function processObservation(
       id: "fixture-replay",
       version: "0.2.0"
     },
+    audioPipeline: stream.audioPipeline,
+    audioCaptureSettings: stream.audioCaptureSettings,
+    voiceModel: stream.voiceModel,
+    audioStreamDiagnostics: stream.audioStreamDiagnostics,
     visualPipeline: stream.visualPipeline,
     videoCaptureSettings: stream.videoCaptureSettings,
     windows,
@@ -336,7 +333,7 @@ function processObservation(
         .length,
       pitchedFrameCount: stream.audio.filter(
         (frame) =>
-          frame.pitchHz !== null && (frame.pitchConfidence ?? 1) >= 0.55
+          frame.f0Hz !== null && frame.f0Confidence >= 0.55
       ).length,
       pitchCoverage:
         stream.audio.filter((frame) => frame.voiced).length === 0
@@ -344,10 +341,26 @@ function processObservation(
           : stream.audio.filter(
                 (frame) =>
                   frame.voiced &&
-                  frame.pitchHz !== null &&
-                  (frame.pitchConfidence ?? 1) >= 0.55
+                  frame.f0Hz !== null &&
+                  frame.f0Confidence >= 0.55
               ).length /
             stream.audio.filter((frame) => frame.voiced).length,
+      audioLostBlockFraction: Math.max(
+        0,
+        ...stream.audio.map((frame) => frame.lostBlockFraction)
+      ),
+      maximumAudioBlockGapMs: Math.max(
+        0,
+        ...stream.audio.map((frame) => frame.blockGapMs)
+      ),
+      medianAudioSnrDb:
+        stream.audio.length === 0
+          ? 0
+          : [...stream.audio]
+              .map((frame) => frame.snrDb)
+              .sort((left, right) => left - right)[
+              Math.floor(stream.audio.length / 2)
+            ],
       faceFrameCount: stream.face.length,
       usableFaceFrameCount,
       usableFaceFraction:
@@ -424,7 +437,7 @@ export function createConductorSession(
     baseTimeMs
   });
   const events: EventEnvelope[] = [];
-  const audio: AudioFeatureFrame[] = [];
+  const audio: VoiceSignalFrameV1[] = [];
   const face: FacialKinematicsFrameV1[] = [];
   const speechState = freshLaneState();
   const faceState = freshLaneState();
@@ -433,7 +446,12 @@ export function createConductorSession(
   let guidedTaskEvidenceIntervals:
     | GuidedTaskEvidenceInterval[]
     | undefined;
+  let guidedVoiceTaskEvidenceIntervals:
+    | GuidedVoiceTaskEvidenceInterval[]
+    | undefined;
   let visualPipeline = identity.visualPipeline;
+  let voiceModel = identity.voiceModel;
+  let audioStreamDiagnostics = identity.audioStreamDiagnostics;
   const qualityPolicy =
     options.qualityPolicy ?? DEFAULT_CAPTURE_QUALITY_POLICY;
   let completed = false;
@@ -478,7 +496,7 @@ export function createConductorSession(
       liveAbstentions.push(abstention);
       emit(
         factory.next(
-          modality === "speech" ? "speech-acoustic" : "facial-expressivity",
+          modality === "speech" ? "voice-analysis" : "facial-expressivity",
           "measurement.abstained",
           "ambient-capture",
           `Preserved a ${modality} abstention: ${abstention.reasonCode}.`,
@@ -501,7 +519,7 @@ export function createConductorSession(
     qualityTransitionCount += 1;
     emit(
       factory.next(
-        modality === "speech" ? "speech-acoustic" : "facial-expressivity",
+        modality === "speech" ? "voice-analysis" : "facial-expressivity",
         "capture.quality.changed",
         "ambient-capture",
         quality === "measurable"
@@ -559,9 +577,15 @@ export function createConductorSession(
       "capture-web",
       "consent.recorded",
       "ambient-capture",
-      "Recorded consent for in-session audiovisual analysis.",
+      identity.selectedProtocolId === "voice-foundation.v1"
+        ? "Recorded consent for in-session microphone analysis."
+        : "Recorded consent for in-session audiovisual analysis.",
       0,
-      { containsPHI: false, consentScope: "developer-self-assessment" }
+      {
+        containsPHI: false,
+        selectedProtocolId: identity.selectedProtocolId,
+        consentScope: "developer-self-assessment"
+      }
     )
   );
 
@@ -571,7 +595,9 @@ export function createConductorSession(
         "capture-web",
         "device.preflight.passed",
         "ambient-capture",
-        "Verified camera framing, room conditions, and speech signal.",
+        identity.selectedProtocolId === "voice-foundation.v1"
+          ? "Verified room conditions, microphone capture, and voice signal."
+          : "Verified camera framing, room conditions, and speech signal.",
         0,
         {
           profileId: identity.calibration.profileId,
@@ -588,7 +614,9 @@ export function createConductorSession(
       "capture-conductor",
       "analysis.started",
       "ambient-capture",
-      "Started ephemeral audiovisual analysis.",
+      identity.selectedProtocolId === "voice-foundation.v1"
+        ? "Started ephemeral microphone-only voice analysis."
+        : "Started ephemeral audiovisual analysis.",
       0,
       {
         captureMode: identity.captureMode,
@@ -601,6 +629,18 @@ export function createConductorSession(
     setVisualPipeline(nextVisualPipeline) {
       if (completed) throw new Error("Cannot update provenance after completion.");
       visualPipeline = { ...nextVisualPipeline };
+    },
+
+    setVoiceModel(nextVoiceModel) {
+      if (completed) throw new Error("Cannot update provenance after completion.");
+      voiceModel = nextVoiceModel ? { ...nextVoiceModel } : null;
+    },
+
+    setAudioStreamDiagnostics(nextDiagnostics) {
+      if (completed) throw new Error("Cannot update diagnostics after completion.");
+      audioStreamDiagnostics = nextDiagnostics
+        ? { ...nextDiagnostics }
+        : null;
     },
 
     setGuidedTaskEvidenceIntervals(intervals) {
@@ -620,11 +660,40 @@ export function createConductorSession(
       }));
     },
 
+    setGuidedVoiceTaskEvidenceIntervals(intervals) {
+      if (completed) throw new Error("Cannot update evidence after completion.");
+      for (const interval of intervals) {
+        if (
+          !Number.isFinite(interval.startMs) ||
+          !Number.isFinite(interval.endMs) ||
+          !Number.isFinite(interval.taskStartedAtMs) ||
+          interval.startMs < interval.taskStartedAtMs ||
+          interval.endMs < interval.startMs ||
+          interval.processorRef.length === 0
+        ) {
+          throw new Error("Guided voice evidence interval is invalid.");
+        }
+      }
+      guidedVoiceTaskEvidenceIntervals = intervals.map((interval) => ({
+        ...interval
+      }));
+    },
+
     ingestAudio(frame) {
       if (completed) throw new Error("Cannot ingest after session completion.");
       audio.push(frame);
 
-      const usable = frame.voiced && !frame.clipped;
+      const usable =
+        frame.voiced &&
+        frame.clippedSampleFraction <= 0.01 &&
+        !frame.qualityReasons.some((reason) =>
+          [
+            "audio-frame-gap",
+            "microphone-unavailable",
+            "audio-worklet-unavailable",
+            "voice-worker-unavailable"
+          ].includes(reason)
+        );
       if (usable) {
         speechState.lastGoodMs = frame.tMs;
         speechState.adverseSinceMs = null;
@@ -655,14 +724,18 @@ export function createConductorSession(
             "speech",
             speechState,
             speechState.lastGoodMs,
-            frame.clipped ? "audio-clipping" : "speech-pause"
+            frame.clippedSampleFraction > 0.01
+              ? "audio-clipping"
+              : "speech-pause"
           );
           changeQuality(
             "speech",
             speechState,
             "withheld",
             frame.tMs,
-            frame.clipped ? "audio-clipping" : "no-voiced-signal"
+            frame.clippedSampleFraction > 0.01
+              ? "audio-clipping"
+              : "no-voiced-signal"
           );
         }
       }
@@ -761,7 +834,7 @@ export function createConductorSession(
         liveAbstentions.push(abstention);
         emit(
           factory.next(
-            modality === "speech" ? "speech-acoustic" : "facial-expressivity",
+            modality === "speech" ? "voice-analysis" : "facial-expressivity",
             "measurement.abstained",
             "ambient-capture",
             `Preserved a ${modality} abstention: ${abstention.reasonCode}.`,
@@ -790,6 +863,8 @@ export function createConductorSession(
       const stream: FrameStream = {
         ...identity,
         visualPipeline,
+        voiceModel,
+        audioStreamDiagnostics,
         audio,
         face
       };
@@ -801,7 +876,8 @@ export function createConductorSession(
         qualityTransitionCount,
         liveAbstentions,
         faceSplitPointsMs,
-        guidedTaskEvidenceIntervals
+        guidedTaskEvidenceIntervals,
+        guidedVoiceTaskEvidenceIntervals
       );
       return { observation, events: [...events] };
     },

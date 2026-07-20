@@ -3,7 +3,9 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { runConductor, type FrameStream } from "@phenometric/ambient-core";
 import type {
+  BiomarkerAggregate,
   EncounterObservation,
+  SpeechConfoundEnvelope,
   TrajectoryHistoryRecord,
   VisualConfoundEnvelope
 } from "@phenometric/contracts";
@@ -50,6 +52,66 @@ function faceOnly(current = currentObservation()): EncounterObservation {
   };
 }
 
+function voiceConfounds(
+  overrides: Partial<SpeechConfoundEnvelope> = {}
+): SpeechConfoundEnvelope {
+  return {
+    kind: "speech",
+    sampleRateHz: 48_000,
+    sampleRateClass: "48khz-or-higher",
+    browserProcessing: {
+      echoCancellation: false,
+      noiseSuppression: false,
+      autoGainControl: false
+    },
+    snrDb: 26,
+    clippingFraction: 0,
+    dcOffset: 0,
+    lostBlockFraction: 0,
+    maximumBlockGapMs: 20,
+    usableCoverage: 1,
+    periodicityCoverage: 0.9,
+    ...overrides
+  };
+}
+
+function voiceAggregate(
+  overrides: Partial<BiomarkerAggregate> = {}
+): BiomarkerAggregate {
+  return {
+    code: "prototype.voice.cpps",
+    label: "Smoothed cepstral peak prominence",
+    unit: "dB",
+    contextKind: "sustained-vowel",
+    value: 14,
+    spread: 0.4,
+    confidence: 0.92,
+    windowCount: 2,
+    algorithmVersion: "voice-analysis-1.0",
+    processorRef: "browser-voice-dsp@1.0",
+    sourceWindowRefs: ["speech-vowel-1", "speech-vowel-2"],
+    confounds: voiceConfounds(),
+    uncertainty: {
+      kind: "estimated",
+      method: "median-absolute-deviation",
+      value: 0.3,
+      unit: "dB"
+    },
+    clinicalValidation: "none",
+    ...overrides
+  };
+}
+
+function voiceObservation(): EncounterObservation {
+  return {
+    ...currentObservation(),
+    selectedProtocolId: "voice-foundation.v1",
+    visualPipeline: null,
+    videoCaptureSettings: null,
+    aggregates: [voiceAggregate()]
+  };
+}
+
 describe("compareTrajectory", () => {
   it("includes three compatible synthetic encounters and excludes old algorithms", () => {
     const result = compareTrajectory(
@@ -68,10 +130,7 @@ describe("compareTrajectory", () => {
     ]);
     expect(
       result.comparison.biomarkers.map((biomarker) => biomarker.code)
-    ).toEqual([
-      "prototype.face.smile_excursion.asymmetry",
-      "prototype.speech.pitch_variability"
-    ]);
+    ).toEqual(["prototype.face.smile_excursion.asymmetry"]);
     expect(
       result.comparison.biomarkers.find((biomarker) =>
         biomarker.code.startsWith("prototype.face.")
@@ -83,27 +142,54 @@ describe("compareTrajectory", () => {
     ]);
   });
 
-  it("excludes speech values outside the SNR tolerance", () => {
-    const current = currentObservation();
-    const degraded: EncounterObservation = {
-      ...current,
-      aggregates: current.aggregates.map((aggregate) =>
-        aggregate.confounds.kind === "speech"
-          ? {
-              ...aggregate,
-              confounds: { ...aggregate.confounds, snrDb: 2 }
-            }
-          : aggregate
-      )
+  it.each([
+    {
+      name: "processor",
+      reason: "voice-processor-mismatch",
+      current: voiceAggregate({ processorRef: "browser-voice-dsp@2.0" })
+    },
+    {
+      name: "sample-rate class",
+      reason: "voice-sample-rate-class-mismatch",
+      current: voiceAggregate({
+        confounds: voiceConfounds({
+          sampleRateHz: 44_100,
+          sampleRateClass: "44.1khz"
+        })
+      })
+    },
+    {
+      name: "browser processing",
+      reason: "voice-browser-processing-mismatch",
+      current: voiceAggregate({
+        confounds: voiceConfounds({
+          browserProcessing: {
+            echoCancellation: true,
+            noiseSuppression: false,
+            autoGainControl: false
+          }
+        })
+      })
+    },
+    {
+      name: "SNR",
+      reason: "speech-snr-out-of-tolerance",
+      current: voiceAggregate({
+        confounds: voiceConfounds({ snrDb: 2 })
+      })
+    }
+  ])("requires exact compatible voice $name", ({ current, reason }) => {
+    const prior: TrajectoryHistoryRecord = {
+      ...history()[0],
+      aggregates: [voiceAggregate()]
     };
-
-    const comparison = compareTrajectory(degraded, history()).comparison;
-    expect(
-      comparison.biomarkers.some(
-        (biomarker) =>
-          biomarker.code === "prototype.speech.pitch_variability"
-      )
-    ).toBe(false);
+    const observation = {
+      ...voiceObservation(),
+      aggregates: [current]
+    };
+    const comparison = compareTrajectory(observation, [prior]).comparison;
+    expect(comparison.biomarkers).toEqual([]);
+    expect(comparison.excludedEncounters[0].reasonCodes).toContain(reason);
   });
 
   it("uses an explicit nonclinical direction vocabulary", () => {
@@ -121,6 +207,47 @@ describe("compareTrajectory", () => {
         ].includes(biomarker.direction)
       )
     ).toBe(true);
+  });
+
+  it("never mixes the same voice measurement across task contexts", () => {
+    const sustained = voiceAggregate({
+      contextKind: "sustained-vowel",
+      value: 14
+    });
+    const reading = voiceAggregate({
+      contextKind: "reading-aloud",
+      value: 9,
+      sourceWindowRefs: ["speech-reading"]
+    });
+    const observation = {
+      ...voiceObservation(),
+      aggregates: [sustained, reading]
+    };
+    const prior: TrajectoryHistoryRecord = {
+      ...history()[0],
+      aggregates: [
+        { ...sustained, value: 13 },
+        { ...reading, value: 8 }
+      ]
+    };
+
+    const comparison = compareTrajectory(observation, [prior]).comparison;
+    expect(comparison.biomarkers).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          contextKind: "sustained-vowel",
+          priorValues: [
+            expect.objectContaining({ value: 13 })
+          ]
+        }),
+        expect.objectContaining({
+          contextKind: "reading-aloud",
+          priorValues: [
+            expect.objectContaining({ value: 8 })
+          ]
+        })
+      ])
+    );
   });
 
   it.each([

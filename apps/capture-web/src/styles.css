@@ -486,6 +486,89 @@ h1 {
   margin-top: 14px;
 }
 
+.protocol-selector {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.65rem;
+  margin: 0 0 1rem;
+  padding: 0;
+  border: 0;
+}
+
+.protocol-selector legend {
+  grid-column: 1 / -1;
+  margin-bottom: 0.35rem;
+  color: var(--ink-muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.protocol-selector label {
+  display: flex;
+  gap: 0.65rem;
+  align-items: flex-start;
+  padding: 0.8rem;
+  border: 1px solid var(--line);
+  border-radius: 0.85rem;
+  background: rgba(255, 255, 255, 0.72);
+  cursor: pointer;
+}
+
+.protocol-selector label:has(input:checked) {
+  border-color: var(--teal);
+  box-shadow: 0 0 0 2px rgba(56, 157, 143, 0.14);
+}
+
+.protocol-selector span,
+.protocol-selector small {
+  display: block;
+}
+
+.protocol-selector small {
+  margin-top: 0.2rem;
+  color: var(--ink-muted);
+}
+
+body[data-selected-protocol="voice-foundation.v1"] .camera-stage {
+  background:
+    radial-gradient(circle at center, rgba(63, 190, 173, 0.2), transparent 35%),
+    linear-gradient(145deg, #102c32, #091b22);
+}
+
+body[data-selected-protocol="voice-foundation.v1"] #camera-preview,
+body[data-selected-protocol="voice-foundation.v1"] #landmark-overlay,
+body[data-selected-protocol="voice-foundation.v1"] #face-overlay,
+body[data-selected-protocol="voice-foundation.v1"] #mesh-disclosure,
+body[data-selected-protocol="voice-foundation.v1"] .signal-card[aria-label="Facial signal"],
+body[data-selected-protocol="voice-foundation.v1"] [data-lane="facial-expressivity"] {
+  display: none !important;
+}
+
+body[data-selected-protocol="voice-foundation.v1"] .camera-empty {
+  background: transparent;
+}
+
+body[data-selected-protocol="voice-foundation.v1"] .camera-aperture {
+  border-radius: 50%;
+  border-width: 3px;
+  box-shadow:
+    0 0 0 12px rgba(99, 215, 197, 0.08),
+    0 0 48px rgba(99, 215, 197, 0.2);
+}
+
+body[data-selected-protocol="voice-foundation.v1"] .signal-grid,
+body[data-selected-protocol="voice-foundation.v1"] .parallel-nodes {
+  grid-template-columns: 1fr;
+}
+
+@media (max-width: 720px) {
+  .protocol-selector {
+    grid-template-columns: 1fr;
+  }
+}
+
 .consent-control {
   display: flex;
   gap: 12px;
@@ -2155,6 +2238,29 @@ body.trace-open {
 
   .capture-controls {
     margin-top: 8px;
+  }
+
+  .protocol-selector {
+    gap: 5px;
+    margin-bottom: 6px;
+  }
+
+  .protocol-selector legend {
+    margin-bottom: 2px;
+    font-size: 10px;
+  }
+
+  .protocol-selector label {
+    align-items: center;
+    padding: 5px 7px;
+  }
+
+  .protocol-selector small {
+    display: none;
+  }
+
+  .protocol-selector input {
+    margin: 0;
   }
 
   .consent-control {

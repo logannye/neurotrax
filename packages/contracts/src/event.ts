@@ -1,6 +1,7 @@
 export type AmbientActorId =
   | "capture-web"
   | "capture-conductor"
+  | "voice-analysis"
   | "speech-acoustic"
   | "facial-expressivity"
   | "personal-trajectory"

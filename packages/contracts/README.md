@@ -18,21 +18,29 @@ in
   `sourceWindowRefs`. A facial task measurement can therefore cite both its
   neutral reference and active-task window.
 - `Abstention` preserves a reason-coded no-value interval.
-- `EncounterObservation` adds its schema version, occurrence time,
-  capture-adapter and visual-pipeline provenance, privacy-safe camera settings,
-  aggregate confounds, quality summary, windows, measurements, and abstentions.
+- `EncounterObservation` v2 adds selected protocol, occurrence time,
+  capture-adapter, visual/audio/model provenance, privacy-safe camera and
+  microphone settings, stream diagnostics, aggregate confounds, quality
+  summary, windows, measurements, and abstentions.
 - `neutral-face`, `smile`, and `eye-closure` are explicit measurement
   contexts. Anatomical subject-left and subject-right do not depend on preview
   mirroring.
+- `VoiceSignalFrameV1` carries timing, epoch/sequence, absolute sample index,
+  task, compact voicing/acoustic primitives, quality reasons, and processor
+  reference. It carries no PCM or native arrays.
+- Voice task contexts include quiet calibration, natural-speech check, two
+  sustained vowels, standardized reading, rapid syllables, and spontaneous
+  response. Accepted task intervals are explicit conductor inputs.
 - Observation privacy assertions require `containsPHI: false`,
-  `rawMediaRetained: false`, and
-  `nativeVisualObservationsRetained: false`. Camera identifiers, device labels,
-  media, landmarks, blendshapes, and transformation matrices are not contract
-  fields.
+  `rawMediaRetained: false`, `rawAudioRetained: false`,
+  `nativeAudioObservationsRetained: false`, `transcriptRetained: false`,
+  `voiceEmbeddingsRetained: false`, and
+  `nativeVisualObservationsRetained: false`.
 
-Visual measurements use `estimated` uncertainty derived from within-task
-median absolute deviation. Existing speech measurements use `not-estimated`
-with an explicit reason; neither form implies clinical validation.
+Visual and repeatable voice measurements use median-absolute-deviation
+uncertainty. Repeated vowels use between-trial MAD. Non-repeatable values use
+`not-estimated` with an explicit reason; neither form implies clinical
+validation.
 
 ## Personal Trajectory
 
@@ -42,8 +50,9 @@ with an explicit reason; neither form implies clinical validation.
 - `TrajectoryComparison` preserves robust personal-reference statistics,
   nonclinical direction, evidence references, and the provisional claim
   boundary.
-- Compatible measurements must exactly match both algorithm version and visual
-  processor reference. A new visual processor begins a new baseline.
+- Compatible measurements exactly match algorithm and modality processor
+  reference. Voice also exact-matches browser-processing state and sample-rate
+  class. A new processor begins a new baseline.
 
 ## Evidence and review
 
@@ -51,8 +60,9 @@ with an explicit reason; neither form implies clinical validation.
   final summary.
 - `EvidenceNarrativeDraft` permits only a headline and short summary from the
   synthesis service.
-- `EvidenceCardDraft` attaches exactly two pre-grounded claim references and
-  the review boundary in application code.
+- `EvidenceCardDraft` attaches one or more unique participating-modality claim
+  references and the review boundary in application code. Current protocols
+  each send one outcome.
 - `EvidenceSynthesisTiming` records total, service, and validation latency for
   operator diagnostics.
 - `GroundingResult` records deterministic pass/fail and errors.

@@ -13,6 +13,9 @@ required_files=(
   "apps/capture-web/README.md"
   "apps/capture-web/server/evidence-agent.ts"
   "apps/capture-web/src/face-worker.ts"
+  "apps/capture-web/public/voice-capture-worklet.js"
+  "apps/capture-web/src/voice-worker.ts"
+  "packages/ambient-core/src/voice-analysis.ts"
   "apps/capture-web/public/models/face_landmarker.task"
   "apps/capture-web/public/mediapipe/vision_wasm_internal.wasm"
   "apps/clinician-review/README.md"
@@ -26,6 +29,9 @@ required_files=(
   "packages/evidence-core/src/evidence.ts"
   "packages/event-log/README.md"
   "protocols/macbook-check-in.v0.1.json"
+  "protocols/voice-foundation.v0.1.json"
+  "services/voice-inference/pyproject.toml"
+  "services/voice-inference/phenometric_voice/app.py"
   "examples/prior-encounter-observation.example.json"
   "examples/encounter-observation.example.json"
   "examples/trajectory-comparison.example.json"
@@ -47,6 +53,7 @@ node <<'NODE'
   const jsonFiles = [
     "package.json",
     "protocols/macbook-check-in.v0.1.json",
+    "protocols/voice-foundation.v0.1.json",
     "examples/prior-encounter-observation.example.json",
     "examples/encounter-observation.example.json",
     "examples/trajectory-comparison.example.json",
@@ -298,6 +305,9 @@ node <<'NODE'
   const protocol = JSON.parse(
     fs.readFileSync("protocols/macbook-check-in.v0.1.json", "utf8")
   );
+  const voiceProtocol = JSON.parse(
+    fs.readFileSync("protocols/voice-foundation.v0.1.json", "utf8")
+  );
   const priorObservation = JSON.parse(
     fs.readFileSync(
       "examples/prior-encounter-observation.example.json",
@@ -327,6 +337,10 @@ node <<'NODE'
   const privacySafe = (artifact) =>
     artifact.containsPHI === false &&
     artifact.rawMediaRetained === false &&
+    artifact.rawAudioRetained === false &&
+    artifact.nativeAudioObservationsRetained === false &&
+    artifact.transcriptRetained === false &&
+    artifact.voiceEmbeddingsRetained === false &&
     artifact.nativeVisualObservationsRetained === false;
   if (
     consentEvent.payload?.captureMode !== "live" ||
@@ -361,18 +375,28 @@ node <<'NODE'
     "prototype.face.eye_closure_fraction.right",
     "prototype.face.eye_closure_fraction.asymmetry"
   ];
-  const expectedSpeechCodes = [
-    "prototype.speech.onset_latency",
-    "prototype.speech.voiced_time_fraction",
-    "prototype.speech.pause_rate",
-    "prototype.speech.pitch_center",
-    "prototype.speech.pitch_variability"
+  const expectedVoiceCodes = [
+    "prototype.voice.f0.median",
+    "prototype.voice.f0.variability",
+    "prototype.voice.cpps",
+    "prototype.voice.hnr",
+    "prototype.voice.intensity.variability",
+    "prototype.voice.voiced_fraction",
+    "prototype.voice.pause_rate",
+    "prototype.voice.pause_duration.median",
+    "prototype.voice.speech_run_duration.median",
+    "prototype.voice.syllabic_rate_estimate",
+    "prototype.voice.jitter.local",
+    "prototype.voice.shimmer.local",
+    "prototype.voice.phonation_break_fraction",
+    "prototype.voice.formant.f1_median",
+    "prototype.voice.formant.f2_median",
+    "prototype.voice.ddk.rate",
+    "prototype.voice.ddk.interval_variability",
+    "prototype.voice.onset_latency"
   ];
-  const expectedMeasurementCodes = new Set([
-    ...expectedSpeechCodes,
-    ...expectedFaceCodes
-  ]);
   if (
+    protocol.id !== "facial-foundation.v1" ||
     protocol.sequence?.length !== expectedPhases.length ||
     protocol.sequence.some(
       (phase, index) =>
@@ -390,17 +414,56 @@ node <<'NODE'
     protocol.advancement?.skipAvailable !== false ||
     protocol.advancement?.acceptedEvidence !==
       "final-qualifying-interval-only" ||
-    JSON.stringify(protocol.speechMeasurements) !==
-      JSON.stringify(expectedSpeechCodes) ||
+    "speechMeasurements" in protocol ||
     JSON.stringify(protocol.facialMeasurements) !==
       JSON.stringify(expectedFaceCodes)
   ) {
     throw new Error(
-      "Protocol must define completion-gated exercises and exact 5 speech + 6 facial measurements."
+      "Facial protocol must retain its completion-gated exercises and exact six facial measurements without legacy speech metrics."
+    );
+  }
+  const expectedVoicePhases = [
+    ["sustained-vowel-1", 3000],
+    ["sustained-vowel-2", 3000],
+    ["standardized-reading", 4000],
+    ["rapid-syllables", 4000],
+    ["spontaneous-response", 8000]
+  ];
+  if (
+    voiceProtocol.id !== "voice-foundation.v1" ||
+    voiceProtocol.cameraRequested !== false ||
+    voiceProtocol.systemCheck?.[0]?.phase !== "quiet-calibration" ||
+    voiceProtocol.systemCheck?.[0]?.evidenceDurationMs !== 2000 ||
+    voiceProtocol.systemCheck?.[1]?.phase !== "natural-speech-check" ||
+    voiceProtocol.systemCheck?.[1]?.evidenceDurationMs !== 1500 ||
+    voiceProtocol.sequence?.length !== expectedVoicePhases.length ||
+    voiceProtocol.sequence.some(
+      (phase, index) =>
+        phase.phase !== expectedVoicePhases[index][0] ||
+        phase.evidenceDurationMs !== expectedVoicePhases[index][1] ||
+        phase.assistanceAfterMs !== 12000
+    ) ||
+    voiceProtocol.sequence[0].requiredPeriodicityCoverage !== 0.8 ||
+    voiceProtocol.sequence[1].requiredPeriodicityCoverage !== 0.8 ||
+    voiceProtocol.sequence[3].requiredSyllabicNuclei !== 6 ||
+    voiceProtocol.sequence[4].permitsNaturalPauses !== true ||
+    voiceProtocol.advancement?.mode !== "signal-gated" ||
+    voiceProtocol.advancement?.timeoutBehavior !== "never-auto-advance" ||
+    voiceProtocol.advancement?.skipAvailable !== false ||
+    JSON.stringify(voiceProtocol.voiceMeasurements) !==
+      JSON.stringify(expectedVoiceCodes) ||
+    voiceProtocol.clinicalClaims?.length !== 0
+  ) {
+    throw new Error(
+      "Voice protocol must define the exact microphone-only gated battery and eighteen prototype.voice measurements."
     );
   }
   if (
     protocol.processing?.rawMediaRetained !== false ||
+    protocol.processing?.rawAudioRetained !== false ||
+    protocol.processing?.nativeAudioObservationsRetained !== false ||
+    protocol.processing?.transcriptRetained !== false ||
+    protocol.processing?.voiceEmbeddingsRetained !== false ||
     protocol.processing?.nativeVisualObservationsRetained !== false ||
     protocol.processing?.mediaPipeVersion !== "0.10.35" ||
     protocol.processing?.lateralityConvention !== "subject-anatomical" ||
@@ -417,6 +480,28 @@ node <<'NODE'
       "Protocol processing must remain local, versioned, anatomical, ephemeral, and nonclinical."
     );
   }
+  if (
+    voiceProtocol.processing?.rawMediaRetained !== false ||
+    voiceProtocol.processing?.rawAudioRetained !== false ||
+    voiceProtocol.processing?.nativeAudioObservationsRetained !== false ||
+    voiceProtocol.processing?.transcriptRetained !== false ||
+    voiceProtocol.processing?.voiceEmbeddingsRetained !== false ||
+    voiceProtocol.processing?.analysisWindowMs !== 40 ||
+    voiceProtocol.processing?.analysisHopMs !== 10 ||
+    voiceProtocol.processing?.pcmBlockMs !== 20 ||
+    voiceProtocol.processing?.ringBufferSeconds !== 30 ||
+    voiceProtocol.processing?.requestedAudio?.sampleRate !== 48000 ||
+    voiceProtocol.processing?.optionalRepresentationProcessor
+      ?.enabledByDefault !== false ||
+    voiceProtocol.processing?.optionalRepresentationProcessor
+      ?.serviceBinding !== "127.0.0.1" ||
+    voiceProtocol.processing?.optionalRepresentationProcessor?.stored !==
+      false
+  ) {
+    throw new Error(
+      "Voice processing must remain continuous, local, bounded, optional, ephemeral, and nonclinical."
+    );
+  }
 
   const observationCodes = new Set(
     currentObservation.measurements.map((measurement) => measurement.code)
@@ -429,19 +514,21 @@ node <<'NODE'
   );
   if (
     currentObservation.schemaVersion !==
-      "phenometric.encounter-observation.v1" ||
-    currentObservation.measurementCount !== 11 ||
-    observationCodes.size !== 11 ||
-    aggregateCodes.size !== 11 ||
-    [...expectedMeasurementCodes].some(
+      "phenometric.encounter-observation.v2" ||
+    currentObservation.selectedProtocolId !== "facial-foundation.v1" ||
+    currentObservation.measurementCount !== 6 ||
+    observationCodes.size !== 6 ||
+    aggregateCodes.size !== 6 ||
+    expectedFaceCodes.some(
       (code) => !observationCodes.has(code) || !aggregateCodes.has(code)
     ) ||
+    [...observationCodes].some((code) => code.startsWith("prototype.speech.")) ||
     ["neutral-face", "smile", "eye-closure"].some(
       (context) => !observationContexts.has(context)
     )
   ) {
     throw new Error(
-      "Current observation must expose exactly eleven task-context measurements and aggregates."
+      "Current facial observation must expose exactly six facial task measurements and no removed prototype.speech metrics."
     );
   }
 
@@ -466,6 +553,19 @@ node <<'NODE'
   const forbiddenSerializedKeys = new Set([
     "deviceId",
     "deviceLabel",
+    "groupId",
+    "pcm",
+    "waveform",
+    "pitchCycles",
+    "fftBins",
+    "cepstra",
+    "mfccs",
+    "formantCandidates",
+    "formantTracks",
+    "transcript",
+    "spectrogram",
+    "embeddings",
+    "voiceprint",
     "landmarks",
     "faceLandmarks",
     "blendshapes",
@@ -499,7 +599,7 @@ node <<'NODE'
   ]) {
     const forbidden = findForbiddenKey(artifact);
     if (forbidden) {
-      throw new Error(`${name} serializes forbidden visual/media key: ${forbidden}`);
+      throw new Error(`${name} serializes forbidden native audio/visual key: ${forbidden}`);
     }
   }
 
@@ -570,7 +670,7 @@ node <<'NODE'
   );
   if (
     card.visitId !== currentObservation.visitId ||
-    card.claims.length !== 2 ||
+    card.claims.length !== 1 ||
     card.claims.some((claim) => !groundedClaimIds.has(claim.claimId)) ||
     card.claims.find((claim) => claim.modality === "face")
       ?.measurementCode !==
@@ -579,7 +679,7 @@ node <<'NODE'
       ?.processorRef !== visualProcessorRef
   ) {
     throw new Error(
-      "Evidence card must contain grounded speech and primary facial task outcomes."
+      "Facial evidence card must contain one grounded primary facial task outcome."
     );
   }
   if (!groundedClaimIds.has(evidenceTraceEvents[0].payload?.claimId)) {
@@ -608,14 +708,14 @@ node <<'NODE'
   );
   const modern = currentHistory.filter((record) =>
     record.aggregates.every((aggregate) =>
-      ["speech-acoustic-0.4", "facial-task-kinematics-1.0"].includes(
+      ["facial-task-kinematics-1.0"].includes(
         aggregate.algorithmVersion
       )
     )
   );
   const oldAlgorithm = currentHistory.filter((record) =>
     record.aggregates.some((aggregate) =>
-      !["speech-acoustic-0.4", "facial-task-kinematics-1.0"].includes(
+      !["facial-task-kinematics-1.0"].includes(
         aggregate.algorithmVersion
       ) ||
       (aggregate.code.startsWith("prototype.face.") &&

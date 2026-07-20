@@ -4,6 +4,7 @@ import type {
   Measurement,
   MeasurableWindow
 } from "@phenometric/contracts";
+import { syntheticSpeechConfounds } from "./test-helpers.js";
 
 describe("measurement contracts", () => {
   it("models a measurement with provenance and placeholder honesty", () => {
@@ -14,16 +15,12 @@ describe("measurement contracts", () => {
       endMs: 4000,
       context: {
         kind: "spontaneous-speech",
-        confounds: {
-          kind: "speech",
-          snrDb: 22,
-          clippingFraction: 0
-        }
+        confounds: syntheticSpeechConfounds({ snrDb: 22 })
       }
     };
     const measurement: Measurement = {
-      code: "prototype.speech.articulation_rate",
-      label: "Articulation rate",
+      code: "prototype.voice.syllabic_rate_estimate",
+      label: "Estimated syllabic rate",
       value: 0.61,
       unit: "voiced-fraction",
       confidence: 0.9,
@@ -31,8 +28,8 @@ describe("measurement contracts", () => {
         kind: "not-estimated",
         reason: "not estimated for speech"
       },
-      algorithmVersion: "speech-acoustic-0.1",
-      processorRef: "speech-acoustic-0.1",
+      algorithmVersion: "voice-analysis-1.0",
+      processorRef: "browser-voice-dsp@1.0",
       clinicalValidation: "none",
       contextRef: window.windowId,
       sourceWindowRefs: [window.windowId],

@@ -11,17 +11,6 @@
   "summary": "Pitch variability and smile-excursion asymmetry were measured during technically usable portions of the encounter.",
   "claims": [
     {
-      "claimId": "outcome-speech-measured",
-      "modality": "speech",
-      "status": "measured",
-      "statement": "Pitch variability: 1.9 semitone-stddev, measured across accepted speech analysis windows.",
-      "measurementCode": "prototype.speech.pitch_variability",
-      "sourceWindowRefs": [
-        "speech-0"
-      ],
-      "processorRef": "speech-acoustic-0.4"
-    },
-    {
       "claimId": "outcome-face-measured",
       "modality": "face",
       "status": "measured",
@@ -57,5 +46,9 @@
     "annotation": "Synthetic demo review complete.",
     "reviewer": "synthetic-clinician-001",
     "decidedAt": "2026-07-18T16:00:24.000Z"
-  }
+  },
+  "rawAudioRetained": false,
+  "nativeAudioObservationsRetained": false,
+  "transcriptRetained": false,
+  "voiceEmbeddingsRetained": false
 }

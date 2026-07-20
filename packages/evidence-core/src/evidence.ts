@@ -16,9 +16,9 @@ const PROHIBITED_CLINICAL_LANGUAGE =
   /\b(diagnos(?:is|e|ed|tic)|disease|progress(?:ion|ed|ing)?|treat(?:ment|ed|ing)?|medicat(?:ion|e|ed)|risk|normal|abnormal|worsen(?:ed|ing)?|improv(?:ed|ing|ement)?|cause|clinical decline)\b/i;
 
 const SPEECH_PRIORITY = [
-  "prototype.speech.pitch_variability",
-  "prototype.speech.voiced_time_fraction",
-  "prototype.speech.pause_rate"
+  "prototype.voice.cpps",
+  "prototype.voice.ddk.interval_variability",
+  "prototype.voice.pause_rate"
 ];
 const FACE_PRIORITY = [
   "prototype.face.smile_excursion.asymmetry",
@@ -37,7 +37,12 @@ function priorityFor(code: string, modality: Modality): number {
 }
 
 function isOutcomeCandidate(code: string, modality: Modality): boolean {
-  if (!code.startsWith(`prototype.${modality}.`)) return false;
+  if (modality === "speech" && !code.startsWith("prototype.voice.")) {
+    return false;
+  }
+  if (modality === "face" && !code.startsWith("prototype.face.")) {
+    return false;
+  }
   return modality === "speech" || FACE_PRIORITY.includes(code);
 }
 
@@ -64,7 +69,11 @@ export function createEncounterClaimFacts(
 ): EvidenceClaimFact[] {
   const facts: EvidenceClaimFact[] = [];
 
-  for (const modality of ["speech", "face"] as const) {
+  const modalities: Modality[] =
+    observation.selectedProtocolId === "voice-foundation.v1"
+      ? ["speech"]
+      : ["face"];
+  for (const modality of modalities) {
     const aggregate = observation.aggregates
       .filter((candidate) =>
         isOutcomeCandidate(candidate.code, modality)
@@ -102,7 +111,7 @@ export function createEncounterClaimFacts(
             event.payload.modality === modality ||
             event.actor.id ===
               (modality === "speech"
-                ? "speech-acoustic"
+                ? "voice-analysis"
                 : "facial-expressivity")
           );
         }
@@ -164,7 +173,7 @@ function supportingEventsFor(
         event.payload.modality === modality ||
         event.actor.id ===
           (modality === "speech"
-            ? "speech-acoustic"
+            ? "voice-analysis"
             : "facial-expressivity")
       );
     }
@@ -175,7 +184,7 @@ function supportingEventsFor(
 export function createModalityOutcomes(
   observation: EncounterObservation,
   events: EventEnvelope[]
-): [ModalityOutcome, ModalityOutcome] {
+): ModalityOutcome[] {
   const createOutcome = (modality: Modality): ModalityOutcome => {
     const aggregate = observation.aggregates
       .filter((candidate) =>
@@ -285,7 +294,9 @@ export function createModalityOutcomes(
     };
   };
 
-  return [createOutcome("speech"), createOutcome("face")];
+  return observation.selectedProtocolId === "voice-foundation.v1"
+    ? [createOutcome("speech")]
+    : [createOutcome("face")];
 }
 
 function numericTokens(value: string): string[] {
@@ -342,8 +353,14 @@ export function validateEvidenceCardDraft(
     (fact) => !("status" in fact) || fact.status === "measured"
   );
 
-  if (facts.length !== 2 || new Set(facts.map((fact) => fact.modality)).size !== 2) {
-    errors.push("Current-encounter synthesis requires one speech fact and one face fact.");
+  if (
+    facts.length < 1 ||
+    facts.length > 2 ||
+    new Set(facts.map((fact) => fact.modality)).size !== facts.length
+  ) {
+    errors.push(
+      "Current-encounter synthesis requires one or more unique participating modalities."
+    );
   }
   if (draft.claims.length !== reportableFacts.length) {
     errors.push(

@@ -1,11 +1,13 @@
 import type {
   VideoCaptureSettings,
+  SpeechConfoundEnvelope,
   VisualPipelineProvenance,
   VisualTaskContext
 } from "@phenometric/contracts";
 import type {
   FacialKinematicsFrameV1,
-  FrameStream
+  FrameStream,
+  VoiceSignalFrameV1
 } from "./primitives.js";
 
 export const SYNTHETIC_VISUAL_PIPELINE: VisualPipelineProvenance = {
@@ -26,6 +28,74 @@ export const SYNTHETIC_VIDEO_SETTINGS: VideoCaptureSettings = {
   displayMirrored: true,
   lateralityConvention: "subject-anatomical"
 };
+
+export function syntheticSpeechConfounds(
+  overrides: Partial<SpeechConfoundEnvelope> = {}
+): SpeechConfoundEnvelope {
+  return {
+    kind: "speech",
+    sampleRateHz: 48_000,
+    sampleRateClass: "48khz-or-higher",
+    browserProcessing: {
+      echoCancellation: false,
+      noiseSuppression: false,
+      autoGainControl: false
+    },
+    snrDb: 26,
+    clippingFraction: 0,
+    dcOffset: 0.001,
+    lostBlockFraction: 0,
+    maximumBlockGapMs: 20,
+    usableCoverage: 1,
+    periodicityCoverage: 0.9,
+    ...overrides
+  };
+}
+
+export function syntheticVoiceFrame(
+  tMs: number,
+  overrides: Partial<VoiceSignalFrameV1> = {}
+): VoiceSignalFrameV1 {
+  return {
+    schemaVersion: "phenometric.voice-signal-frame.v1",
+    tMs,
+    acquiredAtMs: tMs,
+    captureEpoch: 1,
+    sequence: Math.floor(tMs / 10) + 1,
+    absoluteSampleIndex: Math.round(tMs * 48),
+    taskContext: "spontaneous-response",
+    voiced: true,
+    voicingProbability: 0.94,
+    rms: 0.08,
+    intensityDbfs: -21.9,
+    f0Hz: 140 + Math.sin(tMs / 200) * 5,
+    f0Confidence: 0.92,
+    estimatorAgreement: 0.95,
+    periodicity: 0.9,
+    cppsDb: 14,
+    hnrDb: 21,
+    jitterLocal: 0.009,
+    shimmerLocal: 0.03,
+    formantF1Hz: 730,
+    formantF2Hz: 1_090,
+    spectralFlux: 0.06,
+    syllabicNucleus: tMs % 400 < 10,
+    clippedSampleFraction: 0,
+    dcOffset: 0.001,
+    snrDb: 26,
+    sampleRateHz: 48_000,
+    blockGapMs: 10,
+    lostBlockFraction: 0,
+    browserProcessing: {
+      echoCancellation: false,
+      noiseSuppression: false,
+      autoGainControl: false
+    },
+    qualityReasons: [],
+    processorRef: "browser-voice-dsp@1.0",
+    ...overrides
+  };
+}
 
 export function syntheticFacialFrame(
   tMs: number,
@@ -93,13 +163,18 @@ export function syntheticFrameStream(
   partial: Partial<FrameStream> = {}
 ): FrameStream {
   return {
-    schemaVersion: "phenometric.frame-stream.v1",
+    schemaVersion: "phenometric.frame-stream.v2",
     containsPHI: false,
     visitId: "synthetic-visit",
     participantId: "synthetic-participant",
     captureMode: "fixture-playback",
+    selectedProtocolId: "facial-foundation.v1",
     occurredAt: "2026-07-18T16:00:00.000Z",
     captureAdapter: { id: "fixture-replay", version: "1.0.0" },
+    audioPipeline: null,
+    audioCaptureSettings: null,
+    voiceModel: null,
+    audioStreamDiagnostics: null,
     visualPipeline: SYNTHETIC_VISUAL_PIPELINE,
     videoCaptureSettings: SYNTHETIC_VIDEO_SETTINGS,
     audio: [],

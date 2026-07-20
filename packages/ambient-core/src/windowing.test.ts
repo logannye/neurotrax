@@ -3,32 +3,37 @@ import { detectMeasurableWindows } from "./windowing.js";
 import {
   syntheticFacialFrame,
   syntheticFrameStream,
+  syntheticVoiceFrame,
   syntheticTaskFrames
 } from "./test-helpers.js";
 
 describe("detectMeasurableWindows", () => {
   it("preserves bounded pauses inside a speech window", () => {
-    const audio = Array.from({ length: 30 }, (_, index) => ({
-      tMs: index * 100,
-      voiced: index < 8 || index >= 18,
-      rms: index >= 8 && index < 18 ? 0.03 : 0.4,
-      pitchHz: index >= 8 && index < 18 ? null : 120,
-      clipped: false,
-      snrDb: 20
-    }));
+    const audio = Array.from({ length: 300 }, (_, index) =>
+      syntheticVoiceFrame(index * 10, {
+        taskContext: "spontaneous-response",
+        voiced: index < 80 || index >= 180,
+        f0Hz: index >= 80 && index < 180 ? null : 120
+      })
+    );
 
     const windows = detectMeasurableWindows(
-      syntheticFrameStream({ audio })
+      syntheticFrameStream({
+        selectedProtocolId: "voice-foundation.v1",
+        visualPipeline: null,
+        videoCaptureSettings: null,
+        audio
+      })
     );
 
     expect(windows).toHaveLength(1);
     expect(windows[0]).toMatchObject({
       modality: "speech",
       startMs: 0,
-      endMs: 2900,
+      endMs: 2990,
       context: {
         kind: "spontaneous-speech",
-        confounds: { kind: "speech", snrDb: 20 }
+        confounds: { kind: "speech", snrDb: 26 }
       }
     });
   });

@@ -231,7 +231,7 @@ describe("guided face calibration", () => {
       classifyFaceCalibration([])
     );
     expect(capture).toMatchObject({
-      schemaVersion: "phenometric.capture-calibration.v1",
+      schemaVersion: "phenometric.capture-calibration.v2",
       profileId: "visual-foundation-v1",
       audioQuality: "strong",
       faceQuality: "unavailable",

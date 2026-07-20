@@ -56,6 +56,9 @@ const QualitySummarySchema = z
     speechActiveFrameCount: z.number().int().nonnegative(),
     pitchedFrameCount: z.number().int().nonnegative(),
     pitchCoverage: z.number().min(0).max(1),
+    audioLostBlockFraction: z.number().min(0).max(1),
+    maximumAudioBlockGapMs: z.number().nonnegative(),
+    medianAudioSnrDb: z.number(),
     faceFrameCount: z.number().int().nonnegative(),
     usableFaceFrameCount: z.number().int().nonnegative(),
     usableFaceFraction: z.number().min(0).max(1),
@@ -69,17 +72,24 @@ export const EvidenceAgentRequestSchema = z
   .object({
     containsPHI: z.literal(false),
     rawMediaRetained: z.literal(false),
+    rawAudioRetained: z.literal(false),
+    nativeAudioObservationsRetained: z.literal(false),
+    transcriptRetained: z.literal(false),
+    voiceEmbeddingsRetained: z.literal(false),
     nativeVisualObservationsRetained: z.literal(false),
     visitId: z.string().min(1),
     qualitySummary: QualitySummarySchema,
-    outcomes: z.array(ModalityOutcomeSchema).length(2)
+    outcomes: z.array(ModalityOutcomeSchema).min(1).max(2)
   })
   .strict()
   .superRefine((value, context) => {
-    if (new Set(value.outcomes.map((outcome) => outcome.modality)).size !== 2) {
+    if (
+      new Set(value.outcomes.map((outcome) => outcome.modality)).size !==
+      value.outcomes.length
+    ) {
       context.addIssue({
         code: "custom",
-        message: "Exactly one speech outcome and one facial outcome are required.",
+        message: "Participating modality outcomes must be unique.",
         path: ["outcomes"]
       });
     }

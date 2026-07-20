@@ -1,15 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { aggregateMeasurements } from "./aggregate.js";
 import type { Measurement, MeasurementContext } from "@phenometric/contracts";
+import { syntheticSpeechConfounds } from "./test-helpers.js";
 
 function measurementContext(kind: MeasurementContext["kind"]): MeasurementContext {
   return {
     kind,
-    confounds: {
-      kind: "speech",
-      snrDb: 20,
-      clippingFraction: 0
-    }
+    confounds: syntheticSpeechConfounds({ snrDb: 20 })
   };
 }
 
@@ -17,8 +14,8 @@ function m(code: string, value: number, contextRef = "speech-0"): Measurement {
   return {
     code, label: code, value, unit: "u", confidence: 0.9,
     uncertainty: { kind: "not-estimated", reason: "not estimated" },
-    algorithmVersion: "speech-acoustic-0.1",
-    processorRef: "speech-acoustic-0.1",
+    algorithmVersion: "voice-analysis-1.0",
+    processorRef: "browser-voice-dsp@1.0",
     clinicalValidation: "none", contextRef, sourceWindowRefs: [contextRef], windowStartMs: 0,
     windowEndMs: 2000, evidenceSnippetRef: null
   };
@@ -29,9 +26,9 @@ describe("aggregateMeasurements", () => {
     const context = new Map<string, MeasurementContext>([
       ["speech-0", measurementContext("spontaneous-speech")]
     ]);
-    const labels = new Map([["prototype.speech.pause_count", { label: "Pause count", unit: "count" }]]);
+    const labels = new Map([["prototype.voice.pause_rate", { label: "Pause rate", unit: "pauses-per-minute" }]]);
     const result = aggregateMeasurements(
-      [m("prototype.speech.pause_count", 2), m("prototype.speech.pause_count", 4), m("prototype.speech.pause_count", 6)],
+      [m("prototype.voice.pause_rate", 2), m("prototype.voice.pause_rate", 4), m("prototype.voice.pause_rate", 6)],
       context, labels
     );
     expect(result).toHaveLength(1);
@@ -39,8 +36,8 @@ describe("aggregateMeasurements", () => {
     expect(result[0].spread).toBe(2);
     expect(result[0].windowCount).toBe(3);
     expect(result[0].contextKind).toBe("spontaneous-speech");
-    expect(result[0].label).toBe("Pause count");
-    expect(result[0].processorRef).toBe("speech-acoustic-0.1");
+    expect(result[0].label).toBe("Pause rate");
+    expect(result[0].processorRef).toBe("browser-voice-dsp@1.0");
     expect(result[0].sourceWindowRefs).toEqual(["speech-0"]);
   });
 
@@ -50,7 +47,7 @@ describe("aggregateMeasurements", () => {
     ]);
     const labels = new Map([["c", { label: "c", unit: "u" }]]);
     const a = m("c", 1);
-    const b = { ...m("c", 2), algorithmVersion: "speech-acoustic-0.2" };
+    const b = { ...m("c", 2), algorithmVersion: "voice-analysis-1.1" };
     expect(() => aggregateMeasurements([a, b], context, labels)).toThrow(/mixes algorithm versions/);
   });
 

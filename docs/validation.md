@@ -4,11 +4,21 @@
 
 The unit suite covers:
 
-- quiet-room calibration and voice hysteresis;
-- rejection of unpitched room energy;
-- bounded pause detection;
-- speech initiation latency, voiced-time fraction, pause rate, pitch coverage,
-  pitch center, and normalized pitch variability;
+- two-second quiet-room calibration and 1.5-second natural-speech preflight;
+- `AudioWorklet` buffer reuse, capture epochs, sequence/sample reset, and
+  continuous 20 ms blocks;
+- bounded PCM memory, exact 40 ms/10 ms overlapping windows, discontinuity
+  recovery, rolling block-loss quality, and monotonic acquisition time;
+- F0 from 50–700 Hz, estimator disagreement/octave handling, silence,
+  clipping, DC offset, and 44.1/48 kHz analysis;
+- CPPS, HNR, jitter, shimmer, formants, pauses, speech runs, syllabic nuclei,
+  DDK timing, onset latency, and metric-specific abstention;
+- every audio-quality boundary, including browser-processing behavior that
+  preserves timing while withholding fine acoustic values;
+- all five voice task gates, retries, assistance, natural pauses, final
+  accepted-interval clipping, repeated-vowel uncertainty, and discard;
+- WavLM request/response validation, provenance-only handling, cancellation,
+  stale-result rejection, and model-failure isolation;
 - duration- and coverage-based facial calibration;
 - face visibility, size, margins, pose, illumination, clipping, sharpness,
   cadence, skipped-frame fraction, and frame-gap quality boundaries;
@@ -37,6 +47,9 @@ The unit suite covers:
 The browser suite covers:
 
 - local facial analysis readiness;
+- protocol selection and microphone-only permission constraints;
+- proof that Voice Foundation neither requests a camera nor starts the visual
+  worker;
 - a blank-bitmap MediaPipe worker initialization smoke test;
 - presentation-copy cleanup;
 - system check and guided capture;
@@ -50,8 +63,12 @@ The browser suite covers:
 - mesh/video CSS alignment, worker-restart canvas reattachment, and mesh
   hiding on intentional withholding, camera unavailability, and a hidden tab;
 - automatic results reveal while synthesis is still pending;
-- an eleven-measurement quantitative encounter profile;
-- two primary current-encounter statements;
+- a six-measurement facial profile and task-specific voice profile;
+- one outcome for the modality participating in the selected protocol;
+- successful signal-gated completion of all Voice Foundation tasks;
+- no voice advancement from time alone, corrective guidance, retry, and
+  cancellation without a report;
+- optional representation availability and unavailable fallback;
 - primary-claim and quantitative-profile trace opening;
 - summary approval and dismissal;
 - synthesis failure with evidence-only review;
@@ -68,14 +85,15 @@ pnpm test:unit
 pnpm typecheck
 pnpm build
 pnpm test:browser
+pnpm test:python
 pnpm demo:smoke
 pnpm test
 ```
 
 ## Manual acceptance
 
-Run five consecutive Chrome rehearsals on the presentation MacBook. Each run
-must:
+Run five consecutive Facial Foundation Chrome rehearsals on the presentation
+MacBook. Each run must:
 
 1. complete the system check;
 2. request 1280×720 at an ideal 30 fps;
@@ -92,15 +110,39 @@ must:
 9. clear the mesh immediately during turn-away, hidden/muted/ended capture,
    worker outage, epoch reset, consent withdrawal, and media release;
 10. recognize same-eye closure followed by reopening;
-11. produce one honest outcome for speech and one for facial analysis;
+11. produce one honest facial outcome and six facial measurements;
 12. visibly withhold only facial analysis during intentional turn-away;
 13. visibly restore facial analysis for the prompted tasks;
-14. make two grounded outcomes available immediately and complete the
+14. make the grounded outcome available immediately and complete the
     clinician-readable narrative within 20 seconds under the demo network
     conditions;
-15. open both traces;
+15. open the primary and quantitative traces;
 16. record a human review decision and establish Visit 1 after approval;
 17. release camera and microphone access;
 18. cancel a separate run without creating a report; and
 19. serialize no media, landmarks, mesh connections, overlay pixels,
     blendshapes, transformation matrices, or camera identifiers.
+
+Run five consecutive Voice Foundation Chrome rehearsals. Each must:
+
+1. request microphone-only mono audio at an ideal 48 kHz with browser
+   processing disabled and record an actual sample rate of at least 44.1 kHz;
+2. complete quiet calibration and natural-speech preflight;
+3. complete both vowel trials, reading, rapid syllables, and spontaneous
+   response only after their gates succeed;
+4. respond within 250 ms after each criterion becomes satisfied;
+5. preserve monotonic sample time with no unexplained gap, no more than 1%
+   lost blocks, and p95 feature latency no greater than 50 ms;
+6. keep worker memory bounded throughout a 60-second session;
+7. produce correct task-specific measurements and independent abstentions;
+8. complete within approximately 45 seconds of active task performance;
+9. preserve browser DSP reporting when WavLM is unavailable;
+10. when explicitly enabled, return finite correctly shaped WavLM layer
+    summaries without delaying browser measurements;
+11. discard a separate run without creating a report; and
+12. serialize no PCM, waveform, pitch-cycle, FFT/cepstral/MFCC, formant-track,
+    transcript, spectrogram, embedding, voiceprint, or microphone-identifier
+    data.
+
+The required Python tests use the deterministic fake encoder. Real WavLM smoke
+is manual because the checkpoint is intentionally absent from CI.

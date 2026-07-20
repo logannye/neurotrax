@@ -58,7 +58,7 @@ function confoundReasons(
   policy: TrajectoryPolicy
 ): string[] {
   const reasons: string[] = [];
-  if (current.code.startsWith("prototype.speech.")) {
+  if (current.code.startsWith("prototype.voice.")) {
     if (
       current.confounds.kind !== "speech" ||
       prior.confounds.kind !== "speech"
@@ -70,6 +70,18 @@ function confoundReasons(
       policy.speechSnrToleranceDb
     ) {
       reasons.push("speech-snr-out-of-tolerance");
+    }
+    if (
+      current.confounds.sampleRateClass !==
+      prior.confounds.sampleRateClass
+    ) {
+      reasons.push("voice-sample-rate-class-mismatch");
+    }
+    if (
+      JSON.stringify(current.confounds.browserProcessing) !==
+      JSON.stringify(prior.confounds.browserProcessing)
+    ) {
+      reasons.push("voice-browser-processing-mismatch");
     }
   }
   if (current.code.startsWith("prototype.face.")) {
@@ -134,6 +146,12 @@ function compatibleAggregate(
     return { aggregate: null, reasons: ["algorithm-version-mismatch"] };
   }
   if (
+    current.code.startsWith("prototype.voice.") &&
+    sameCode.processorRef !== current.processorRef
+  ) {
+    return { aggregate: null, reasons: ["voice-processor-mismatch"] };
+  }
+  if (
     current.code.startsWith("prototype.face.") &&
     sameCode.processorRef !== current.processorRef
   ) {
@@ -141,6 +159,12 @@ function compatibleAggregate(
   }
   const reasons = confoundReasons(current, sameCode, policy);
   return { aggregate: reasons.length === 0 ? sameCode : null, reasons };
+}
+
+function aggregateKey(
+  aggregate: Pick<BiomarkerAggregate, "code" | "contextKind">
+): string {
+  return `${aggregate.code}\u0000${aggregate.contextKind}`;
 }
 
 export function compareTrajectory(
@@ -169,7 +193,7 @@ export function compareTrajectory(
   };
 
   const decisions: CompatibilityDecision[] = [];
-  const compatibleByCode = new Map<
+  const compatibleByCodeAndContext = new Map<
     string,
     Array<{ record: TrajectoryHistoryRecord; aggregate: BiomarkerAggregate }>
   >();
@@ -191,9 +215,11 @@ export function compareTrajectory(
         const result = compatibleAggregate(aggregate, record, policy);
         if (result.aggregate) {
           matchedCount += 1;
-          const bucket = compatibleByCode.get(aggregate.code) ?? [];
+          const key = aggregateKey(aggregate);
+          const bucket =
+            compatibleByCodeAndContext.get(key) ?? [];
           bucket.push({ record, aggregate: result.aggregate });
-          compatibleByCode.set(aggregate.code, bucket);
+          compatibleByCodeAndContext.set(key, bucket);
         } else {
           result.reasons.forEach((reason) => recordReasons.add(reason));
         }
@@ -236,7 +262,10 @@ export function compareTrajectory(
 
   const biomarkers: BiomarkerComparison[] = [];
   for (const currentAggregate of current.aggregates) {
-    const matches = compatibleByCode.get(currentAggregate.code) ?? [];
+    const matches =
+      compatibleByCodeAndContext.get(
+        aggregateKey(currentAggregate)
+      ) ?? [];
     if (matches.length === 0) continue;
     const values = matches.map((match) => match.aggregate.value);
     const priorMedian = median(values);

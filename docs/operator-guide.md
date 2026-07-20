@@ -41,7 +41,7 @@ Automated browser tests set `PHENOMETRIC_SKIP_SYNTHESIS_WARMUP=1` because their
 synthesis endpoint is intercepted with a deterministic response. Do not set
 that variable for a live presentation.
 
-## Presentation rehearsal
+## Facial Foundation rehearsal
 
 1. Use Chrome on `http://127.0.0.1:4173`.
 2. Close other camera or microphone applications.
@@ -61,10 +61,38 @@ that variable for a live presentation.
     that camera and microphone access is released.
 14. Confirm that the results workspace opens automatically. Grounded evidence
    appears immediately while the short narrative is prepared in place.
-15. Confirm that both summary statements open a complete grounding trace and
-    approval establishes Visit 1.
+15. Confirm that the primary statement and quantitative items open complete
+    grounding traces and approval establishes Visit 1.
 16. In a separate run, choose **End assessment**, dismiss the confirmation once,
     then accept it and confirm that devices release without creating a report.
+
+## Voice Foundation rehearsal
+
+1. Select **Voice Foundation** before consent and confirm that the camera stays
+   off.
+2. Remain quiet for two seconds, then provide 1.5 seconds of natural speech.
+3. Complete two comfortable sustained “ah” trials.
+4. Read the displayed sentence.
+5. Repeat “pa-ta-ka” until the criterion completes.
+6. Describe a familiar routine; brief pauses are allowed.
+7. Confirm that level, pitch coverage, SNR, quality, and progress update without
+   exposing a waveform or transcript.
+8. Confirm that the voice-only evidence card appears and that the microphone
+   releases.
+9. Run a separate voice assessment, choose **End assessment**, and confirm that
+   no report is created.
+
+Optional WavLM representations are not required for the demo. To exercise the
+loopback research adapter, start the service as documented in
+[`../services/voice-inference/README.md`](../services/voice-inference/README.md)
+and set:
+
+```bash
+VITE_VOICE_REPRESENTATION_ENDPOINT=http://127.0.0.1:8765/v1/voice/representations
+```
+
+This value is an endpoint, not a secret. The sidecar remains disabled unless
+`PHENOMETRIC_WAVLM_ENABLED=1` is set for the Python process.
 
 Clinical Synthesis uses priority processing, no reasoning pass, and a bounded
 response size. Request timing is written only to the browser operator console
@@ -94,7 +122,15 @@ operator mode in the presentation recording.
 - **Move closer persists:** position the face at least 180×220 pixels in the
   analyzed frame while leaving a visible margin around it.
 - **Speech quality is limited:** reduce background noise if convenient; the
-   assessment will still start when the five-second check ends.
+  voice system check requires continuous usable natural speech.
+- **Fine voice values abstain:** verify actual sample rate, reduce background
+  noise, avoid clipping, and confirm Chrome did not force echo cancellation,
+  noise suppression, or automatic gain control. Timing values may remain.
+- **A voice task does not complete:** follow the criterion-specific prompt.
+  Time alone never advances a task, and reading/phoneme accuracy is not
+  inferred.
+- **WavLM is unavailable:** browser measurements and reporting should continue;
+  the optional representation lane abstains independently.
 - **Turn-away does not complete:** keep speaking and turn farther until the face
   is not visible or pose leaves the measurement range. Camera, worker, tab,
   blur, lighting, cadence, and frame-gap failures do not count as the exercise.
@@ -107,7 +143,7 @@ operator mode in the presentation recording.
 - **A quality interruption occurs:** correct the visible issue and repeat the
   current action. Only the current continuous streak resets.
 
-Operator diagnostics report requested and actual camera settings, analyzed
-cadence, result gaps, processing latency, skipped frames, MediaPipe version,
-delegate, and model digest. They never include camera identifiers, device
-labels, native landmarks, transformation matrices, blendshapes, or media.
+Operator diagnostics report privacy-safe requested and actual capture settings,
+audio loss/gaps/latency, visual cadence/gaps, processor provenance, and model
+digests. They never include device identifiers or labels, media, native visual
+observations, PCM, native acoustic arrays, transcripts, or embeddings.

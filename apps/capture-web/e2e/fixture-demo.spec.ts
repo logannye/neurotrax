@@ -3,7 +3,7 @@ import { expect, test, type Page } from "@playwright/test";
 const boundary =
   "For clinician review. This summary does not provide a diagnosis or treatment recommendation.";
 const forbiddenSerializedData =
-  /deviceId|deviceLabel|faceLandmarks|landmarks|meshConnections|overlayPixels|offscreenCanvas|screenshot|blendshapes|transformationMatrix|bitmap|mediaStream/i;
+  /"(?:deviceId|deviceLabel|groupId|faceLandmarks|landmarks|meshConnections|overlayPixels|offscreenCanvas|screenshot|blendshapes|transformationMatrix|bitmap|mediaStream|pcm|waveform|pitchCycles|fftBins|cepstra|mfcc|formantCandidates|formantTracks|transcript|spectrogram|embeddings|voiceprint)"\s*:/i;
 
 async function expectCleanPresentationCopy(page: Page): Promise<void> {
   const body = (await page.locator("body").innerText()).toLowerCase();
@@ -48,14 +48,32 @@ async function installReadinessMock(page: Page): Promise<void> {
 
 async function installEvidenceMock(
   page: Page,
-  onEvidenceRequest?: () => void
+  onEvidenceRequest?: (payload: {
+    containsPHI: boolean;
+    rawMediaRetained: boolean;
+    rawAudioRetained: boolean;
+    nativeAudioObservationsRetained: boolean;
+    transcriptRetained: boolean;
+    voiceEmbeddingsRetained: boolean;
+    nativeVisualObservationsRetained: boolean;
+    outcomes: Array<{
+      outcomeId: string;
+      label: string;
+      modality: "speech" | "face";
+      status: "measured" | "withheld";
+      statement: string;
+    }>;
+  }) => void
 ): Promise<void> {
   await installReadinessMock(page);
   await page.route("**/api/evidence-card", async (route) => {
-    onEvidenceRequest?.();
     const payload = route.request().postDataJSON() as {
       containsPHI: boolean;
       rawMediaRetained: boolean;
+      rawAudioRetained: boolean;
+      nativeAudioObservationsRetained: boolean;
+      transcriptRetained: boolean;
+      voiceEmbeddingsRetained: boolean;
       nativeVisualObservationsRetained: boolean;
       outcomes: Array<{
         outcomeId: string;
@@ -65,14 +83,19 @@ async function installEvidenceMock(
         statement: string;
       }>;
     };
+    onEvidenceRequest?.(payload);
     expect(payload.containsPHI).toBe(false);
     expect(payload.rawMediaRetained).toBe(false);
+    expect(payload.rawAudioRetained).toBe(false);
+    expect(payload.nativeAudioObservationsRetained).toBe(false);
+    expect(payload.transcriptRetained).toBe(false);
+    expect(payload.voiceEmbeddingsRetained).toBe(false);
     expect(payload.nativeVisualObservationsRetained).toBe(false);
     expect(JSON.stringify(payload)).not.toMatch(forbiddenSerializedData);
-    expect(payload.outcomes).toHaveLength(2);
+    expect(payload.outcomes).toHaveLength(1);
     expect(
       new Set(payload.outcomes.map((outcome) => outcome.modality)).size
-    ).toBe(2);
+    ).toBe(1);
     const reportable = payload.outcomes.filter(
       (outcome) => outcome.status === "measured"
     );
@@ -81,11 +104,9 @@ async function installEvidenceMock(
       contentType: "application/json",
       body: JSON.stringify({
         draft: {
-          headline: "Two encounter signals are ready for review",
+          headline: "One encounter signal is ready for review",
           summary:
-            reportable.length === 2
-              ? "Pitch variability and bilateral facial task measurements were captured during technically usable portions of the encounter."
-              : `${reportable[0]?.label ?? "No audiovisual metric"} was included in the encounter report.`,
+            `${reportable[0]?.label ?? "No measured metric"} was included in the encounter report.`,
           claims: reportable.map((outcome) => ({
             claimId: outcome.outcomeId,
             modality: outcome.modality,
@@ -142,7 +163,7 @@ async function runGuidedCapture(
     timeout: 10_000
   });
   await expect(page.locator("#evidence-card")).toBeVisible();
-  await expect(page.locator(".evidence-claim")).toHaveCount(2);
+  await expect(page.locator(".evidence-claim")).toHaveCount(1);
   await expect(page.locator("#evidence-status-chip")).toContainText(
     "grounded"
   );
@@ -235,6 +256,182 @@ test("keeps the opening focused and reports device privacy accurately", async ({
   await expect(page.locator("#speech-signal-caption")).toHaveText(
     "Analysis prepared"
   );
+});
+
+test("voice protocol requests microphone only with unprocessed 48 kHz audio", async ({
+  page
+}) => {
+  await installReadinessMock(page);
+  const visualWorkerRequests: string[] = [];
+  page.on("request", (request) => {
+    if (
+      /\/face-worker\.ts(?:\?|$)/.test(request.url()) ||
+      request.url().includes("face_landmarker.task")
+    ) {
+      visualWorkerRequests.push(request.url());
+    }
+  });
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, "mediaDevices", {
+      configurable: true,
+      value: {
+        getUserMedia: (constraints: MediaStreamConstraints) => {
+          (
+            window as typeof window & {
+              __voiceMediaConstraints?: MediaStreamConstraints;
+            }
+          ).__voiceMediaConstraints = constraints;
+          return new Promise<MediaStream>(() => undefined);
+        }
+      }
+    });
+  });
+  await page.goto("/?protocol=voice");
+  await expect(page.locator("body")).toHaveAttribute(
+    "data-selected-protocol",
+    "voice-foundation.v1"
+  );
+  await expect(page.locator("#camera-preview")).toBeHidden();
+  await page.locator("#consent-checkbox").check();
+  await page.locator("#start-button").click();
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          (
+            window as typeof window & {
+              __voiceMediaConstraints?: MediaStreamConstraints;
+            }
+          ).__voiceMediaConstraints
+      )
+    )
+    .toEqual({
+      video: false,
+      audio: {
+        channelCount: { ideal: 1 },
+        sampleRate: { ideal: 48_000 },
+        echoCancellation: false,
+        noiseSuppression: false,
+        autoGainControl: false
+      }
+    });
+  expect(visualWorkerRequests).toEqual([]);
+});
+
+test("completes the microphone-only voice battery and keeps WavLM summaries transient", async ({
+  page
+}) => {
+  let evidencePayload:
+    | Parameters<NonNullable<Parameters<typeof installEvidenceMock>[1]>>[0]
+    | undefined;
+  await installEvidenceMock(page, (payload) => {
+    evidencePayload = payload;
+  });
+  await page.goto(
+    "/?testCapture=1&fast=1&protocol=voice&representation=available"
+  );
+  await expect(page.locator("#face-lane-state")).toBeHidden();
+  await page.locator("#consent-checkbox").check();
+  await page.locator("#start-button").click();
+  await expect(page.locator("#start-button")).toHaveText(
+    "Begin assessment"
+  );
+  await page.locator("#start-button").click();
+  await expect(
+    page.locator('[data-milestone="eye-closure"]')
+  ).toHaveClass(/is-complete/, { timeout: 10_000 });
+  await expect(page.locator("#results-panel")).toBeVisible();
+  await expect(page.locator("#evidence-card")).toBeVisible();
+  await expect(page.locator("body")).toHaveAttribute(
+    "data-voice-representation",
+    "available"
+  );
+  expect(evidencePayload?.outcomes).toHaveLength(1);
+  expect(evidencePayload?.outcomes[0].modality).toBe("speech");
+  expect(evidencePayload?.outcomes[0].status).toBe("measured");
+  expect(JSON.stringify(evidencePayload)).not.toMatch(
+    forbiddenSerializedData
+  );
+  const measurementCodes = await page
+    .locator(".aggregate-card")
+    .evaluateAll((cards) => [
+      ...new Set(
+        cards
+          .map((card) => (card as HTMLElement).dataset.measurementCode)
+          .filter((code): code is string => Boolean(code))
+      )
+    ]);
+  expect(measurementCodes).toEqual(
+    expect.arrayContaining([
+      "prototype.voice.f0.median",
+      "prototype.voice.cpps",
+      "prototype.voice.jitter.local",
+      "prototype.voice.formant.f1_median",
+      "prototype.voice.ddk.rate",
+      "prototype.voice.ddk.interval_variability",
+      "prototype.voice.onset_latency"
+    ])
+  );
+  expect(measurementCodes.some((code) => code.startsWith("prototype.speech.")))
+    .toBe(false);
+});
+
+test("voice representation unavailability never blocks browser measurements", async ({
+  page
+}) => {
+  await installEvidenceMock(page);
+  await page.goto(
+    "/?testCapture=1&fast=1&protocol=voice&representation=unavailable"
+  );
+  await page.locator("#consent-checkbox").check();
+  await page.locator("#start-button").click();
+  await page.locator("#start-button").click();
+  await expect(page.locator("#results-panel")).toBeVisible({
+    timeout: 10_000
+  });
+  await expect(page.locator("body")).toHaveAttribute(
+    "data-voice-representation",
+    "abstained"
+  );
+  await expect(page.locator("#evidence-card")).toBeVisible();
+  await expect(
+    page.locator(
+      '[data-measurement-code="prototype.voice.ddk.interval_variability"]'
+    ).first()
+  ).toBeVisible();
+});
+
+test("unfinished voice exercise shows help, never advances, and discards without a report", async ({
+  page
+}) => {
+  let evidenceRequestCount = 0;
+  await installEvidenceMock(page, () => {
+    evidenceRequestCount += 1;
+  });
+  await page.goto(
+    "/?testCapture=1&fast=1&protocol=voice&scenario=unfinished-sustained-vowel-1"
+  );
+  await page.locator("#consent-checkbox").check();
+  await page.locator("#start-button").click();
+  await page.locator("#start-button").click();
+  await expect(page.locator("#guidance-step")).toHaveText(
+    "Voice task 1 of 5"
+  );
+  await expect(page.locator("#guidance-detail")).toContainText(
+    /steady voiced signal|sustain/i,
+    { timeout: 5_000 }
+  );
+  await expect(
+    page.locator('[data-milestone="speech"]')
+  ).not.toHaveClass(/is-complete/);
+  await expect(page.locator("#results-panel")).toBeHidden();
+  page.once("dialog", (dialog) => dialog.accept());
+  await page.locator("#stop-button").click();
+  await expect(page.locator("body")).toHaveAttribute(
+    "data-capture-state",
+    "idle"
+  );
+  expect(evidenceRequestCount).toBe(0);
 });
 
 test("consent withdrawal stops a media request that resolves late", async ({
@@ -421,7 +618,7 @@ test("consent withdrawal stops tracks while video playback is still pending", as
   });
 });
 
-test("runs guided capture, traces both claims, and approves the summary", async ({
+test("runs guided facial capture, traces its claim, and approves the summary", async ({
   page
 }) => {
   await page.addInitScript(() => {
@@ -436,7 +633,7 @@ test("runs guided capture, traces both claims, and approves the summary", async 
   });
   await runGuidedCapture(page);
   await expect(page.locator("#result-summary")).toContainText(
-    "11 encounter biomarkers"
+    "6 encounter biomarkers"
   );
   await expect(page.getByRole("heading", {
     name: "Clinician encounter summary"
@@ -483,11 +680,9 @@ test("runs guided capture, traces both claims, and approves the summary", async 
   await expect(page.locator("#trace-content")).not.toContainText("#1");
   await page.locator("#trace-close-button").click();
   await page.locator(".report-metric").first().click();
-  await expect(page.locator("#trace-title")).toHaveText(
-    "Speech initiation latency"
-  );
+  await expect(page.locator("#trace-title")).toContainText(/smile/i);
   await expect(page.locator("#trace-content")).toContainText(
-    "speech timing + fluency"
+    "Facial Analysis"
   );
   await expect(page.locator("#trace-content")).not.toContainText(
     "speech-acoustic"
@@ -557,9 +752,9 @@ test("prefetches synthesis and exposes measured evidence during service latency"
       contentType: "application/json",
       body: JSON.stringify({
         draft: {
-          headline: "Two encounter signals are ready for review",
+          headline: "One encounter signal is ready for review",
           summary:
-            "Pitch variability and bilateral facial task measurements were captured during technically usable portions of the encounter.",
+            "A bilateral facial task measurement was captured during technically usable portions of the encounter.",
           claims: payload.outcomes.map((outcome) => ({
             claimId: outcome.outcomeId,
             modality: outcome.modality,
@@ -599,25 +794,25 @@ test("prefetches synthesis and exposes measured evidence during service latency"
     "data-event-id",
     /coordinator\.decision\.recorded/
   );
-  await expect(page.locator(".aggregate-card")).toHaveCount(11);
+  await expect(page.locator(".aggregate-card")).toHaveCount(6);
   await expect(page.locator("#evidence-loading")).toBeVisible();
   await expect(page.locator("#evidence-loading")).toHaveAttribute(
     "data-event-id",
     /evidence-card\.requested/
   );
-  await expect(page.locator(".skeleton-claim")).toHaveCount(2);
+  await expect(page.locator(".skeleton-claim")).toHaveCount(1);
   await expect(page.locator("#evidence-card")).toBeHidden();
   await expect(page.locator("#evidence-card")).toBeVisible({
     timeout: 5_000
   });
   await expect(page.locator("#evidence-headline")).toHaveText(
-    "Two encounter signals are ready for review"
+    "One encounter signal is ready for review"
   );
   await expect(page.locator("#evidence-card")).toHaveAttribute(
     "data-event-id",
     /evidence-card\.drafted/
   );
-  await expect(page.locator(".report-metric")).toHaveCount(11);
+  await expect(page.locator(".report-metric")).toHaveCount(6);
 });
 
 test("shows facial analysis pausing while speech continues", async ({ page }) => {
@@ -862,7 +1057,7 @@ test("a processor change after completion rewinds to neutral before finalization
   await expect(page.locator("#results-panel")).toBeVisible({
     timeout: 10_000
   });
-  await expect(page.locator(".aggregate-card")).toHaveCount(11);
+  await expect(page.locator(".aggregate-card")).toHaveCount(6);
   expect(evidenceRequestCount).toBe(1);
 });
 
@@ -871,7 +1066,7 @@ test("labels, mirrors, and restores the worker-only mesh across lifecycle bounda
 }) => {
   await installEvidenceMock(page);
   await page.goto(
-    "/?testCapture=1&fast=1&scenario=technical-turn-away"
+    "/?testCapture=1&fast=1&scenario=unfinished-smile"
   );
   await page.locator("#consent-checkbox").check();
   await page.locator("#start-button").click();
@@ -905,23 +1100,6 @@ test("labels, mirrors, and restores the worker-only mesh across lifecycle bounda
   expect(transforms.box).toBe(transforms.preview);
   expect(transforms.meshLayer).toBeGreaterThan(transforms.boxLayer);
 
-  await expect
-    .poll(() =>
-      page.evaluate(() => ({
-        face: document.querySelector("#face-lane-state")?.textContent,
-        meshHidden:
-          (document.querySelector("#mesh-disclosure") as HTMLElement)
-            ?.hidden ?? false
-      }))
-    )
-    .toEqual({ face: "Paused", meshHidden: true });
-
-  await page.goto(
-    "/?testCapture=1&fast=1&scenario=unfinished-smile"
-  );
-  await page.locator("#consent-checkbox").check();
-  await page.locator("#start-button").click();
-  await page.locator("#start-button").click();
   await expect(page.locator("#guidance-step")).toHaveText("Step 4 of 5");
   await expect(page.locator("#face-lane-state")).toHaveText("Connected");
   await expect(page.locator("#mesh-disclosure")).toBeVisible();

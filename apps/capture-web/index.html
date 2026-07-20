@@ -157,10 +157,36 @@
             </div>
 
             <div class="capture-controls">
+              <fieldset class="protocol-selector" id="protocol-selector">
+                <legend>Choose a foundation protocol</legend>
+                <label>
+                  <input
+                    type="radio"
+                    name="protocol"
+                    value="facial-foundation.v1"
+                    checked
+                  />
+                  <span>
+                    <strong>Facial Foundation</strong>
+                    <small>Camera + microphone · facial task measurements</small>
+                  </span>
+                </label>
+                <label>
+                  <input
+                    type="radio"
+                    name="protocol"
+                    value="voice-foundation.v1"
+                  />
+                  <span>
+                    <strong>Voice Foundation</strong>
+                    <small>Microphone only · acoustic task measurements</small>
+                  </span>
+                </label>
+              </fieldset>
               <label class="consent-control">
                 <input id="consent-checkbox" type="checkbox" />
                 <span>
-                  <strong>I consent to in-session audiovisual analysis</strong>
+                  <strong id="consent-label">I consent to in-session audiovisual analysis</strong>
                   <small>I am using my own non-patient data.</small>
                 </span>
               </label>
@@ -216,10 +242,10 @@
               </article>
               <div class="graph-connector graph-split" aria-hidden="true"></div>
               <div class="parallel-nodes">
-                <article class="agent-node" data-lane="speech-acoustic">
+                <article class="agent-node" data-lane="voice-analysis">
                   <span class="node-icon" aria-hidden="true">S</span>
                   <div>
-                    <strong>Speech Analysis</strong>
+                    <strong id="voice-lane-title">Voice Analysis</strong>
                     <p id="speech-status">Waiting for room calibration.</p>
                   </div>
                   <span class="lane-state" id="speech-state">Waiting</span>

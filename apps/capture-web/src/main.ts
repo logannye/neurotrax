@@ -5,8 +5,9 @@ import {
   createEventFactory,
   evaluateEyeClosureAdherence,
   evaluateSmileAdherence,
+  evaluateVoiceQuality,
   evaluateVisualQuality,
-  type AudioFeatureFrame,
+  type VoiceSignalFrameV1,
   type ConductorSession,
   type FacialKinematicsFrameV1,
   type NeutralFacialBaseline
@@ -18,6 +19,10 @@ import {
 import type {
   AmbientActorId,
   AmbientEventType,
+  AudioCalibration,
+  AudioCaptureSettings,
+  AudioPipelineProvenance,
+  AudioStreamDiagnostics,
   CalibrationQuality,
   CaptureCalibration,
   EncounterObservation,
@@ -32,13 +37,10 @@ import type {
   VisualPipelineProvenance,
   VisualQualityReasonCode,
   VisualTaskContext,
+  VoiceTaskContext,
+  VoiceModelProvenance,
   WorkflowStage
 } from "@phenometric/contracts";
-import {
-  calculateRms,
-  createVoiceActivityTracker,
-  type DerivedAudioFeature
-} from "./audio-features.js";
 import {
   calibrateFaceFrame,
   classifyAudioCalibration,
@@ -71,6 +73,23 @@ import {
   type VisualWorkerFrameMessage,
   type VisualWorkerResponse
 } from "./face-worker-protocol.js";
+import {
+  requestedAudioCaptureSettings,
+  WAVLM_LAYERS,
+  WAVLM_MODEL_ID,
+  WAVLM_REVISION,
+  WAVLM_WEIGHT_SHA256
+} from "./voice-worker-protocol.js";
+import {
+  startVoiceCapturePipeline,
+  type VoiceCapturePipeline
+} from "./voice-capture.js";
+import {
+  createVoiceGuidedController,
+  VOICE_FOUNDATION_POLICY,
+  type GuidedVoicePhase,
+  type VoiceGuidedSnapshot
+} from "./voice-guided-demo.js";
 
 type CaptureState =
   | "idle"
@@ -117,7 +136,10 @@ const guidanceProgressFill =
   element<HTMLSpanElement>("guidance-progress-fill");
 const guidanceProgress =
   element<HTMLDivElement>("guidance-progress");
+const protocolSelector =
+  element<HTMLFieldSetElement>("protocol-selector");
 const consentCheckbox = element<HTMLInputElement>("consent-checkbox");
+const consentLabel = element<HTMLElement>("consent-label");
 const startButton = element<HTMLButtonElement>("start-button");
 const stopButton = element<HTMLButtonElement>("stop-button");
 const resetButton = element<HTMLButtonElement>("reset-button");
@@ -194,6 +216,10 @@ const operatorDiagnostics =
   element<HTMLDetailsElement>("operator-diagnostics");
 const operatorOutput = element<HTMLPreElement>("operator-output");
 
+type FoundationProtocolId =
+  | "facial-foundation.v1"
+  | "voice-foundation.v1";
+
 const query = new URLSearchParams(window.location.search);
 const testCaptureMode =
   import.meta.env.DEV && query.get("testCapture") === "1";
@@ -231,9 +257,14 @@ let lifecycleGeneration = 0;
 let mediaStream: MediaStream | null = null;
 const pendingMediaStreams = new Set<MediaStream>();
 let audioContext: AudioContext | null = null;
-let audioSource: MediaStreamAudioSourceNode | null = null;
-let analyser: AnalyserNode | null = null;
-let sampleBuffer: Float32Array | null = null;
+let voiceCapturePipeline: VoiceCapturePipeline | null = null;
+let audioPipeline: AudioPipelineProvenance | null = null;
+let audioCaptureSettings: AudioCaptureSettings | null = null;
+let audioStreamDiagnostics: AudioStreamDiagnostics | null = null;
+let voiceModel: VoiceModelProvenance | null = null;
+let audioCaptureEpoch = 1;
+let voiceSessionFrameOriginMs = 0;
+let voicePreflightStreakStartedAtMs: number | null = null;
 let sampleInterval: number | null = null;
 let clockInterval: number | null = null;
 let preflightStartedAt = 0;
@@ -242,14 +273,15 @@ let systemCheckTimer: number | null = null;
 let sessionStartedAtPerformance = 0;
 let sessionStartedAtEpoch = 0;
 let quietRmsSamples: number[] = [];
+let quietCalibrationFrameCount = 0;
 let preflightFaceFrames: FacialKinematicsFrameV1[] = [];
 let preflightPitchedFrames = 0;
 let preflightSpeechEnergyFrames = 0;
 let calibration: CaptureCalibration | null = null;
-let audioFrames: AudioFeatureFrame[] = [];
+let audioFrames: VoiceSignalFrameV1[] = [];
 let receivedFaceFrameCount = 0;
 let usableFaceFrameCount = 0;
-let latestAudioFeature: DerivedAudioFeature | null = null;
+let latestAudioFeature: VoiceSignalFrameV1 | null = null;
 let latestAudioFeatureAtMs = Number.NEGATIVE_INFINITY;
 let latestFaceUsable = false;
 let guidedPhaseFaceFrames: FacialKinematicsFrameV1[] = [];
@@ -278,7 +310,7 @@ let readinessChecked = false;
 let conductorSession: ConductorSession | null = null;
 let allEvents: EventEnvelope[] = [];
 let latestObservation: EncounterObservation | null = null;
-let latestOutcomes: [ModalityOutcome, ModalityOutcome] | null = null;
+let latestOutcomes: ModalityOutcome[] | null = null;
 let latestEvidence: EvidenceApiResult | null = null;
 let evidenceReviewReady = false;
 let captureFinalizationScheduled = false;
@@ -287,6 +319,7 @@ let captureVisitId = "";
 let captureParticipantId = "developer-self-demo";
 let lastGuidedTransitionId = 0;
 let lastAssistancePhase: GuidedPhase | null = null;
+let lastVoiceAssistancePhase: GuidedVoicePhase | null = null;
 let lastFaceQuality: "unknown" | "measurable" | "withheld" = "unknown";
 let faceWindowOpen = false;
 let packetTimer: number | null = null;
@@ -294,8 +327,15 @@ let cameraCalloutTimer: number | null = null;
 let traceCloseTimer: number | null = null;
 let resetCaptureOperation: Promise<void> | null = null;
 let testProcessorChangeInjected = false;
-const voiceTracker = createVoiceActivityTracker();
+let selectedProtocolId: FoundationProtocolId =
+  "facial-foundation.v1";
 const guidedDemo = createGuidedDemoController();
+const voiceGuidedDemo = createVoiceGuidedController();
+const voiceRepresentationEndpoint =
+  import.meta.env.VITE_VOICE_REPRESENTATION_ENDPOINT?.trim() ?? "";
+const testRepresentationMode = testCaptureMode
+  ? query.get("representation")
+  : null;
 const visualLaneGuard = new VisualLaneGuard();
 const visualResultAcceptanceGuard =
   new VisualResultAcceptanceGuard();
@@ -330,7 +370,15 @@ function createFaceWorker(): Worker {
   });
 }
 
-let faceWorker = createFaceWorker();
+let faceWorker: Worker | null = null;
+
+function ensureFaceWorker(): Worker {
+  if (faceWorker) return faceWorker;
+  faceWorker = createFaceWorker();
+  bindFaceWorker(faceWorker);
+  attachLandmarkOverlay(faceWorker);
+  return faceWorker;
+}
 
 function replaceLandmarkOverlayCanvas(): void {
   const replacement = document.createElement("canvas");
@@ -384,7 +432,7 @@ function clearLandmarkOverlay(): void {
   meshDisclosure.hidden = true;
   if (landmarkOverlayTransferred) {
     try {
-      faceWorker.postMessage(
+      faceWorker?.postMessage(
         createVisualWorkerClearOverlayMessage(visualCaptureEpoch)
       );
     } catch {
@@ -482,7 +530,7 @@ function metricCategory(code: string): string {
   ) {
     return "Speech timing + fluency";
   }
-  if (code.startsWith("prototype.speech.")) {
+  if (code.startsWith("prototype.voice.")) {
     return "Voice modulation";
   }
   return "Facial motor function";
@@ -490,11 +538,24 @@ function metricCategory(code: string): string {
 
 function biomarkerOrder(code: string): number {
   const order = [
-    "prototype.speech.onset_latency",
-    "prototype.speech.voiced_time_fraction",
-    "prototype.speech.pause_rate",
-    "prototype.speech.pitch_center",
-    "prototype.speech.pitch_variability",
+    "prototype.voice.cpps",
+    "prototype.voice.f0.median",
+    "prototype.voice.f0.variability",
+    "prototype.voice.hnr",
+    "prototype.voice.jitter.local",
+    "prototype.voice.shimmer.local",
+    "prototype.voice.formant.f1_median",
+    "prototype.voice.formant.f2_median",
+    "prototype.voice.voiced_fraction",
+    "prototype.voice.pause_rate",
+    "prototype.voice.pause_duration.median",
+    "prototype.voice.speech_run_duration.median",
+    "prototype.voice.syllabic_rate_estimate",
+    "prototype.voice.ddk.rate",
+    "prototype.voice.ddk.interval_variability",
+    "prototype.voice.onset_latency",
+    "prototype.voice.intensity.variability",
+    "prototype.voice.phonation_break_fraction",
     "prototype.face.smile_excursion.left",
     "prototype.face.smile_excursion.right",
     "prototype.face.smile_excursion.asymmetry",
@@ -603,6 +664,53 @@ function refreshStartAvailability(): void {
     startButton.textContent = "Begin assessment";
     startButton.disabled = false;
   }
+}
+
+function setSelectedProtocol(protocolId: FoundationProtocolId): void {
+  if (state !== "idle") return;
+  selectedProtocolId = protocolId;
+  document.body.dataset.selectedProtocol = protocolId;
+  const voiceOnly = protocolId === "voice-foundation.v1";
+  consentLabel.textContent = voiceOnly
+    ? "I consent to in-session microphone analysis"
+    : "I consent to in-session audiovisual analysis";
+  captureHint.textContent = voiceOnly
+    ? "The system check calibrates room noise, microphone quality, and natural speech."
+    : "The system check verifies framing, room conditions, and speech.";
+  cameraEmpty.querySelector("strong")!.textContent = voiceOnly
+    ? "Ready for microphone check"
+    : "Ready for system check";
+  cameraEmpty.querySelector("span:last-child")!.textContent =
+    "Confirm consent to begin.";
+  const labels = voiceOnly
+    ? [
+        ["speech", "Vowel trial 1"],
+        ["withheld", "Vowel trial 2"],
+        ["neutral", "Standardized reading"],
+        ["smile", "Rapid syllables"],
+        ["eye-closure", "Spontaneous response"]
+      ]
+    : [
+        ["speech", "Signals established"],
+        ["withheld", "Facial branch paused"],
+        ["neutral", "Neutral baseline"],
+        ["smile", "Smile measured"],
+        ["eye-closure", "Eye closure measured"]
+      ];
+  for (const [key, label] of labels) {
+    const item = document.querySelector<HTMLElement>(
+      `[data-milestone="${key}"]`
+    );
+    const strong = item?.querySelector("strong");
+    if (strong) strong.textContent = label;
+  }
+  faceState.textContent = voiceOnly ? "Not requested" : "Waiting";
+  faceSignalCaption.textContent = voiceOnly
+    ? "Camera remains off"
+    : "Analysis preparing";
+  privacyStatus.textContent = voiceOnly
+    ? "Camera off · microphone not yet requested"
+    : "Camera and microphone are off.";
 }
 
 function updateState(nextState: CaptureState, detail?: string): void {
@@ -748,6 +856,179 @@ function updateMilestones(snapshot: GuidedDemoSnapshot): void {
   }
 }
 
+const VOICE_PHASES: Exclude<GuidedVoicePhase, "complete">[] = [
+  "sustained-vowel-1",
+  "sustained-vowel-2",
+  "standardized-reading",
+  "rapid-syllables",
+  "spontaneous-response"
+];
+
+function updateVoiceMilestones(snapshot: VoiceGuidedSnapshot): void {
+  const currentIndex =
+    snapshot.phase === "complete"
+      ? VOICE_PHASES.length
+      : VOICE_PHASES.indexOf(snapshot.phase);
+  ["speech", "withheld", "neutral", "smile", "eye-closure"].forEach(
+    (name, index) =>
+      milestone(name)?.classList.toggle(
+        "is-complete",
+        index < currentIndex || snapshot.phase === "complete"
+      )
+  );
+  const progressPercent = Math.round(snapshot.progress.fraction * 100);
+  guidanceProgressFill.style.width = `${progressPercent}%`;
+  guidanceProgress.setAttribute(
+    "aria-valuenow",
+    progressPercent.toString()
+  );
+  if (snapshot.phase === "sustained-vowel-1") {
+    guidanceStep.textContent = "Voice task 1 of 5";
+    guidanceTitle.textContent = "Sustain “ah” · trial 1";
+    guidanceDetail.textContent =
+      snapshot.assistanceText ??
+      "Take a comfortable breath, then sustain “ah” steadily for three seconds.";
+  } else if (snapshot.phase === "sustained-vowel-2") {
+    guidanceStep.textContent = "Voice task 2 of 5";
+    guidanceTitle.textContent = "Sustain “ah” · trial 2";
+    guidanceDetail.textContent =
+      snapshot.assistanceText ??
+      "Repeat the same comfortable sustained “ah” for a second trial.";
+  } else if (snapshot.phase === "standardized-reading") {
+    guidanceStep.textContent = "Voice task 3 of 5";
+    guidanceTitle.textContent = "Read the sentence";
+    guidanceDetail.textContent =
+      snapshot.assistanceText ??
+      "“Today I prepared a warm drink, checked the weather, and planned my afternoon.”";
+  } else if (snapshot.phase === "rapid-syllables") {
+    guidanceStep.textContent = "Voice task 4 of 5";
+    guidanceTitle.textContent = "Repeat “pa-ta-ka”";
+    guidanceDetail.textContent =
+      snapshot.assistanceText ??
+      "Repeat “pa-ta-ka” clearly and continuously until the signal is confirmed.";
+  } else if (snapshot.phase === "spontaneous-response") {
+    guidanceStep.textContent = "Voice task 5 of 5";
+    guidanceTitle.textContent = "Describe a familiar routine";
+    guidanceDetail.textContent =
+      snapshot.assistanceText ??
+      "Describe a familiar daily routine in your natural voice. Brief pauses are allowed.";
+  } else {
+    guidanceStep.textContent = "Capture complete";
+    guidanceTitle.textContent = "Preparing encounter summary";
+    guidanceDetail.textContent =
+      "The microphone is being released and the voice measurements are being summarized.";
+  }
+  if (
+    snapshot.needsAssistance &&
+    snapshot.phase !== "complete" &&
+    lastVoiceAssistancePhase !== snapshot.phase
+  ) {
+    lastVoiceAssistancePhase = snapshot.phase;
+    emitWorkflowEvent(
+      "capture-conductor",
+      "coordinator.decision.recorded",
+      "ambient-capture",
+      "Provided criterion-specific voice-task guidance; the task remains open.",
+      {
+        phase: snapshot.phase,
+        decision: "assist-without-timeout",
+        skipAvailable: false
+      }
+    );
+  }
+  if (
+    snapshot.canComplete &&
+    state === "capturing" &&
+    !captureFinalizationScheduled
+  ) {
+    captureFinalizationScheduled = true;
+    queueMicrotask(() => void finalizeCapture());
+  }
+}
+
+function observeGuidedVoiceFrame(frame: VoiceSignalFrameV1): void {
+  const prior = voiceGuidedDemo.snapshot(frame.tMs);
+  if (
+    prior.phase === "complete" ||
+    frame.taskContext !== prior.phase
+  ) {
+    return;
+  }
+  const technicalReasons = frame.qualityReasons.filter(
+    (reason) =>
+      ![
+        "signal-too-quiet",
+        "snr-below-minimum",
+        "audio-processing-enabled"
+      ].includes(reason)
+  );
+  const assessment = evaluateVoiceQuality(frame);
+  const snapshot = voiceGuidedDemo.observe({
+    tMs: frame.tMs,
+    voiced: frame.voiced,
+    periodicityReliable:
+      frame.f0Hz !== null &&
+      frame.f0Confidence >= 0.55 &&
+      frame.estimatorAgreement >= 0.7,
+    syllabicNucleus: frame.syllabicNucleus,
+    qualityUsable: assessment.generalMeasurementUsable,
+    quietPauseUsable: technicalReasons.length === 0,
+    processorRef: frame.processorRef
+  });
+  if (
+    snapshot.transitionId > prior.transitionId &&
+    snapshot.lastCompletedPhase
+  ) {
+    const interval = snapshot.acceptedEvidenceIntervals.at(-1);
+    emitWorkflowEvent(
+      "capture-conductor",
+      "demo.phase.completed",
+      "ambient-capture",
+      `Confirmed ${snapshot.lastCompletedPhase} from its final qualifying voice interval.`,
+      {
+        phase: snapshot.lastCompletedPhase,
+        acceptedEvidenceInterval: interval,
+        advancement: "signal-gated"
+      },
+      interval ? [`voice:${interval.startMs}-${interval.endMs}`] : []
+    );
+    if (interval) {
+      if (testRepresentationMode === "available") {
+        voiceModel = {
+          processorType: "speech-representation",
+          processorRef: `wavlm-large:${WAVLM_REVISION}`,
+          modelId: WAVLM_MODEL_ID,
+          revision: WAVLM_REVISION,
+          weightSha256: WAVLM_WEIGHT_SHA256,
+          requestedLayers: WAVLM_LAYERS,
+          runtime: "fake-deterministic-encoder",
+          device: "cpu"
+        };
+        document.body.dataset.voiceRepresentation = "available";
+      } else if (testRepresentationMode === "unavailable") {
+        document.body.dataset.voiceRepresentation = "abstained";
+      } else if (voiceRepresentationEndpoint) {
+        voiceCapturePipeline?.requestRepresentation(
+          voiceRepresentationEndpoint,
+          interval
+        );
+      }
+    }
+    lastVoiceAssistancePhase = null;
+    if (snapshot.phase !== "complete") {
+      voiceCapturePipeline?.setTask(snapshot.phase);
+      emitWorkflowEvent(
+        "capture-conductor",
+        "demo.phase.started",
+        "ambient-capture",
+        `Started ${snapshot.phase}.`,
+        { phase: snapshot.phase, policyId: VOICE_FOUNDATION_POLICY.id }
+      );
+    }
+  }
+  updateVoiceMilestones(snapshot);
+}
+
 function recordGuidedTransition(snapshot: GuidedDemoSnapshot): void {
   const transition = snapshot.lastTransition;
   if (!transition || transition.id <= lastGuidedTransitionId) return;
@@ -886,7 +1167,8 @@ function observeGuidedFaceFrame(
     tMs: frame.tMs,
     audioAvailable,
     audioVoiced: latestAudioFeature?.voiced ?? false,
-    audioClipped: latestAudioFeature?.clipped ?? false,
+    audioClipped:
+      (latestAudioFeature?.clippedSampleFraction ?? 0) > 0.01,
     visualUsable: usable,
     visualReasonCodes: frame.qualityReasons,
     processorRef: frame.processorRef,
@@ -975,7 +1257,7 @@ function applyEventToLanes(event: EventEnvelope): void {
   }
   if (event.type === "capture.quality.changed") {
     const quality = event.payload.quality;
-    if (event.actor.id === "speech-acoustic") {
+    if (event.actor.id === "voice-analysis") {
       setLane(
         speechState,
         speechStatus,
@@ -1161,7 +1443,7 @@ function appendEvent(event: EventEnvelope): void {
   meta.className = "event-meta";
   meta.textContent = normalized.actor.lane
     .replace("capture-conductor", "Encounter Coordinator")
-    .replace("speech-acoustic", "Speech Analysis")
+    .replace("voice-analysis", "Voice Analysis")
     .replace("facial-expressivity", "Facial Analysis")
     .replace("evidence-card", "Clinical Synthesis")
     .replace("clinician-review", "Clinician Review")
@@ -1254,16 +1536,16 @@ function emitWorkflowEvent(
   return allEvents.at(-1)!;
 }
 
-function updateLiveAudio(feature: DerivedAudioFeature): void {
+function updateLiveAudio(feature: VoiceSignalFrameV1): void {
   const meterPercent = Math.min(100, Math.round(feature.rms * 900));
   micMeterFill.style.width = `${meterPercent}%`;
   micMeter.setAttribute("aria-valuenow", meterPercent.toString());
-  voiceState.textContent = feature.clipped
+  voiceState.textContent = feature.clippedSampleFraction > 0.01
     ? "Too loud"
     : feature.voiced
       ? "Active"
       : "Listening";
-  voiceState.dataset.status = feature.clipped
+  voiceState.dataset.status = feature.clippedSampleFraction > 0.01
     ? "warning"
     : feature.voiced
       ? "active"
@@ -1274,14 +1556,18 @@ function updateLiveAudio(feature: DerivedAudioFeature): void {
       : preflightSpeechEnergyFrames;
   const pitchedFrames =
     state === "capturing"
-      ? audioFrames.filter((frame) => frame.pitchHz !== null).length
+      ? audioFrames.filter((frame) => frame.f0Hz !== null).length
       : preflightPitchedFrames;
-  speechDurationValue.textContent = `${(activeFrames / 10).toFixed(1)} s`;
+  speechDurationValue.textContent = `${(activeFrames / 100).toFixed(1)} s`;
   pitchCoverageValue.textContent = `${
     activeFrames === 0
       ? 0
       : Math.round((pitchedFrames / activeFrames) * 100)
   }%`;
+  speechSignalCaption.textContent =
+    feature.qualityReasons.length === 0
+      ? `SNR ${feature.snrDb.toFixed(1)} dB · ${feature.sampleRateHz / 1000} kHz`
+      : feature.qualityReasons.join(" · ");
 }
 
 function updateLiveFace(
@@ -1355,8 +1641,35 @@ function completeSystemCheck(generation: number): void {
   if (calibration) return;
   if (quietRmsSamples.length === 0) {
     quietRmsSamples = [0.002, 0.002, 0.002];
+    quietCalibrationFrameCount = Math.max(
+      quietCalibrationFrameCount,
+      quietRmsSamples.length
+    );
   }
-  voiceTracker.calibrate(quietRmsSamples);
+  const sortedNoise = [...quietRmsSamples].sort(
+    (left, right) => left - right
+  );
+  const percentile = (fraction: number): number =>
+    sortedNoise[
+      Math.min(
+        sortedNoise.length - 1,
+        Math.floor((sortedNoise.length - 1) * fraction)
+      )
+    ];
+  const medianNoiseRms = Math.max(0.0001, percentile(0.5));
+  const noiseP90Rms = Math.max(medianNoiseRms, percentile(0.9));
+  const audioCalibration: AudioCalibration = {
+    medianNoiseRms,
+    noiseP90Rms,
+    entryThresholdRms: Math.max(0.008, noiseP90Rms * 2.8),
+    exitThresholdRms: Math.max(0.006, noiseP90Rms * 1.6),
+    durationMs: Math.max(0, voiceCalibrationStartedAt - preflightStartedAt),
+    usableFraction:
+      quietRmsSamples.filter((value) => Number.isFinite(value)).length /
+      Math.max(1, quietCalibrationFrameCount),
+    sampleRateHz: audioCaptureSettings?.actual.sampleRate
+  };
+  voiceCapturePipeline?.setNoiseFloor(medianNoiseRms);
   const audioQuality: CalibrationQuality = classifyAudioCalibration(
     preflightPitchedFrames,
     preflightSpeechEnergyFrames
@@ -1369,13 +1682,17 @@ function completeSystemCheck(generation: number): void {
         usableFrameCount: 0
       };
   calibration = createCaptureCalibration(
-    voiceTracker.getCalibration(),
+    audioCalibration,
     audioQuality,
-    faceResult
+    faceResult,
+    selectedProtocolId === "voice-foundation.v1"
+      ? "voice-foundation-v1"
+      : "visual-foundation-v1"
   );
-  window.clearInterval(sampleInterval ?? undefined);
-  clearAllVisualOverlays();
-  stopVisualFramePump();
+  if (selectedProtocolId === "facial-foundation.v1") {
+    clearAllVisualOverlays();
+    stopVisualFramePump();
+  }
   window.clearTimeout(systemCheckTimer ?? undefined);
   sampleInterval = null;
   systemCheckTimer = null;
@@ -1385,10 +1702,16 @@ function completeSystemCheck(generation: number): void {
   guidanceProgressFill.style.width = "100%";
   voiceState.textContent = "Ready";
   voiceState.dataset.status = "quiet";
-  faceState.textContent = "Ready";
+  faceState.textContent =
+    selectedProtocolId === "voice-foundation.v1"
+      ? "Not requested"
+      : "Ready";
   faceState.dataset.status = "quiet";
   speechSignalCaption.textContent = "Analysis prepared";
-  faceSignalCaption.textContent = "Analysis prepared";
+  faceSignalCaption.textContent =
+    selectedProtocolId === "voice-foundation.v1"
+      ? "Camera remains off"
+      : "Analysis prepared";
   setLane(
     conductorState,
     conductorStatus,
@@ -1403,93 +1726,118 @@ function completeSystemCheck(generation: number): void {
     "System check complete.",
     "complete"
   );
-  setLane(
-    faceLaneState,
-    faceStatus,
-    "Ready",
-    "System check complete.",
-    "complete"
-  );
+  if (selectedProtocolId === "facial-foundation.v1") {
+    setLane(
+      faceLaneState,
+      faceStatus,
+      "Ready",
+      "System check complete.",
+      "complete"
+    );
+  }
   updateState(
     "ready",
     "System check complete. Begin the ambient assessment when ready."
   );
 }
 
-function sampleAudioFrame(): void {
+function handleVoiceSignalFrame(frame: VoiceSignalFrameV1): void {
   if (
-    !["calibrating-quiet", "calibrating-voice", "capturing"].includes(state) ||
-    !analyser ||
-    !sampleBuffer ||
-    !audioContext
+    !["calibrating-quiet", "calibrating-voice", "capturing"].includes(
+      state
+    )
   ) {
     return;
   }
-  analyser.getFloatTimeDomainData(sampleBuffer);
-  const now = performance.now();
-  if (state === "calibrating-quiet" || state === "calibrating-voice") {
-    guidanceProgressFill.style.width = `${Math.min(
-      100,
-      Math.round(
-        ((now - preflightStartedAt) /
-          JUDGE_READY_COMPLETION_POLICY.systemCheckMaximumMs) *
-          100
-      )
-    )}%`;
-  }
+  latestAudioFeature = frame;
+  updateLiveAudio(frame);
 
   if (state === "calibrating-quiet") {
-    const rms = calculateRms(sampleBuffer);
-    quietRmsSamples.push(rms);
-    micMeterFill.style.width = `${Math.min(100, Math.round(rms * 900))}%`;
+    quietCalibrationFrameCount += 1;
+    const quietTechnicalReasons = frame.qualityReasons.filter(
+      (reason) =>
+        ![
+          "signal-too-quiet",
+          "snr-below-minimum",
+          "audio-processing-enabled"
+        ].includes(reason)
+    );
+    if (quietTechnicalReasons.length === 0) {
+      quietRmsSamples.push(frame.rms);
+    }
+    const quietRequiredMs =
+      selectedProtocolId === "voice-foundation.v1"
+        ? 2_000
+        : JUDGE_READY_COMPLETION_POLICY.quietCalibrationMs;
+    guidanceProgressFill.style.width = `${Math.min(
+      50,
+      Math.round((frame.tMs / quietRequiredMs) * 50)
+    )}%`;
     if (
-      now - preflightStartedAt >=
-        JUDGE_READY_COMPLETION_POLICY.quietCalibrationMs &&
-      quietRmsSamples.length >= 8
+      frame.tMs >= quietRequiredMs &&
+      quietRmsSamples.length /
+        Math.max(1, quietCalibrationFrameCount) >=
+        0.8
     ) {
-      voiceTracker.calibrate(quietRmsSamples);
-      voiceCalibrationStartedAt = now;
+      const sorted = [...quietRmsSamples].sort(
+        (left, right) => left - right
+      );
+      const noiseFloor =
+        sorted[Math.floor((sorted.length - 1) / 2)] ?? 0.002;
+      voiceCapturePipeline?.setNoiseFloor(noiseFloor);
+      voiceCapturePipeline?.setTask("natural-speech-check");
+      voiceCalibrationStartedAt = performance.now();
+      voicePreflightStreakStartedAtMs = null;
       state = "calibrating-voice";
       document.body.dataset.captureState = state;
       guidanceStep.textContent = "System check · speech";
-      guidanceTitle.textContent = "Speak for a few seconds";
+      guidanceTitle.textContent = "Speak naturally";
       guidanceDetail.textContent =
-        "Use your natural voice while speech quality is verified.";
-      setLane(
-        speechState,
-        speechStatus,
-        "Calibrating",
-        "Verifying speech energy and pitch coverage.",
-        "active"
-      );
+        "Provide 1.5 seconds of clear, unclipped natural speech.";
     }
     return;
   }
 
-  const derived = voiceTracker.derive(sampleBuffer, audioContext.sampleRate);
-  latestAudioFeature = derived;
-  updateLiveAudio(derived);
-
   if (state === "calibrating-voice") {
-    if (derived.rms >= voiceTracker.getCalibration().entryThresholdRms) {
+    const assessment = evaluateVoiceQuality(frame);
+    if (frame.voiced && assessment.generalMeasurementUsable) {
       preflightSpeechEnergyFrames += 1;
+      if (
+        frame.f0Hz !== null &&
+        frame.f0Confidence >= 0.55
+      ) {
+        preflightPitchedFrames += 1;
+      }
+      voicePreflightStreakStartedAtMs ??= frame.tMs;
+    } else {
+      voicePreflightStreakStartedAtMs = null;
     }
-    if (derived.voiced && derived.pitchConfidence >= 0.55) {
-      preflightPitchedFrames += 1;
+    const speechEvidenceMs =
+      voicePreflightStreakStartedAtMs === null
+        ? 0
+        : frame.tMs - voicePreflightStreakStartedAtMs;
+    guidanceProgressFill.style.width = `${Math.min(
+      100,
+      50 + Math.round((speechEvidenceMs / 1_500) * 50)
+    )}%`;
+    if (speechEvidenceMs >= 1_500) {
+      completeSystemCheck(lifecycleGeneration);
     }
-    guidanceDetail.textContent =
-      "Continue speaking naturally while Speech Analysis prepares.";
     return;
   }
 
   if (!conductorSession) return;
-  const frame: AudioFeatureFrame = {
-    tMs: Math.round(now - sessionStartedAtPerformance),
-    ...derived
+  const relativeFrame: VoiceSignalFrameV1 = {
+    ...frame,
+    tMs: Math.max(0, frame.tMs - voiceSessionFrameOriginMs)
   };
-  latestAudioFeatureAtMs = frame.tMs;
-  audioFrames.push(frame);
-  conductorSession.ingestAudio(frame);
+  latestAudioFeature = relativeFrame;
+  latestAudioFeatureAtMs = relativeFrame.tMs;
+  audioFrames.push(relativeFrame);
+  conductorSession.ingestAudio(relativeFrame);
+  if (selectedProtocolId === "voice-foundation.v1") {
+    observeGuidedVoiceFrame(relativeFrame);
+  }
 }
 
 function relativeVisualTimestamp(acquiredAtMs: number): number {
@@ -1586,7 +1934,7 @@ function configureVisualFramePump(): void {
         stream: scheduled.stream,
         calibration: calibration?.face ?? null
       });
-      faceWorker.postMessage(message, [scheduled.frame]);
+      ensureFaceWorker().postMessage(message, [scheduled.frame]);
     }
   });
   visualFramePump = new VideoFramePump<ImageBitmap>({
@@ -1598,7 +1946,7 @@ function configureVisualFramePump(): void {
 }
 
 function initializeVisualWorkerForCurrentEpoch(): void {
-  faceWorker.postMessage(
+  ensureFaceWorker().postMessage(
     visualWorkerMessage({
       type: "initialize",
       captureEpoch: visualCaptureEpoch,
@@ -1626,7 +1974,7 @@ function beginVisualCaptureEpoch(
     initializeVisualWorkerForCurrentEpoch();
     return;
   }
-  faceWorker.postMessage(
+  ensureFaceWorker().postMessage(
     visualWorkerMessage({
       type: "reset",
       captureEpoch: visualCaptureEpoch
@@ -1668,7 +2016,7 @@ function noteVisualWithholding(
 function restartVisualWorker(): void {
   stopVisualFramePump();
   clearAllVisualOverlays();
-  faceWorker.terminate();
+  faceWorker?.terminate();
   visualCaptureEpoch += 1;
   visualResultAcceptanceGuard.reset();
   externalVisualWithholdingActive = false;
@@ -1743,6 +2091,10 @@ function updateClock(): void {
   const now = performance.now();
   const elapsed = now - sessionStartedAtPerformance;
   sessionClock.textContent = formatElapsed(elapsed);
+  if (selectedProtocolId === "voice-foundation.v1") {
+    updateVoiceMilestones(voiceGuidedDemo.tick(elapsed));
+    return;
+  }
   advanceGuidedEncounter(elapsed);
   const laneHealth = visualLaneGuard.evaluate(now);
   for (const reason of laneHealth.reasons) {
@@ -1771,15 +2123,21 @@ function stopStream(stream: MediaStream): void {
 }
 
 async function initializeMedia(generation: number): Promise<boolean> {
+  const voiceOnly = selectedProtocolId === "voice-foundation.v1";
+  if (!voiceOnly) ensureFaceWorker();
   const stream = await navigator.mediaDevices.getUserMedia({
-    video: {
-      facingMode: "user",
-      width: { ideal: REQUESTED_VIDEO_CAPTURE.width },
-      height: { ideal: REQUESTED_VIDEO_CAPTURE.height },
-      frameRate: { ideal: REQUESTED_VIDEO_CAPTURE.frameRate }
-    },
+    video: voiceOnly
+      ? false
+      : {
+          facingMode: "user",
+          width: { ideal: REQUESTED_VIDEO_CAPTURE.width },
+          height: { ideal: REQUESTED_VIDEO_CAPTURE.height },
+          frameRate: { ideal: REQUESTED_VIDEO_CAPTURE.frameRate }
+        },
     audio: {
-      echoCancellation: true,
+      channelCount: { ideal: 1 },
+      sampleRate: { ideal: 48_000 },
+      echoCancellation: false,
       noiseSuppression: false,
       autoGainControl: false
     }
@@ -1795,16 +2153,21 @@ async function initializeMedia(generation: number): Promise<boolean> {
       return false;
     }
 
-    cameraPreview.srcObject = stream;
-    await cameraPreview.play();
-    if (!systemCheckRequestIsCurrent(generation)) {
-      cameraPreview.srcObject = null;
-      pendingMediaStreams.delete(stream);
-      stopStream(stream);
-      return false;
+    if (!voiceOnly) {
+      cameraPreview.srcObject = stream;
+      await cameraPreview.play();
+      if (!systemCheckRequestIsCurrent(generation)) {
+        cameraPreview.srcObject = null;
+        pendingMediaStreams.delete(stream);
+        stopStream(stream);
+        return false;
+      }
     }
 
-    context = new AudioContext({ latencyHint: "interactive" });
+    context = new AudioContext({
+      latencyHint: "interactive",
+      sampleRate: 48_000
+    });
     await context.resume();
     if (!systemCheckRequestIsCurrent(generation)) {
       cameraPreview.srcObject = null;
@@ -1816,42 +2179,102 @@ async function initializeMedia(generation: number): Promise<boolean> {
 
     const videoTrack = stream.getVideoTracks()[0];
     const settings = videoTrack?.getSettings();
-    const source = context.createMediaStreamSource(stream);
-    const nextAnalyser = context.createAnalyser();
-    nextAnalyser.fftSize = 4096;
-    nextAnalyser.smoothingTimeConstant = 0;
-    source.connect(nextAnalyser);
+    const audioTrack = stream.getAudioTracks()[0];
+    const audioSettings = audioTrack?.getSettings();
+    const browserProcessing = {
+      echoCancellation: audioSettings?.echoCancellation === true,
+      noiseSuppression: audioSettings?.noiseSuppression === true,
+      autoGainControl: audioSettings?.autoGainControl === true
+    };
+    audioCaptureSettings = requestedAudioCaptureSettings(
+      context.sampleRate,
+      audioSettings?.channelCount ?? 1,
+      browserProcessing
+    );
+    audioCaptureEpoch += 1;
+    voiceCapturePipeline = await startVoiceCapturePipeline({
+      stream,
+      audioContext: context,
+      captureSettings: audioCaptureSettings,
+      captureEpoch: audioCaptureEpoch,
+      taskContext: "quiet-calibration",
+      callbacks: {
+        onFrame: handleVoiceSignalFrame,
+        onReady(provenance) {
+          audioPipeline = provenance;
+        },
+        onDiagnostics(diagnostics) {
+          audioStreamDiagnostics = diagnostics;
+        },
+        onRepresentation(result) {
+          if (result.status === "available" && result.provenance) {
+            voiceModel = result.provenance;
+            document.body.dataset.voiceRepresentation = "available";
+          } else {
+            document.body.dataset.voiceRepresentation = "abstained";
+          }
+        },
+        onFailure(reason) {
+          if (
+            ["requesting", "calibrating-quiet", "calibrating-voice", "capturing"].includes(
+              state
+            )
+          ) {
+            setLane(
+              speechState,
+              speechStatus,
+              "Unavailable",
+              `Voice Analysis stopped: ${reason}.`,
+              "warning"
+            );
+            void resetCapture();
+          }
+        }
+      }
+    });
 
     pendingMediaStreams.delete(stream);
     mediaStream = stream;
     audioContext = context;
-    audioSource = source;
-    analyser = nextAnalyser;
-    sampleBuffer = new Float32Array(nextAnalyser.fftSize);
-    videoCaptureSettings = {
-      requested: { ...REQUESTED_VIDEO_CAPTURE },
-      actual: {
-        width:
-          settings?.width ??
-          cameraPreview.videoWidth ??
-          REQUESTED_VIDEO_CAPTURE.width,
-        height:
-          settings?.height ??
-          cameraPreview.videoHeight ??
-          REQUESTED_VIDEO_CAPTURE.height,
-        frameRate: settings?.frameRate ?? null
-      },
-      ...(settings?.facingMode
-        ? { facingMode: settings.facingMode }
-        : {}),
-      coordinateSpace: "normalized-unmirrored-image",
-      displayMirrored: true,
-      lateralityConvention: "subject-anatomical"
-    };
+    if (!voiceOnly) {
+      videoCaptureSettings = {
+        requested: { ...REQUESTED_VIDEO_CAPTURE },
+        actual: {
+          width:
+            settings?.width ??
+            cameraPreview.videoWidth ??
+            REQUESTED_VIDEO_CAPTURE.width,
+          height:
+            settings?.height ??
+            cameraPreview.videoHeight ??
+            REQUESTED_VIDEO_CAPTURE.height,
+          frameRate: settings?.frameRate ?? null
+        },
+        ...(settings?.facingMode
+          ? { facingMode: settings.facingMode }
+          : {}),
+        coordinateSpace: "normalized-unmirrored-image",
+        displayMirrored: true,
+        lateralityConvention: "subject-anatomical"
+      };
+    }
     if (videoTrack) {
       videoTrack.addEventListener("mute", handleCameraUnavailable);
       videoTrack.addEventListener("ended", handleCameraUnavailable);
       videoTrack.addEventListener("unmute", handleCameraAvailable);
+    }
+    if (audioTrack) {
+      const releaseAudio = (): void => {
+        if (
+          ["requesting", "calibrating-quiet", "calibrating-voice", "capturing"].includes(
+            state
+          )
+        ) {
+          void resetCapture();
+        }
+      };
+      audioTrack.addEventListener("mute", releaseAudio);
+      audioTrack.addEventListener("ended", releaseAudio);
     }
     return true;
   } catch (error) {
@@ -1873,34 +2296,68 @@ async function runSystemCheck(): Promise<void> {
   }
   lifecycleGeneration += 1;
   const generation = lifecycleGeneration;
-  updateState("requesting", "Allow camera and microphone access to continue.");
+  const voiceOnly = selectedProtocolId === "voice-foundation.v1";
+  protocolSelector.disabled = true;
+  updateState(
+    "requesting",
+    voiceOnly
+      ? "Allow microphone access to continue."
+      : "Allow camera and microphone access to continue."
+  );
   voiceState.textContent = "Preparing";
-  faceState.textContent = "Preparing";
-  speechSignalCaption.textContent = "Preparing speech analysis";
-  faceSignalCaption.textContent = "Preparing facial analysis";
+  faceState.textContent = voiceOnly ? "Not requested" : "Preparing";
+  speechSignalCaption.textContent = "Preparing voice analysis";
+  faceSignalCaption.textContent = voiceOnly
+    ? "Camera remains off"
+    : "Preparing facial analysis";
   try {
     if (testCaptureMode) {
-      videoCaptureSettings = defaultVideoCaptureSettings();
-      visualPipeline = visualPipelineProvenance("GPU");
-      voiceTracker.calibrate([
-        0.002,
-        0.0022,
-        0.0021,
-        0.0024,
-        0.0023
-      ]);
+      if (!voiceOnly) ensureFaceWorker();
+      audioCaptureSettings = requestedAudioCaptureSettings(
+        48_000,
+        1,
+        {
+          echoCancellation:
+            testScenario === "browser-processing",
+          noiseSuppression: false,
+          autoGainControl: false
+        }
+      );
+      audioPipeline = {
+        processorRef: "browser-voice-dsp@1.0",
+        runtime: "audio-worklet-voice-worker",
+        workletSchemaVersion: "phenometric.voice-worklet-message.v1",
+        workerSchemaVersion: "phenometric.voice-worker-message.v1",
+        signalFrameSchemaVersion: "phenometric.voice-signal-frame.v1",
+        analysisWindowMs: 40,
+        analysisHopMs: 10,
+        ringBufferSeconds: 30,
+        algorithmVersion: "voice-analysis-1.0"
+      };
+      if (!voiceOnly) {
+        videoCaptureSettings = defaultVideoCaptureSettings();
+        visualPipeline = visualPipelineProvenance("GPU");
+      }
       calibration = createCaptureCalibration(
-        voiceTracker.getCalibration(),
+        {
+          medianNoiseRms: 0.0021,
+          noiseP90Rms: 0.0024,
+          entryThresholdRms: 0.008,
+          exitThresholdRms: 0.006,
+          durationMs: voiceOnly ? 2_000 : 1_500,
+          usableFraction: 1,
+          sampleRateHz: 48_000
+        },
         testScenario === "limited-calibration" ? "limited" : "strong",
         {
           quality:
-            testScenario === "missing-face"
+            voiceOnly || testScenario === "missing-face"
               ? "unavailable"
               : testScenario === "limited-calibration"
                 ? "limited"
                 : "strong",
           calibration:
-            testScenario === "missing-face"
+            voiceOnly || testScenario === "missing-face"
               ? null
               : {
                   durationMs: 1_600,
@@ -1916,8 +2373,9 @@ async function runSystemCheck(): Promise<void> {
                   baselineSharpness: 0.01
                 },
           usableFrameCount:
-            testScenario === "missing-face" ? 0 : 45
-        }
+            voiceOnly || testScenario === "missing-face" ? 0 : 45
+        },
+        voiceOnly ? "voice-foundation-v1" : "visual-foundation-v1"
       );
       cameraEmpty.hidden = true;
       guidanceCard.hidden = false;
@@ -1927,10 +2385,12 @@ async function runSystemCheck(): Promise<void> {
         "The ambient assessment is ready.";
       voiceState.textContent = "Ready";
       voiceState.dataset.status = "quiet";
-      faceState.textContent = "Ready";
+      faceState.textContent = voiceOnly ? "Not requested" : "Ready";
       faceState.dataset.status = "quiet";
       speechSignalCaption.textContent = "Analysis prepared";
-      faceSignalCaption.textContent = "Analysis prepared";
+      faceSignalCaption.textContent = voiceOnly
+        ? "Camera remains off"
+        : "Analysis prepared";
       setLane(
         conductorState,
         conductorStatus,
@@ -1945,13 +2405,15 @@ async function runSystemCheck(): Promise<void> {
         "System check complete.",
         "complete"
       );
-      setLane(
-        faceLaneState,
-        faceStatus,
-        "Ready",
-        "System check complete.",
-        "complete"
-      );
+      if (!voiceOnly) {
+        setLane(
+          faceLaneState,
+          faceStatus,
+          "Ready",
+          "System check complete.",
+          "complete"
+        );
+      }
       updateState(
         "ready",
         "System check complete. Begin the ambient assessment when ready."
@@ -1963,19 +2425,24 @@ async function runSystemCheck(): Promise<void> {
     if (!initialized || !systemCheckRequestIsCurrent(generation)) return;
     preflightStartedAt = performance.now();
     quietRmsSamples = [];
+    quietCalibrationFrameCount = 0;
     preflightFaceFrames = [];
     preflightPitchedFrames = 0;
     preflightSpeechEnergyFrames = 0;
     calibration = null;
-    voiceTracker.reset();
+    voicePreflightStreakStartedAtMs = null;
     cameraEmpty.hidden = true;
     guidanceCard.hidden = false;
     guidanceStep.textContent = "System check · room";
     guidanceTitle.textContent = "Remain quiet";
     guidanceDetail.textContent =
-      "Calibrating ambient room conditions for 1.5 seconds.";
+      `Calibrating ambient room conditions for ${
+        voiceOnly ? "2" : "1.5"
+      } seconds.`;
     privacyStatus.textContent =
-      "Camera and microphone active · in-session processing";
+      voiceOnly
+        ? "Microphone active · camera off · in-session processing"
+        : "Camera and microphone active · in-session processing";
     setLane(
       conductorState,
       conductorStatus,
@@ -1990,22 +2457,25 @@ async function runSystemCheck(): Promise<void> {
       "Measuring ambient room conditions.",
       "active"
     );
-    setLane(
-      faceLaneState,
-      faceStatus,
-      "Calibrating",
-      "Center your face and look toward the camera.",
-      "active"
-    );
+    if (!voiceOnly) {
+      setLane(
+        faceLaneState,
+        faceStatus,
+        "Calibrating",
+        "Center your face and look toward the camera.",
+        "active"
+      );
+    }
     state = "calibrating-quiet";
     document.body.dataset.captureState = state;
     headerMode.textContent = "System check";
-    beginVisualCaptureEpoch(true);
-    sampleInterval = window.setInterval(sampleAudioFrame, 100);
-    systemCheckTimer = window.setTimeout(
-      () => completeSystemCheck(generation),
-      JUDGE_READY_COMPLETION_POLICY.systemCheckMaximumMs
-    );
+    if (!voiceOnly) {
+      beginVisualCaptureEpoch(true);
+      systemCheckTimer = window.setTimeout(
+        () => completeSystemCheck(generation),
+        JUDGE_READY_COMPLETION_POLICY.systemCheckMaximumMs
+      );
+    }
   } catch {
     if (generation !== lifecycleGeneration) return;
     await releaseMedia();
@@ -2018,17 +2488,22 @@ async function runSystemCheck(): Promise<void> {
     );
     updateState(
       "error",
-      "Camera or microphone access is required for the system check."
+      voiceOnly
+        ? "Microphone access is required for the system check."
+        : "Camera or microphone access is required for the system check."
     );
   }
 }
 
 function prepareConductor(): void {
   if (!calibration) throw new Error("System check is required.");
+  voiceSessionFrameOriginMs = 0;
   lifecycleGeneration += 1;
   captureFinalizationScheduled = false;
   resultsVisible = false;
   audioFrames = [];
+  audioStreamDiagnostics = null;
+  voiceModel = null;
   receivedFaceFrameCount = 0;
   usableFaceFrameCount = 0;
   latestAudioFeature = null;
@@ -2041,12 +2516,20 @@ function prepareConductor(): void {
   testProcessorChangeInjected = false;
   testVisualCaptureSuspended = false;
   delete document.body.dataset.testProcessorChangeRewound;
+  delete document.body.dataset.voiceRepresentation;
   overlayRenderThrottle.reset();
   visualResultAcceptanceGuard.reset();
   externalVisualWithholdingActive = false;
-  voiceTracker.reset();
   visualWorkerRestartBudget.reset();
   guidedDemo.reset(0);
+  voiceGuidedDemo.reset(0);
+  audioCaptureEpoch += 1;
+  voiceCapturePipeline?.reset(
+    audioCaptureEpoch,
+    selectedProtocolId === "voice-foundation.v1"
+      ? "sustained-vowel-1"
+      : "natural-speech-check"
+  );
   sessionStartedAtPerformance = performance.now();
   sessionStartedAtEpoch = Date.now();
   allEvents = [];
@@ -2057,22 +2540,34 @@ function prepareConductor(): void {
   evidenceReviewReady = false;
   lastGuidedTransitionId = 0;
   lastAssistancePhase = null;
+  lastVoiceAssistancePhase = null;
   lastFaceQuality = "unknown";
   faceWindowOpen = false;
   baselinePanel.hidden = true;
   captureVisitId = `visit-${crypto.randomUUID()}`;
   conductorSession = createConductorSession(
     {
-      schemaVersion: "phenometric.frame-stream.v1",
+      schemaVersion: "phenometric.frame-stream.v2",
       containsPHI: false,
       visitId: captureVisitId,
       participantId: captureParticipantId,
       captureMode: "live",
+      selectedProtocolId,
       occurredAt: new Date(sessionStartedAtEpoch).toISOString(),
       captureAdapter: { id: "macbook-browser", version: "0.4.0" },
       calibration,
-      visualPipeline,
-      videoCaptureSettings
+      audioPipeline,
+      audioCaptureSettings,
+      voiceModel,
+      audioStreamDiagnostics,
+      visualPipeline:
+        selectedProtocolId === "facial-foundation.v1"
+          ? visualPipeline
+          : null,
+      videoCaptureSettings:
+        selectedProtocolId === "facial-foundation.v1"
+          ? videoCaptureSettings
+          : null
     },
     {
       baseTimeMs: sessionStartedAtEpoch,
@@ -2115,19 +2610,52 @@ function startTestCapture(): void {
       testScenario !== "missing-speech" &&
       (taskContext === "establishing" ||
         taskContext === "turn-away");
-    const audio: AudioFeatureFrame & DerivedAudioFeature = {
+    const audio: VoiceSignalFrameV1 = {
+      schemaVersion: "phenometric.voice-signal-frame.v1",
       tMs: fixtureTimeMs,
+      acquiredAtMs: fixtureTimeMs,
+      captureEpoch: audioCaptureEpoch,
+      sequence: fixtureSequence + 1,
+      absoluteSampleIndex: Math.round(fixtureTimeMs * 48),
+      taskContext:
+        taskContext === "establishing" ||
+        taskContext === "turn-away"
+          ? "natural-speech-check"
+          : "quiet-calibration",
       voiced: speechAvailable,
+      voicingProbability: speechAvailable ? 0.94 : 0,
       rms: speechAvailable ? 0.07 : 0.002,
-      pitchHz:
+      intensityDbfs: speechAvailable ? -23 : -54,
+      f0Hz:
         speechAvailable
           ? fixtureTimeMs % 400 < 200
             ? 122
             : 158
           : null,
-      pitchConfidence: speechAvailable ? 0.92 : 0,
-      clipped: false,
-      snrDb: speechAvailable ? 24 : 0
+      f0Confidence: speechAvailable ? 0.92 : 0,
+      estimatorAgreement: speechAvailable ? 0.96 : 0,
+      periodicity: speechAvailable ? 0.9 : 0,
+      cppsDb: speechAvailable ? 13 : null,
+      hnrDb: speechAvailable ? 19 : null,
+      jitterLocal: speechAvailable ? 0.01 : null,
+      shimmerLocal: speechAvailable ? 0.03 : null,
+      formantF1Hz: speechAvailable ? 730 : null,
+      formantF2Hz: speechAvailable ? 1_090 : null,
+      spectralFlux: speechAvailable ? 0.08 : 0,
+      syllabicNucleus: speechAvailable && fixtureTimeMs % 300 < frameStepMs,
+      clippedSampleFraction: 0,
+      dcOffset: 0,
+      snrDb: speechAvailable ? 24 : 0,
+      sampleRateHz: 48_000,
+      blockGapMs: frameStepMs,
+      lostBlockFraction: 0,
+      browserProcessing: {
+        echoCancellation: false,
+        noiseSuppression: false,
+        autoGainControl: false
+      },
+      qualityReasons: speechAvailable ? [] : ["signal-too-quiet"],
+      processorRef: "browser-voice-dsp@1.0"
     };
     latestAudioFeature = audio;
     latestAudioFeatureAtMs = fixtureTimeMs;
@@ -2238,20 +2766,107 @@ function startTestCapture(): void {
   }, intervalMs);
 }
 
+function startTestVoiceCapture(): void {
+  let fixtureTimeMs = 0;
+  let fixtureSequence = 0;
+  const frameStepMs = 10;
+  const intervalMs = fastTestCapture ? 1 : 2;
+  sampleInterval = window.setInterval(() => {
+    if (state !== "capturing" || !conductorSession) return;
+    const snapshot = voiceGuidedDemo.snapshot(fixtureTimeMs);
+    if (snapshot.phase === "complete") {
+      window.clearInterval(sampleInterval ?? undefined);
+      sampleInterval = null;
+      return;
+    }
+    const phase = snapshot.phase;
+    const phaseElapsed = fixtureTimeMs - snapshot.phaseStartedAtMs;
+    const unfinished =
+      testScenario === "unfinished-task" ||
+      testScenario === `unfinished-${phase}`;
+    const naturalPause =
+      phase === "spontaneous-response" &&
+      phaseElapsed % 1_600 >= 1_250;
+    const voiced = !unfinished && !naturalPause;
+    const nucleus =
+      voiced &&
+      (phase === "rapid-syllables"
+        ? phaseElapsed % 350 < frameStepMs
+        : phaseElapsed % 500 < frameStepMs);
+    fixtureSequence += 1;
+    const frame: VoiceSignalFrameV1 = {
+      schemaVersion: "phenometric.voice-signal-frame.v1",
+      tMs: fixtureTimeMs,
+      acquiredAtMs: fixtureTimeMs,
+      captureEpoch: audioCaptureEpoch,
+      sequence: fixtureSequence,
+      absoluteSampleIndex: fixtureSequence * 480,
+      taskContext: phase,
+      voiced,
+      voicingProbability: voiced ? 0.94 : 0,
+      rms: voiced ? 0.07 : 0.002,
+      intensityDbfs: voiced ? -23 : -54,
+      f0Hz: voiced ? 220 + Math.sin(fixtureTimeMs / 400) * 8 : null,
+      f0Confidence: voiced ? 0.93 : 0,
+      estimatorAgreement: voiced ? 0.96 : 0,
+      periodicity: voiced ? 0.91 : 0,
+      cppsDb: voiced ? 14 + Math.sin(fixtureTimeMs / 700) : null,
+      hnrDb: voiced ? 21 + Math.sin(fixtureTimeMs / 900) : null,
+      jitterLocal: voiced ? 0.008 + (fixtureSequence % 3) * 0.001 : null,
+      shimmerLocal: voiced ? 0.025 + (fixtureSequence % 4) * 0.001 : null,
+      formantF1Hz: voiced ? 730 + (fixtureSequence % 5) : null,
+      formantF2Hz: voiced ? 1_090 + (fixtureSequence % 7) : null,
+      spectralFlux: nucleus ? 0.12 : voiced ? 0.04 : 0,
+      syllabicNucleus: nucleus,
+      clippedSampleFraction: 0,
+      dcOffset: 0.001,
+      snrDb: voiced ? 26 : 0,
+      sampleRateHz: 48_000,
+      blockGapMs: frameStepMs,
+      lostBlockFraction: 0,
+      browserProcessing: {
+        echoCancellation: testScenario === "browser-processing",
+        noiseSuppression: false,
+        autoGainControl: false
+      },
+      qualityReasons: voiced
+        ? testScenario === "browser-processing"
+          ? ["audio-processing-enabled"]
+          : []
+        : ["signal-too-quiet", "snr-below-minimum"],
+      processorRef: "browser-voice-dsp@1.0"
+    };
+    latestAudioFeature = frame;
+    latestAudioFeatureAtMs = fixtureTimeMs;
+    audioFrames.push(frame);
+    conductorSession.ingestAudio(frame);
+    updateLiveAudio(frame);
+    observeGuidedVoiceFrame(frame);
+    sessionClock.textContent = formatElapsed(fixtureTimeMs);
+    updateVoiceMilestones(voiceGuidedDemo.tick(fixtureTimeMs));
+    fixtureTimeMs += frameStepMs;
+  }, intervalMs);
+}
+
 function startAssessment(): void {
   if (state !== "ready" || !calibration) return;
+  const voiceOnly = selectedProtocolId === "voice-foundation.v1";
   prepareConductor();
-  cameraEmpty.hidden = !testCaptureMode;
-  if (testCaptureMode) {
+  cameraEmpty.hidden = voiceOnly ? false : !testCaptureMode;
+  if (testCaptureMode || voiceOnly) {
     cameraEmpty.querySelector("strong")!.textContent =
-      "Guided assessment active";
+      voiceOnly ? "Voice assessment active" : "Guided assessment active";
     cameraEmpty.querySelector("span:last-child")!.textContent =
-      "Speech and facial agents are analyzing in parallel.";
+      voiceOnly
+        ? "Microphone signal is analyzed locally; the camera remains off."
+        : "Voice and facial agents are analyzing in parallel.";
   }
   liveStrip.hidden = false;
   guidanceCard.hidden = false;
   privacyStatus.textContent =
-    "Audio and video are processed during the encounter and are not stored.";
+    voiceOnly
+      ? "Microphone audio is processed ephemerally · camera off · no audio stored."
+      : "Audio and video are processed during the encounter and are not stored.";
   setLane(
     conductorState,
     conductorStatus,
@@ -2262,30 +2877,46 @@ function startAssessment(): void {
   setLane(
     speechState,
     speechStatus,
-    "Listening",
-    "Waiting for usable speech.",
-    "quiet"
+    voiceOnly ? "Analyzing" : "Listening",
+    voiceOnly
+      ? "Waiting for the first sustained-vowel trial."
+      : "Providing behavioral voice gating only.",
+    voiceOnly ? "active" : "quiet"
   );
-  setLane(
-    faceLaneState,
-    faceStatus,
-    "Observing",
-    "Checking calibrated framing.",
-    "active"
-  );
+  if (!voiceOnly) {
+    setLane(
+      faceLaneState,
+      faceStatus,
+      "Observing",
+      "Checking calibrated framing.",
+      "active"
+    );
+  }
   updateState(
     "capturing",
-    "Complete each guided exercise; progress advances only when its signal criterion is confirmed."
+    voiceOnly
+      ? "Complete each guided voice exercise; elapsed time alone never advances the protocol."
+      : "Complete each guided exercise; progress advances only when its signal criterion is confirmed."
   );
-  updateMilestones(guidedDemo.snapshot());
+  if (voiceOnly) {
+    updateVoiceMilestones(voiceGuidedDemo.snapshot());
+    voiceCapturePipeline?.setTask("sustained-vowel-1");
+  } else {
+    updateMilestones(guidedDemo.snapshot());
+    voiceCapturePipeline?.setTask("natural-speech-check");
+  }
   emitWorkflowEvent(
     "capture-conductor",
     "demo.phase.started",
     "ambient-capture",
-    "Started the establishing phase.",
+    voiceOnly
+      ? "Started sustained-vowel trial 1."
+      : "Started the establishing phase.",
     {
-      phase: "establishing",
-      policyId: JUDGE_READY_COMPLETION_POLICY.id,
+      phase: voiceOnly ? "sustained-vowel-1" : "establishing",
+      policyId: voiceOnly
+        ? VOICE_FOUNDATION_POLICY.id
+        : JUDGE_READY_COMPLETION_POLICY.id,
       advancement: "signal-gated",
       skipAvailable: false
     }
@@ -2294,20 +2925,33 @@ function startAssessment(): void {
     "capture-conductor",
     "coordinator.decision.recorded",
     "ambient-capture",
-    "Speech and Facial Analysis started in parallel.",
-    { decision: "start-parallel-analysis" }
+    voiceOnly
+      ? "Voice Analysis started; no camera was requested."
+      : "Voice gating and Facial Analysis started in parallel.",
+    {
+      decision: voiceOnly
+        ? "start-microphone-only-analysis"
+        : "start-parallel-analysis"
+    }
   );
   setCoordinatorDecision(
-    "Speech and Facial Analysis started in parallel",
+    voiceOnly
+      ? "Voice Analysis started · camera off"
+      : "Voice gating and Facial Analysis started in parallel",
     startDecision.eventId
   );
   eventCount.textContent = "Agents active";
   if (testCaptureMode) {
-    startTestCapture();
+    if (voiceOnly) startTestVoiceCapture();
+    else {
+      // Fixture playback does not send native landmarks to the worker, but it
+      // still exercises the worker-owned display layer and its lifecycle.
+      landmarkOverlayAttached = true;
+      startTestCapture();
+    }
   } else {
-    beginVisualCaptureEpoch(false);
+    if (!voiceOnly) beginVisualCaptureEpoch(false);
     clockInterval = window.setInterval(updateClock, 100);
-    sampleInterval = window.setInterval(sampleAudioFrame, 100);
   }
 }
 
@@ -2336,23 +2980,24 @@ async function releaseMedia(): Promise<void> {
   mediaStream?.getTracks().forEach((track) => track.stop());
   mediaStream = null;
   cameraPreview.srcObject = null;
-  audioSource?.disconnect();
-  analyser?.disconnect();
-  audioSource = null;
-  analyser = null;
-  sampleBuffer = null;
+  const pipeline = voiceCapturePipeline;
+  voiceCapturePipeline = null;
+  await pipeline?.stop();
   const context = audioContext;
   audioContext = null;
-  clearAllVisualOverlays();
-  visualCaptureEpoch += 1;
-  faceWorker.postMessage(
-    visualWorkerMessage({
-      type: "dispose",
-      captureEpoch: visualCaptureEpoch
-    })
-  );
-  faceWorker.terminate();
-  faceWorkerReady = false;
+  if (faceWorker) {
+    clearAllVisualOverlays();
+    visualCaptureEpoch += 1;
+    faceWorker.postMessage(
+      visualWorkerMessage({
+        type: "dispose",
+        captureEpoch: visualCaptureEpoch
+      })
+    );
+    faceWorker.terminate();
+    faceWorker = null;
+    faceWorkerReady = false;
+  }
   visualLaneGuard.reset();
   visualResultAcceptanceGuard.reset();
   externalVisualWithholdingActive = false;
@@ -2385,8 +3030,8 @@ function renderObservation(
     const label = document.createElement("strong");
     label.textContent = aggregate.label;
     const context = document.createElement("span");
-    context.textContent = aggregate.code.startsWith("prototype.speech.")
-      ? "speech"
+    context.textContent = aggregate.code.startsWith("prototype.voice.")
+      ? "voice"
       : "facial";
     header.append(label, context);
     const value = document.createElement("p");
@@ -2479,7 +3124,8 @@ function renderSynthesisSkeleton(): void {
   summary.className = "skeleton-line skeleton-summary";
   const claims = document.createElement("div");
   claims.className = "skeleton-claims";
-  for (let index = 0; index < 2; index += 1) {
+  const outcomeCount = Math.max(1, latestOutcomes?.length ?? 1);
+  for (let index = 0; index < outcomeCount; index += 1) {
     const claim = document.createElement("span");
     claim.className = "skeleton-claim";
     claims.append(claim);
@@ -2722,8 +3368,8 @@ function openMeasurementTrace(measurementCode: string): void {
         .map((event) =>
           event.type === "extractor.routed"
             ? `${
-                aggregate.code.startsWith("prototype.speech.")
-                  ? "Speech"
+                aggregate.code.startsWith("prototype.voice.")
+                  ? "Voice"
                   : "Facial"
               } Analysis accepted the source window.`
             : event.summary
@@ -2779,9 +3425,9 @@ async function synthesizeEvidence(
   generation = lifecycleGeneration
 ): Promise<void> {
   if (generation !== lifecycleGeneration) return;
-  if (!latestObservation || latestOutcomes?.length !== 2) {
+  if (!latestObservation || !latestOutcomes || latestOutcomes.length < 1) {
     throw new Error(
-      "One speech outcome and one facial outcome are required."
+      "At least one participating modality outcome is required."
     );
   }
   evidenceLoading.hidden = false;
@@ -2809,6 +3455,10 @@ async function synthesizeEvidence(
       body: JSON.stringify({
         containsPHI: false,
         rawMediaRetained: false,
+        rawAudioRetained: false,
+        nativeAudioObservationsRetained: false,
+        transcriptRetained: false,
+        voiceEmbeddingsRetained: false,
         nativeVisualObservationsRetained: false,
         visitId: latestObservation.visitId,
         qualitySummary: latestObservation.qualitySummary,
@@ -2978,9 +3628,17 @@ async function synthesizeEvidence(
 async function finishEncounter(generation: number): Promise<void> {
   if (generation !== lifecycleGeneration) return;
   if (!conductorSession) throw new Error("No active assessment.");
-  conductorSession.setGuidedTaskEvidenceIntervals(
-    guidedDemo.snapshot().acceptedEvidenceIntervals
-  );
+  if (selectedProtocolId === "voice-foundation.v1") {
+    conductorSession.setGuidedVoiceTaskEvidenceIntervals(
+      voiceGuidedDemo.snapshot().acceptedEvidenceIntervals
+    );
+  } else {
+    conductorSession.setGuidedTaskEvidenceIntervals(
+      guidedDemo.snapshot().acceptedEvidenceIntervals
+    );
+  }
+  conductorSession.setVoiceModel(voiceModel);
+  conductorSession.setAudioStreamDiagnostics(audioStreamDiagnostics);
   const result = conductorSession.complete();
   latestObservation = result.observation;
   conductorSession = null;
@@ -2991,7 +3649,7 @@ async function finishEncounter(generation: number): Promise<void> {
   for (const outcome of latestOutcomes) {
     const created = emitWorkflowEvent(
       outcome.modality === "speech"
-        ? "speech-acoustic"
+        ? "voice-analysis"
         : "facial-expressivity",
       "modality.outcome.created",
       "ambient-capture",
@@ -3048,24 +3706,34 @@ async function finishEncounter(generation: number): Promise<void> {
     "The audiovisual observation is complete.",
     "complete"
   );
-  setLane(
-    speechState,
-    speechStatus,
-    latestOutcomes[0].status === "measured" ? "Measured" : "Complete",
-    latestOutcomes[0].status === "measured"
-      ? latestOutcomes[0].statement
-      : "Speech Analysis completed the encounter interval.",
-    "complete"
+  const voiceOutcome = latestOutcomes.find(
+    (outcome) => outcome.modality === "speech"
   );
-  setLane(
-    faceLaneState,
-    faceStatus,
-    latestOutcomes[1].status === "measured" ? "Measured" : "Complete",
-    latestOutcomes[1].status === "measured"
-      ? latestOutcomes[1].statement
-      : "Facial Analysis completed the encounter interval.",
-    "complete"
+  const faceOutcome = latestOutcomes.find(
+    (outcome) => outcome.modality === "face"
   );
+  if (voiceOutcome) {
+    setLane(
+      speechState,
+      speechStatus,
+      voiceOutcome.status === "measured" ? "Measured" : "Complete",
+      voiceOutcome.status === "measured"
+        ? voiceOutcome.statement
+        : "Voice Analysis completed the encounter interval.",
+      "complete"
+    );
+  }
+  if (faceOutcome) {
+    setLane(
+      faceLaneState,
+      faceStatus,
+      faceOutcome.status === "measured" ? "Measured" : "Complete",
+      faceOutcome.status === "measured"
+        ? faceOutcome.statement
+        : "Facial Analysis completed the encounter interval.",
+      "complete"
+    );
+  }
   renderPendingEvidence();
   updateState(
     "analyzing",
@@ -3083,7 +3751,11 @@ function revealResults(): void {
 }
 
 async function finalizeCapture(): Promise<void> {
-  if (state !== "capturing" || !guidedDemo.snapshot().canComplete) return;
+  const canComplete =
+    selectedProtocolId === "voice-foundation.v1"
+      ? voiceGuidedDemo.snapshot().canComplete
+      : guidedDemo.snapshot().canComplete;
+  if (state !== "capturing" || !canComplete) return;
   const generation = lifecycleGeneration;
   const completionEvent =
     [...allEvents]
@@ -3105,7 +3777,11 @@ async function finalizeCapture(): Promise<void> {
   if (
     generation !== lifecycleGeneration ||
     state !== "capturing" ||
-    !guidedDemo.snapshot().canComplete
+    !(
+      selectedProtocolId === "voice-foundation.v1"
+        ? voiceGuidedDemo.snapshot().canComplete
+        : guidedDemo.snapshot().canComplete
+    )
   ) {
     if (
       generation === lifecycleGeneration &&
@@ -3124,14 +3800,18 @@ async function finalizeCapture(): Promise<void> {
   cameraEmpty.hidden = false;
   cameraEmpty.querySelector("strong")!.textContent = "Assessment complete";
   cameraEmpty.querySelector("span:last-child")!.textContent =
-    "Camera and microphone access has been released.";
+    selectedProtocolId === "voice-foundation.v1"
+      ? "Microphone access has been released; the camera was never requested."
+      : "Camera and microphone access has been released.";
   liveStrip.hidden = true;
   guidanceCard.hidden = true;
   cameraCallout.hidden = true;
   voiceState.textContent = "Released";
   faceState.textContent = "Released";
   privacyStatus.textContent =
-    "Camera and microphone released · no audio or video stored";
+    selectedProtocolId === "voice-foundation.v1"
+      ? "Microphone released · camera was off · no audio stored"
+      : "Camera and microphone released · no audio or video stored";
   try {
     await finishEncounter(generation);
   } catch {
@@ -3220,6 +3900,7 @@ function clearEncounterRuntimeState(): void {
   guidedPhaseFaceFrames = [];
   neutralFacialBaseline = null;
   quietRmsSamples = [];
+  quietCalibrationFrameCount = 0;
   preflightFaceFrames = [];
   preflightPitchedFrames = 0;
   preflightSpeechEnergyFrames = 0;
@@ -3237,6 +3918,7 @@ function clearEncounterRuntimeState(): void {
   lastOperatorDiagnosticsRenderAtMs = Number.NEGATIVE_INFINITY;
   testVisualCaptureSuspended = false;
   guidedDemo.reset(0);
+  voiceGuidedDemo.reset(0);
   operatorOutput.textContent = "";
 }
 
@@ -3245,20 +3927,17 @@ async function performResetCapture(
 ): Promise<void> {
   await releaseMedia();
   if (resetGeneration !== lifecycleGeneration) return;
+  audioPipeline = null;
+  audioCaptureSettings = null;
+  audioStreamDiagnostics = null;
+  voiceModel = null;
   replaceLandmarkOverlayCanvas();
-  faceWorker = createFaceWorker();
-  bindFaceWorker(faceWorker);
-  visualCaptureEpoch += 1;
-  attachLandmarkOverlay(faceWorker);
   visualPipeline = null;
   videoCaptureSettings = defaultVideoCaptureSettings();
   visualSmokeSubmitted = false;
-  if (testCaptureMode) {
-    faceWorkerReady = true;
-  } else {
-    initializeVisualWorkerForCurrentEpoch();
-  }
+  faceWorkerReady = testCaptureMode;
   calibration = null;
+  protocolSelector.disabled = false;
   consentCheckbox.checked = false;
   cameraEmpty.hidden = false;
   cameraEmpty.querySelector("strong")!.textContent =
@@ -3309,7 +3988,10 @@ async function performResetCapture(
   for (const item of document.querySelectorAll(".milestone")) {
     item.classList.remove("is-complete");
   }
-  privacyStatus.textContent = "Camera and microphone are off.";
+  privacyStatus.textContent =
+    selectedProtocolId === "voice-foundation.v1"
+      ? "Camera off · microphone is off."
+      : "Camera and microphone are off.";
   setLane(
     conductorState,
     conductorStatus,
@@ -3327,11 +4009,13 @@ async function performResetCapture(
   setLane(
     faceLaneState,
     faceStatus,
-    faceWorkerReady ? "Ready" : "Preparing",
-    faceWorkerReady
-      ? "Ready for system check."
-      : "Facial analysis is preparing; the system check can still begin.",
-    faceWorkerReady ? "complete" : "quiet"
+    selectedProtocolId === "voice-foundation.v1"
+      ? "Not requested"
+      : "Ready",
+    selectedProtocolId === "voice-foundation.v1"
+      ? "Voice protocol leaves the camera and visual processor off."
+      : "Ready for a consented system check.",
+    "quiet"
   );
   setLane(
     evidenceState,
@@ -3349,7 +4033,9 @@ async function performResetCapture(
   );
   updateState(
     "idle",
-    "The system check verifies framing, room conditions, and speech."
+    selectedProtocolId === "voice-foundation.v1"
+      ? "The system check verifies room conditions and microphone voice quality."
+      : "The system check verifies framing, room conditions, and speech."
   );
 }
 
@@ -3443,7 +4129,7 @@ async function submitVisualWorkerSmoke(): Promise<void> {
     stream: smokeDiagnostics(),
     calibration: null
   });
-  faceWorker.postMessage(message, [bitmap]);
+  ensureFaceWorker().postMessage(message, [bitmap]);
 }
 
 function applyVisualPipelineProvenance(
@@ -3634,8 +4320,16 @@ function bindFaceWorker(worker: Worker): void {
   });
 }
 
-bindFaceWorker(faceWorker);
-attachLandmarkOverlay(faceWorker);
+protocolSelector.addEventListener("change", (event) => {
+  const target = event.target as HTMLInputElement;
+  if (
+    target.name === "protocol" &&
+    (target.value === "facial-foundation.v1" ||
+      target.value === "voice-foundation.v1")
+  ) {
+    setSelectedProtocol(target.value);
+  }
+});
 
 consentCheckbox.addEventListener("change", () => {
   if (
@@ -3649,6 +4343,16 @@ consentCheckbox.addEventListener("change", () => {
 });
 document.addEventListener("visibilitychange", () => {
   const visible = !document.hidden;
+  if (
+    !visible &&
+    selectedProtocolId === "voice-foundation.v1" &&
+    ["requesting", "calibrating-quiet", "calibrating-voice", "capturing"].includes(
+      state
+    )
+  ) {
+    void resetCapture();
+    return;
+  }
   visualLaneGuard.markPageVisible(visible);
   if (!visible && visualAcquisitionStateActive()) {
     pauseVisualAcquisition("document-hidden");
@@ -3656,6 +4360,16 @@ document.addEventListener("visibilitychange", () => {
     resumeVisualAcquisition();
   }
 });
+
+if (query.get("protocol") === "voice") {
+  const voiceOption = protocolSelector.querySelector<HTMLInputElement>(
+    'input[value="voice-foundation.v1"]'
+  );
+  if (voiceOption) voiceOption.checked = true;
+  setSelectedProtocol("voice-foundation.v1");
+} else {
+  setSelectedProtocol("facial-foundation.v1");
+}
 startButton.addEventListener("click", () => {
   if (state === "idle") void runSystemCheck();
   else if (state === "ready") startAssessment();
@@ -3673,7 +4387,8 @@ window.addEventListener("keydown", (event) => {
 });
 window.addEventListener("beforeunload", () => {
   mediaStream?.getTracks().forEach((track) => track.stop());
-  faceWorker.terminate();
+  void voiceCapturePipeline?.stop();
+  faceWorker?.terminate();
 });
 
 if (testCaptureMode) {
@@ -3716,8 +4431,19 @@ if (testCaptureMode) {
     "Ready for system check.",
     "complete"
   );
-} else {
+} else if (visualWorkerSmokeMode) {
   initializeVisualWorkerForCurrentEpoch();
+} else {
+  const openingVoiceOnly = query.get("protocol") === "voice";
+  setLane(
+    faceLaneState,
+    faceStatus,
+    openingVoiceOnly ? "Not requested" : "Ready",
+    openingVoiceOnly
+      ? "Voice protocol leaves the camera and visual processor off."
+      : "Ready for a consented system check.",
+    "quiet"
+  );
 }
 operatorDiagnostics.hidden = !operatorMode;
 resetHandoff();

@@ -2,20 +2,52 @@ import type {
   CaptureAdapter,
   CaptureCalibration,
   CaptureMode,
+  AudioCaptureSettings,
+  AudioPipelineProvenance,
+  AudioQualityReasonCode,
+  AudioStreamDiagnostics,
+  BrowserAudioProcessingState,
+  VoiceModelProvenance,
+  VoiceTaskContext,
   VideoCaptureSettings,
   VisualPipelineProvenance,
   VisualQualityReasonCode,
   VisualTaskContext
 } from "@phenometric/contracts";
 
-export interface AudioFeatureFrame {
+export interface VoiceSignalFrameV1 {
+  schemaVersion: "phenometric.voice-signal-frame.v1";
   tMs: number;
+  acquiredAtMs: number;
+  captureEpoch: number;
+  sequence: number;
+  absoluteSampleIndex: number;
+  taskContext: VoiceTaskContext;
   voiced: boolean;
+  voicingProbability: number;
   rms: number;
-  pitchHz: number | null;
-  pitchConfidence?: number;
-  clipped: boolean;
+  intensityDbfs: number;
+  f0Hz: number | null;
+  f0Confidence: number;
+  estimatorAgreement: number;
+  periodicity: number;
+  cppsDb: number | null;
+  hnrDb: number | null;
+  jitterLocal: number | null;
+  shimmerLocal: number | null;
+  formantF1Hz: number | null;
+  formantF2Hz: number | null;
+  spectralFlux: number;
+  syllabicNucleus: boolean;
+  clippedSampleFraction: number;
+  dcOffset: number;
   snrDb: number;
+  sampleRateHz: number;
+  blockGapMs: number;
+  lostBlockFraction: number;
+  browserProcessing: BrowserAudioProcessingState;
+  qualityReasons: AudioQualityReasonCode[];
+  processorRef: string;
 }
 
 export interface NormalizedPoint {
@@ -77,16 +109,23 @@ export interface FacialKinematicsFrameV1 {
 }
 
 export interface FrameStream {
-  schemaVersion: "phenometric.frame-stream.v1";
+  schemaVersion: "phenometric.frame-stream.v2";
   containsPHI: false;
   visitId: string;
   participantId: string;
   captureMode: CaptureMode;
+  selectedProtocolId:
+    | "facial-foundation.v1"
+    | "voice-foundation.v1";
   occurredAt?: string;
   captureAdapter?: CaptureAdapter;
   calibration?: CaptureCalibration;
+  audioPipeline: AudioPipelineProvenance | null;
+  audioCaptureSettings: AudioCaptureSettings | null;
+  voiceModel: VoiceModelProvenance | null;
+  audioStreamDiagnostics: AudioStreamDiagnostics | null;
   visualPipeline: VisualPipelineProvenance | null;
   videoCaptureSettings: VideoCaptureSettings | null;
-  audio: AudioFeatureFrame[];
+  audio: VoiceSignalFrameV1[];
   face: FacialKinematicsFrameV1[];
 }

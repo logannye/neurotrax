@@ -25,31 +25,6 @@
   "reviewStatus": "accepted",
   "aggregates": [
     {
-      "code": "prototype.speech.pitch_variability",
-      "label": "Pitch variability",
-      "unit": "semitone-stddev",
-      "contextKind": "spontaneous-speech",
-      "value": 1.82,
-      "spread": 0,
-      "confidence": 0.9,
-      "windowCount": 1,
-      "algorithmVersion": "speech-acoustic-0.4",
-      "processorRef": "speech-acoustic-0.4",
-      "sourceWindowRefs": [
-        "prior-speech-0"
-      ],
-      "confounds": {
-        "kind": "speech",
-        "snrDb": 20.8,
-        "clippingFraction": 0
-      },
-      "uncertainty": {
-        "kind": "not-estimated",
-        "reason": "Speech uncertainty is not estimated by this prototype extractor."
-      },
-      "clinicalValidation": "none"
-    },
-    {
       "code": "prototype.face.smile_excursion.left",
       "label": "Left smile excursion",
       "unit": "inter-eye-normalized-distance",
@@ -295,5 +270,9 @@
       },
       "clinicalValidation": "none"
     }
-  ]
+  ],
+  "rawAudioRetained": false,
+  "nativeAudioObservationsRetained": false,
+  "transcriptRetained": false,
+  "voiceEmbeddingsRetained": false
 }

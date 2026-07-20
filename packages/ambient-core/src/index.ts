@@ -1,6 +1,6 @@
 export const AMBIENT_CORE_VERSION = "0.1.0";
 export type {
-  AudioFeatureFrame,
+  VoiceSignalFrameV1,
   NormalizedPoint,
   FacialBoundingBox,
   FacialPose,
@@ -9,14 +9,25 @@ export type {
   FrameStream
 } from "./primitives.js";
 export {
-  countBoundedPauses,
-  extractSpeechAcoustic,
-  pitchVariabilitySemitones,
-  MAX_PAUSE_MS,
-  MIN_PAUSE_MS,
-  SPEECH_ACOUSTIC_VERSION,
-  SPEECH_SNR_FLOOR_DB
-} from "./speech-acoustic.js";
+  extractVoiceMeasurements,
+  VOICE_ANALYSIS_PROCESSOR_REF,
+  VOICE_ANALYSIS_VERSION,
+  VOICE_MEASUREMENT_LABELS
+} from "./voice-analysis.js";
+export type { VoiceExtractionResult } from "./voice-analysis.js";
+export {
+  browserAudioProcessingEnabled,
+  evaluateVoiceQuality,
+  VOICE_FINE_ACOUSTIC_SNR_FLOOR_DB,
+  VOICE_GENERAL_SNR_FLOOR_DB,
+  VOICE_MAXIMUM_ABSOLUTE_DC_OFFSET,
+  VOICE_MAXIMUM_BLOCK_GAP_MS,
+  VOICE_MAXIMUM_CLIPPED_SAMPLE_FRACTION,
+  VOICE_MAXIMUM_LOST_BLOCK_FRACTION,
+  VOICE_MINIMUM_SAMPLE_RATE_HZ,
+  VOICE_MINIMUM_SIGNAL_RMS
+} from "./voice-quality.js";
+export type { VoiceQualityAssessment } from "./voice-quality.js";
 export {
   createNeutralFacialBaseline,
   evaluateEyeClosureAdherence,
@@ -59,6 +70,8 @@ export type {
 export {
   SYNTHETIC_VISUAL_PIPELINE,
   SYNTHETIC_VIDEO_SETTINGS,
+  syntheticVoiceFrame,
+  syntheticSpeechConfounds,
   syntheticFacialFrame,
   syntheticTaskFrames,
   syntheticFrameStream

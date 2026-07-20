@@ -266,11 +266,12 @@ export function calibrateFaceFrame(
 export function createCaptureCalibration(
   audio: AudioCalibration,
   audioQuality: CalibrationQuality,
-  faceResult: FaceCalibrationResult
+  faceResult: FaceCalibrationResult,
+  profileId: CaptureCalibration["profileId"] = "visual-foundation-v1"
 ): CaptureCalibration {
   return {
-    schemaVersion: "phenometric.capture-calibration.v1",
-    profileId: "visual-foundation-v1",
+    schemaVersion: "phenometric.capture-calibration.v2",
+    profileId,
     calibratedAt: new Date().toISOString(),
     audio,
     audioQuality,

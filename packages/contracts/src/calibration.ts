@@ -3,6 +3,9 @@ export interface AudioCalibration {
   noiseP90Rms: number;
   entryThresholdRms: number;
   exitThresholdRms: number;
+  durationMs?: number;
+  usableFraction?: number;
+  sampleRateHz?: number;
 }
 
 export interface FaceCalibration {
@@ -20,8 +23,8 @@ export interface FaceCalibration {
 export type CalibrationQuality = "strong" | "limited" | "unavailable";
 
 export interface CaptureCalibration {
-  schemaVersion: "phenometric.capture-calibration.v1";
-  profileId: "visual-foundation-v1";
+  schemaVersion: "phenometric.capture-calibration.v2";
+  profileId: "visual-foundation-v1" | "voice-foundation-v1";
   calibratedAt: string;
   audio: AudioCalibration;
   audioQuality: CalibrationQuality;
@@ -123,4 +126,53 @@ export interface GuidedTaskEvidenceInterval {
   startMs: number;
   endMs: number;
   processorRef?: string;
+}
+
+export type VoiceTaskContext =
+  | "quiet-calibration"
+  | "natural-speech-check"
+  | "sustained-vowel-1"
+  | "sustained-vowel-2"
+  | "standardized-reading"
+  | "rapid-syllables"
+  | "spontaneous-response";
+
+export type GuidedVoiceTaskContext = Exclude<
+  VoiceTaskContext,
+  "quiet-calibration" | "natural-speech-check"
+>;
+
+export interface GuidedVoiceTaskEvidenceInterval {
+  taskContext: GuidedVoiceTaskContext;
+  startMs: number;
+  endMs: number;
+  taskStartedAtMs: number;
+  processorRef: string;
+}
+
+export interface VoiceCompletionGateProgress {
+  usableEvidenceMs: number;
+  evidenceRequiredMs: number;
+  voicedEvidenceMs: number;
+  periodicityCoverage: number;
+  syllabicNuclei: number;
+  requiredSyllabicNuclei: number;
+  fraction: number;
+}
+
+export interface CompletionGatedVoicePhasePolicy {
+  phase: GuidedVoiceTaskContext;
+  evidenceDurationMs: number;
+  assistanceAfterMs: number;
+  requiredPeriodicityCoverage?: number;
+  requiredSyllabicNuclei?: number;
+  permitsNaturalPauses: boolean;
+  successCondition: string;
+}
+
+export interface CompletionGatedVoicePolicy {
+  id: "voice-completion-gated-v1";
+  maximumContinuousSignalGapMs: number;
+  assistanceAfterMs: number;
+  phases: readonly CompletionGatedVoicePhasePolicy[];
 }

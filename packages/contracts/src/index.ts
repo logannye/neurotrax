@@ -13,11 +13,19 @@ export type {
   CompletionGatedPhasePolicy,
   CompletionGatedEncounterPolicy,
   CompletionGateProgress,
-  GuidedTaskEvidenceInterval
+  GuidedTaskEvidenceInterval,
+  VoiceTaskContext,
+  GuidedVoiceTaskContext,
+  GuidedVoiceTaskEvidenceInterval,
+  VoiceCompletionGateProgress,
+  CompletionGatedVoicePhasePolicy,
+  CompletionGatedVoicePolicy
 } from "./calibration.js";
 export type {
   Modality,
   MeasurementContextKind,
+  AudioQualityReasonCode,
+  BrowserAudioProcessingState,
   SpeechConfoundEnvelope,
   VisualConfoundEnvelope,
   ConfoundEnvelope,
@@ -30,6 +38,10 @@ export type {
 export type {
   BiomarkerAggregate,
   CaptureAdapter,
+  AudioCaptureSettings,
+  AudioPipelineProvenance,
+  VoiceModelProvenance,
+  AudioStreamDiagnostics,
   VisualPipelineProvenance,
   VideoCaptureSettings,
   EncounterQualitySummary,

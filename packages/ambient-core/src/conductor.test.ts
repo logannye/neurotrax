@@ -6,6 +6,7 @@ import type { FrameStream } from "./primitives.js";
 import {
   syntheticFacialFrame,
   syntheticFrameStream,
+  syntheticVoiceFrame,
   syntheticTaskFrames
 } from "./test-helpers.js";
 
@@ -17,32 +18,27 @@ function loadFixture(): FrameStream {
 }
 
 describe("runConductor", () => {
-  it("produces five speech and six corrected facial measurements", () => {
+  it("produces only the six corrected facial measurements for the facial protocol", () => {
     const stream = loadFixture();
     const { observation, events } = runConductor(stream, {
       baseTimeMs: Date.parse("2026-07-18T16:00:00.000Z")
     });
 
     expect(observation).toMatchObject({
-      schemaVersion: "phenometric.encounter-observation.v1",
+      schemaVersion: "phenometric.encounter-observation.v2",
       containsPHI: false,
       rawMediaRetained: false,
       nativeVisualObservationsRetained: false,
-      measurementCount: 11
+      measurementCount: 6
     });
-    expect(observation.measurements).toHaveLength(11);
+    expect(observation.measurements).toHaveLength(6);
     expect(observation.aggregates.map((aggregate) => aggregate.code)).toEqual([
       "prototype.face.eye_closure_fraction.asymmetry",
       "prototype.face.eye_closure_fraction.left",
       "prototype.face.eye_closure_fraction.right",
       "prototype.face.smile_excursion.asymmetry",
       "prototype.face.smile_excursion.left",
-      "prototype.face.smile_excursion.right",
-      "prototype.speech.onset_latency",
-      "prototype.speech.pause_rate",
-      "prototype.speech.pitch_center",
-      "prototype.speech.pitch_variability",
-      "prototype.speech.voiced_time_fraction"
+      "prototype.face.smile_excursion.right"
     ]);
     expect(
       observation.measurements.filter((measurement) =>
@@ -76,7 +72,7 @@ describe("runConductor", () => {
     );
   });
 
-  it("abstains only a poor-quality visual task while speech continues", () => {
+  it("abstains only a poor-quality visual task while voice gating remains non-measuring", () => {
     const stream = loadFixture();
     const degraded = {
       ...stream,
@@ -105,9 +101,9 @@ describe("runConductor", () => {
     ).toBe(true);
     expect(
       observation.measurements.some((measurement) =>
-        measurement.code.startsWith("prototype.speech.")
+        measurement.code.startsWith("prototype.voice.")
       )
-    ).toBe(true);
+    ).toBe(false);
     expect(observation.abstentions).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -142,14 +138,12 @@ describe("runConductor", () => {
     const session = createConductorSession(identity, { baseTimeMs: 0 });
 
     for (let tMs = 0; tMs <= 5_000; tMs += 100) {
-      session.ingestAudio({
-        tMs,
-        voiced: true,
-        rms: 0.1,
-        pitchHz: 120 + (tMs % 400) / 100,
-        clipped: false,
-        snrDb: 20
-      });
+      session.ingestAudio(
+        syntheticVoiceFrame(tMs, {
+          taskContext: "natural-speech-check",
+          f0Hz: 120 + (tMs % 400) / 100
+        })
+      );
     }
     for (const frame of syntheticTaskFrames("neutral-face", 0)) {
       session.ingestFace(frame);
@@ -182,13 +176,14 @@ describe("runConductor", () => {
     expect(
       observation.windows.filter((window) => window.modality === "face")
     ).toHaveLength(2);
+    expect(observation.qualitySummary.audioFrameCount).toBeGreaterThan(0);
     expect(
       events.some(
         (event) =>
           event.type === "measurement.recorded" &&
-          event.actor.id === "speech-acoustic"
+          event.actor.id === "voice-analysis"
       )
-    ).toBe(true);
+    ).toBe(false);
     expect(observation.abstentions).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
