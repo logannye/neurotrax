@@ -12,27 +12,29 @@ export const VISUAL_WORKER_MESSAGE_VERSION =
   "phenometric.visual-worker-message.v2" as const;
 export const MEDIAPIPE_TASKS_VISION_VERSION = "0.10.35" as const;
 export const FACE_LANDMARKER_MODEL_PATH =
-  "/models/face_landmarker.task" as const;
+  "models/face_landmarker.task" as const;
 export const FACE_LANDMARKER_MODEL_SHA256 =
   "64184e229b263107bc2b804c6625db1341ff2bb731874b0bcc2fe6544e0bc9ff" as const;
 export const FACE_LANDMARKER_GEOMETRY_VERSION =
   "bilateral-geometry-v1" as const;
 
 export function visualPipelineProvenance(
-  delegate: "GPU" | "CPU"
+  delegate: "GPU" | "CPU",
+  modelAsset: string = FACE_LANDMARKER_MODEL_PATH,
+  modelSha256: string = FACE_LANDMARKER_MODEL_SHA256
 ): VisualPipelineProvenance {
   return {
     processorRef: [
       "mediapipe-face-landmarker",
       MEDIAPIPE_TASKS_VISION_VERSION,
-      FACE_LANDMARKER_MODEL_SHA256.slice(0, 12),
+      modelSha256.slice(0, 12),
       FACE_LANDMARKER_GEOMETRY_VERSION,
       delegate.toLowerCase()
     ].join(":"),
     runtime: "mediapipe-tasks-vision",
     mediaPipeVersion: MEDIAPIPE_TASKS_VISION_VERSION,
-    modelAsset: FACE_LANDMARKER_MODEL_PATH,
-    modelSha256: FACE_LANDMARKER_MODEL_SHA256,
+    modelAsset,
+    modelSha256,
     delegate,
     geometryVersion: FACE_LANDMARKER_GEOMETRY_VERSION
   };
@@ -43,6 +45,11 @@ export interface VisualWorkerInitializeMessage {
   type: "initialize";
   captureEpoch: number;
   videoCaptureSettings: VideoCaptureSettings;
+  assets: {
+    mediaPipeRootUrl: string;
+    modelUrl: string;
+    modelSha256: string;
+  };
 }
 
 export interface VisualWorkerResetMessage {
@@ -108,6 +115,7 @@ export interface VisualWorkerResultMessage {
   captureEpoch: number;
   sequence: number;
   acquiredAtMs: number;
+  faceCount: number;
   frame: FacialKinematicsFrameV1;
   boundingBox: FacialKinematicsFrameV1["boundingBox"];
   stream: FrameStreamDiagnostics;
@@ -189,13 +197,15 @@ export function createVideoCaptureSettings(input: {
 
 export function createVisualWorkerInitializeMessage(
   captureEpoch: number,
-  videoCaptureSettings: VideoCaptureSettings
+  videoCaptureSettings: VideoCaptureSettings,
+  assets: VisualWorkerInitializeMessage["assets"]
 ): VisualWorkerInitializeMessage {
   return {
     schemaVersion: VISUAL_WORKER_MESSAGE_VERSION,
     type: "initialize",
     captureEpoch,
-    videoCaptureSettings
+    videoCaptureSettings,
+    assets
   };
 }
 
@@ -212,7 +222,7 @@ export function createVisualWorkerResetMessage(
 export function createVisualWorkerAttachOverlayMessage(
   captureEpoch: number,
   canvas: OffscreenCanvas,
-  maxRenderHz = 12
+  maxRenderHz = 24
 ): VisualWorkerAttachOverlayMessage {
   return {
     schemaVersion: VISUAL_WORKER_MESSAGE_VERSION,

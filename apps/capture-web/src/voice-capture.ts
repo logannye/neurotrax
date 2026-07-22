@@ -2,8 +2,6 @@ import type {
   AudioCaptureSettings,
   AudioPipelineProvenance,
   AudioStreamDiagnostics,
-  GuidedVoiceTaskEvidenceInterval,
-  VoiceModelProvenance,
   VoiceTaskContext
 } from "@phenometric/contracts";
 import type { VoiceSignalFrameV1 } from "@phenometric/ambient-core";
@@ -19,13 +17,6 @@ export interface VoiceCaptureCallbacks {
   onReady(provenance: AudioPipelineProvenance): void;
   onDiagnostics(diagnostics: AudioStreamDiagnostics): void;
   onFailure(reason: string): void;
-  onRepresentation?(result: {
-    requestRef: string;
-    windowRef: string;
-    status: "available" | "abstained";
-    provenance?: VoiceModelProvenance;
-    reasonCode?: string;
-  }): void;
 }
 
 export interface VoiceCaptureStartOptions {
@@ -34,6 +25,7 @@ export interface VoiceCaptureStartOptions {
   captureSettings: AudioCaptureSettings;
   captureEpoch: number;
   taskContext: VoiceTaskContext;
+  workletUrl: string;
   callbacks: VoiceCaptureCallbacks;
 }
 
@@ -41,10 +33,6 @@ export interface VoiceCapturePipeline {
   setTask(taskContext: VoiceTaskContext): void;
   setNoiseFloor(noiseFloorRms: number): void;
   reset(captureEpoch: number, taskContext: VoiceTaskContext): void;
-  requestRepresentation(
-    endpoint: string,
-    interval: GuidedVoiceTaskEvidenceInterval
-  ): void;
   stop(): Promise<void>;
   readonly captureEpoch: number;
 }
@@ -65,7 +53,7 @@ export async function startVoiceCapturePipeline(
     throw new Error("audio-worklet-unavailable");
   }
   await options.audioContext.audioWorklet.addModule(
-    "/voice-capture-worklet.js"
+    options.workletUrl
   );
   const worker = new Worker(
     new URL("./voice-worker.ts", import.meta.url),
@@ -93,16 +81,21 @@ export async function startVoiceCapturePipeline(
   const channel = new MessageChannel();
   let captureEpoch = options.captureEpoch;
   let stopped = false;
+  let disposedResolver: (() => void) | null = null;
 
   worker.addEventListener(
     "message",
     (event: MessageEvent<VoiceWorkerResponse>) => {
-      if (
-        stopped ||
-        !isCurrentVoiceWorkerResponse(event.data, captureEpoch)
-      ) {
+      if (!isCurrentVoiceWorkerResponse(event.data, captureEpoch)) {
         return;
       }
+      if (event.data.type === "disposed") {
+        options.callbacks.onDiagnostics(event.data.diagnostics);
+        disposedResolver?.();
+        disposedResolver = null;
+        return;
+      }
+      if (stopped) return;
       if (event.data.type === "ready") {
         options.callbacks.onReady(event.data.provenance);
       } else if (event.data.type === "signal-frame") {
@@ -114,18 +107,6 @@ export async function startVoiceCapturePipeline(
         options.callbacks.onDiagnostics(event.data.diagnostics);
       } else if (event.data.type === "error") {
         options.callbacks.onFailure(event.data.reason);
-      } else if (event.data.type === "representation-status") {
-        options.callbacks.onRepresentation?.({
-          requestRef: event.data.requestRef,
-          windowRef: event.data.windowRef,
-          status: event.data.status,
-          ...(event.data.provenance
-            ? { provenance: event.data.provenance }
-            : {}),
-          ...(event.data.reasonCode
-            ? { reasonCode: event.data.reasonCode }
-            : {})
-        });
       }
     }
   );
@@ -187,23 +168,12 @@ export async function startVoiceCapturePipeline(
         request({ type: "reset", captureEpoch, taskContext })
       );
     },
-    requestRepresentation(endpoint, interval) {
-      if (stopped || endpoint.length === 0) return;
-      worker.postMessage(
-        request({
-          type: "request-representation",
-          captureEpoch,
-          endpoint,
-          requestRef: `representation-${captureEpoch}-${interval.taskContext}`,
-          windowRef: `voice:${interval.startMs}-${interval.endMs}`,
-          taskContext: interval.taskContext,
-          durationMs: interval.endMs - interval.startMs
-        })
-      );
-    },
     async stop() {
       if (stopped) return;
       stopped = true;
+      const acknowledgement = new Promise<void>((resolve) => {
+        disposedResolver = resolve;
+      });
       try {
         worklet.port.postMessage({ type: "dispose" });
         worker.postMessage(
@@ -211,11 +181,26 @@ export async function startVoiceCapturePipeline(
         );
       } catch {
         // A failed worker already released its message ports.
+        disposedResolver?.();
+        disposedResolver = null;
       }
-      source.disconnect();
-      worklet.disconnect();
-      mutedOutput.disconnect();
+      let timeout: ReturnType<typeof setTimeout> | undefined;
+      await Promise.race([
+        acknowledgement,
+        new Promise<void>((resolve) => {
+          timeout = setTimeout(resolve, 500);
+        })
+      ]);
+      if (timeout !== undefined) clearTimeout(timeout);
+      for (const node of [source, worklet, mutedOutput]) {
+        try {
+          node.disconnect();
+        } catch {
+          // Nodes can already be disconnected when context startup failed.
+        }
+      }
       worker.terminate();
+      disposedResolver = null;
     }
   };
 }

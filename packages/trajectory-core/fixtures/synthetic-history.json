@@ -11,6 +11,7 @@
       "id": "macbook-browser",
       "version": "0.3.0"
     },
+    "selectedProtocolId": "facial-foundation.v1",
     "reviewStatus": "accepted",
     "aggregates": [
       {
@@ -68,6 +69,7 @@
       "id": "macbook-browser",
       "version": "0.3.0"
     },
+    "selectedProtocolId": "facial-foundation.v1",
     "reviewStatus": "accepted",
     "aggregates": [
       {
@@ -125,6 +127,7 @@
       "id": "macbook-browser",
       "version": "0.3.0"
     },
+    "selectedProtocolId": "facial-foundation.v1",
     "reviewStatus": "accepted",
     "aggregates": [
       {
@@ -182,6 +185,7 @@
       "id": "macbook-browser",
       "version": "0.2.0"
     },
+    "selectedProtocolId": "facial-foundation.v1",
     "reviewStatus": "accepted",
     "aggregates": [
       {

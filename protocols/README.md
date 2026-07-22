@@ -1,36 +1,16 @@
 # Protocol registry
 
-Clinical applications will be represented as versioned protocol packs within
-Ambient Capture, Personal Trajectory, and the Clinician Evidence Card.
+The active nonclinical protocol pack is the immutable
+`AMBIENT_LOCAL_PROTOCOL_PACK` in
+`packages/contracts/src/ambient-protocol.ts`. It defines the local source and
+consent policy, five-minute limit, quality thresholds, report ordering, and
+exactly 16 ambient metrics.
 
-The target `ClinicalProtocolPack` contract will define:
+The JSON files in this directory are archival guided-demo fixtures. They are
+not imported by the live browser, are not accepted as ObservationV3 protocol
+identity, and are no longer part of the active structure validator.
 
-- intended use and target population;
-- ambient and prompted capture contexts;
-- required and optional modalities;
-- measurement codes, algorithms, and units;
-- quality, confound, uncertainty, and abstention rules;
-- reference standard and validation evidence;
-- permitted claims and prohibited extrapolations; and
-- the required human-review workflow.
-
-No clinical protocol pack is implemented or validated yet. The planned contract
-and evidence requirements are described in
-[`../docs/telehealth-platform-vision.md`](../docs/telehealth-platform-vision.md).
-
-> **Legacy scripted protocol.** Ambient Capture does not prompt the patient to
-> perform this task in the current live workflow. It is retained only as a
-> historical demo fixture.
-
-The MVP contains one non-clinical protocol:
-
-`macbook-check-in.v0.1`
-
-It captures:
-
-1. a brief standardized speech sample;
-2. a brief seated finger-tapping sample.
-
-The protocol exists to test consent, capture, quality, provenance, comparison,
-and review in the PhenoMetric demo spine. It is not a validated neurological
-examination.
+No clinical protocol pack is implemented or validated. A future clinical pack
+would require an intended use, population, reference standard, analytical and
+clinical evidence, permitted claims, prohibited extrapolations, and governed
+human workflow.

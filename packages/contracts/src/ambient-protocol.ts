@@ -1,0 +1,434 @@
+import type { ProtocolPackV1 } from "./protocol.js";
+import {
+  ProtocolPackV1Schema,
+  protocolRefFor
+} from "./protocol.js";
+
+export const AMBIENT_LOCAL_CONSENT_TEXT =
+  "PhenoMetric processes camera and microphone signals locally in this browser and keeps derived results only in memory for this session. It does not upload or retain recordings, verify identity, diagnose a condition, or provide clinical interpretation. I confirm that I am the intended local participant and will use headphones when other voices may be audible.";
+
+const COMMON_WITHHELD_REASONS = [
+  "modality-unavailable",
+  "processor-unavailable",
+  "asset-integrity-failed",
+  "quality-threshold-failed",
+  "insufficient-duration",
+  "session-ended-early"
+] as const;
+
+const VOICE_WITHHELD_REASONS = [
+  ...COMMON_WITHHELD_REASONS,
+  "no-usable-signal",
+  "insufficient-segments",
+  "insufficient-active-speech"
+] as const;
+
+const FACE_WITHHELD_REASONS = [
+  ...COMMON_WITHHELD_REASONS,
+  "no-usable-signal",
+  "multiple-faces",
+  "insufficient-bins",
+  "pose-out-of-range",
+  "face-scale-out-of-range"
+] as const;
+
+const rawProtocolPack = {
+  schemaVersion: "phenometric.protocol-pack.v1",
+  packId: "ambient-local-observation",
+  version: "1.0.0",
+  // SHA-256 of the canonical pack content with this field omitted.
+  contentSha256:
+    "c4a74628d0c969672a8c9e897deef550b828143f27386dad2f8162fba78182ab",
+  status: "nonclinical-prototype",
+  maximumSessionDurationMs: 300_000,
+  supportedTarget: {
+    browser: "chrome",
+    versions: "current-and-previous-stable",
+    operatingSystem: "macos",
+    requiresHttps: true
+  },
+  modalities: ["voice", "face"],
+  sourcePolicy: {
+    role: "local-participant",
+    audioAttribution: "user-asserted-local-participant",
+    speakerAttribution: "unverified-local-input",
+    faceAttribution: "single-visible-face",
+    performsIdentityVerification: false
+  },
+  consentDocument: {
+    version: "ambient-local-consent.v1",
+    contentSha256:
+      "f42c01a28bea301db48ef4490a29912020f085cccf746292cabde65629ee149e"
+  },
+  qualityPolicy: {
+    id: "ambient-local-quality.v1",
+    maximumSessionDurationMs: 300_000,
+    setupTimeoutMs: 15_000,
+    audio: {
+      quietCalibrationMs: 2_000,
+      minimumSampleRateHz: 44_100,
+      maximumFrameGapMs: 40,
+      maximumLostBlockFraction: 0.05,
+      maximumClippingFraction: 0.01,
+      maximumAbsoluteDcOffset: 0.02,
+      minimumSpeechSnrDb: 15,
+      maximumRawAudioBufferMs: 2_000
+    },
+    face: {
+      minimumCalibrationDurationMs: 1_500,
+      minimumCalibrationUsableFraction: 0.8,
+      binDurationMs: 5_000,
+      minimumDataPerBinMs: 4_000,
+      minimumSamplesPerBin: 80,
+      minimumBinSpanMs: 4_800,
+      maximumFrameGapMs: 200,
+      maximumAbsoluteYawDegrees: 7,
+      maximumAbsolutePitchDegrees: 10,
+      maximumAbsoluteRollDegrees: 5,
+      maximumCalibrationScaleDeviation: 0.2,
+      maximumWithinBinScaleRatio: 1.15,
+      minimumBins: 3,
+      minimumObservationSpanMs: 30_000,
+      maximumDetectedFaces: 2,
+      requiredFaceCount: 1
+    },
+    blink: {
+      minimumExposureMs: 60_000,
+      minimumCadenceHz: 24,
+      maximumP95FrameGapMs: 75,
+      closureFractionOfOpenReference: 0.6,
+      minimumClosureMs: 50,
+      recoveryFractionOfOpenReference: 0.8,
+      maximumRecoveryMs: 800,
+      refractoryMs: 150
+    }
+  },
+  reportSections: [
+    "capture-quality",
+    "pitch",
+    "speech-timing",
+    "eye-geometry",
+    "mouth-geometry",
+    "symmetry",
+    "movement",
+    "blink-behavior"
+  ],
+  metrics: [
+    {
+      code: "ambient.voice.f0.median",
+      label: "Median fundamental frequency",
+      modality: "voice",
+      context: "ambient-speech-turn",
+      unit: "Hz",
+      reportSection: "pitch",
+      reportOrder: 0,
+      algorithmId: "ambient-f0",
+      algorithmVersion: "1.0.0",
+      evidenceRequirements: {
+        minimumSegments: 3,
+        minimumPitchedDurationMs: 10_000,
+        minimumPitchCoverage: 0.6,
+        minimumF0Hz: 50,
+        maximumF0Hz: 700,
+        minimumEstimatorQuality: 0.55,
+        minimumEstimatorAgreement: 0.7
+      },
+      qualityInputs: ["pitchCoverage", "estimatorQuality", "estimatorAgreement"],
+      withheldReasonCodes: [
+        ...VOICE_WITHHELD_REASONS,
+        "insufficient-pitched-speech",
+        "pitch-estimator-disagreement"
+      ],
+      technicalVerification: "automated-test",
+      clinicalValidation: "none"
+    },
+    {
+      code: "ambient.voice.f0.variability",
+      label: "Fundamental-frequency variability",
+      modality: "voice",
+      context: "ambient-speech-turn",
+      unit: "semitone-SD",
+      reportSection: "pitch",
+      reportOrder: 1,
+      algorithmId: "ambient-f0-variability",
+      algorithmVersion: "1.0.0",
+      evidenceRequirements: {
+        minimumSegments: 3,
+        minimumPitchedDurationMs: 10_000,
+        minimumValidBinsPerSegment: 4,
+        binDurationMs: 500,
+        minimumPitchCoverage: 0.6
+      },
+      qualityInputs: ["pitchCoverage", "validPitchBins", "segmentCount"],
+      withheldReasonCodes: [
+        ...VOICE_WITHHELD_REASONS,
+        "insufficient-pitched-speech",
+        "insufficient-pitch-bins"
+      ],
+      technicalVerification: "automated-test",
+      clinicalValidation: "none"
+    },
+    ...[
+      [
+        "ambient.voice.speech_activity_fraction",
+        "Speech-activity fraction",
+        "ratio",
+        0,
+        "ambient-speech-activity"
+      ],
+      [
+        "ambient.voice.pause_rate",
+        "Pause rate",
+        "pauses/minute",
+        1,
+        "ambient-pause-rate"
+      ],
+      [
+        "ambient.voice.pause_duration.median",
+        "Median pause duration",
+        "seconds",
+        2,
+        "ambient-pause-duration"
+      ],
+      [
+        "ambient.voice.speech_run_duration.median",
+        "Median speech-run duration",
+        "seconds",
+        3,
+        "ambient-speech-run-duration"
+      ]
+    ].map(([code, label, unit, reportOrder, algorithmId]) => ({
+      code,
+      label,
+      modality: "voice",
+      context: "ambient-speech-turn",
+      unit,
+      reportSection: "speech-timing",
+      reportOrder,
+      algorithmId,
+      algorithmVersion: "1.0.0",
+      evidenceRequirements: {
+        minimumSegments: 3,
+        minimumEligibleSpanMs: 30_000,
+        minimumActiveSpeechMs: 15_000,
+        minimumSegmentSpanMs: 2_000,
+        minimumActiveSpeechPerSegmentMs: 1_000,
+        minimumTimingCoverage: 0.9,
+        minimumPauseMs: 200,
+        maximumPauseMs: 1_999,
+        ...(code === "ambient.voice.pause_duration.median" ||
+        code === "ambient.voice.speech_run_duration.median"
+          ? { minimumEventsForMedian: 5 }
+          : {})
+      },
+      qualityInputs: ["timingCoverage", "activeSpeechDurationMs", "segmentCount"],
+      withheldReasonCodes: [
+        ...VOICE_WITHHELD_REASONS,
+        "insufficient-active-speech",
+        "insufficient-segments",
+        "insufficient-events"
+      ],
+      technicalVerification: "automated-test",
+      clinicalValidation: "none"
+    })),
+    {
+      code: "ambient.voice.acoustic_nucleus_rate",
+      label: "Acoustic nucleus rate estimate",
+      modality: "voice",
+      context: "ambient-speech-turn",
+      unit: "nuclei/active-speech-second",
+      reportSection: "speech-timing",
+      reportOrder: 4,
+      algorithmId: "ambient-acoustic-nuclei",
+      algorithmVersion: "1.0.0",
+      evidenceRequirements: {
+        minimumSegments: 3,
+        minimumEligibleSpanMs: 30_000,
+        minimumActiveSpeechMs: 15_000,
+        minimumNuclei: 30
+      },
+      qualityInputs: ["activeSpeechDurationMs", "nucleusCount", "segmentCount"],
+      withheldReasonCodes: [
+        ...VOICE_WITHHELD_REASONS,
+        "insufficient-active-speech",
+        "insufficient-nuclei"
+      ],
+      technicalVerification: "automated-test",
+      clinicalValidation: "none"
+    },
+    ...[
+      [
+        "ambient.face.eye_aperture.left",
+        "Left open-eye aperture",
+        "eye-width-ratio",
+        "eye-geometry",
+        0,
+        "ambient-eye-aperture"
+      ],
+      [
+        "ambient.face.eye_aperture.right",
+        "Right open-eye aperture",
+        "eye-width-ratio",
+        "eye-geometry",
+        1,
+        "ambient-eye-aperture"
+      ],
+      [
+        "ambient.face.eye_aperture.asymmetry",
+        "Open-eye aperture asymmetry",
+        "eye-width-ratio",
+        "symmetry",
+        0,
+        "ambient-eye-asymmetry"
+      ],
+      [
+        "ambient.face.mouth_width",
+        "Mouth width",
+        "inter-eye-normalized-distance",
+        "mouth-geometry",
+        0,
+        "ambient-mouth-width"
+      ],
+      [
+        "ambient.face.mouth_aperture.median",
+        "Median mouth aperture",
+        "mouth-width-ratio",
+        "mouth-geometry",
+        1,
+        "ambient-mouth-aperture"
+      ],
+      [
+        "ambient.face.mouth_aperture.p90",
+        "P90 mouth aperture",
+        "mouth-width-ratio",
+        "mouth-geometry",
+        2,
+        "ambient-mouth-aperture"
+      ],
+      [
+        "ambient.face.mouth_corner_position.asymmetry",
+        "Mouth-corner positional asymmetry",
+        "inter-eye-normalized-distance",
+        "symmetry",
+        1,
+        "ambient-mouth-corner-asymmetry"
+      ],
+      [
+        "ambient.face.landmark_speed.p90",
+        "P90 regional landmark speed",
+        "inter-eye-distances/second",
+        "movement",
+        0,
+        "ambient-landmark-speed"
+      ]
+    ].map(([code, label, unit, reportSection, reportOrder, algorithmId]) => ({
+      code,
+      label,
+      modality: "face",
+      context: "ambient-frontal",
+      unit,
+      reportSection,
+      reportOrder,
+      algorithmId,
+      algorithmVersion: "1.0.0",
+      evidenceRequirements: {
+        binDurationMs: 5_000,
+        minimumDataPerBinMs: 4_000,
+        minimumSamplesPerBin: 80,
+        minimumBinSpanMs: 4_800,
+        maximumFrameGapMs: 200,
+        minimumBins: 3,
+        minimumObservationSpanMs: 30_000
+      },
+      qualityInputs: ["usableBins", "usableDurationMs", "poseCoverage", "scaleStability"],
+      withheldReasonCodes: [
+        ...FACE_WITHHELD_REASONS
+      ],
+      technicalVerification: "automated-test",
+      clinicalValidation: "none"
+    })),
+    {
+      code: "ambient.face.blink_rate.bilateral",
+      label: "Bilateral blink rate",
+      modality: "face",
+      context: "ambient-frontal",
+      unit: "events/minute",
+      reportSection: "blink-behavior",
+      reportOrder: 0,
+      algorithmId: "ambient-bilateral-blink",
+      algorithmVersion: "1.0.0",
+      evidenceRequirements: {
+        minimumExposureMs: 60_000,
+        minimumCadenceHz: 24,
+        maximumP95FrameGapMs: 75,
+        closureFractionOfOpenReference: 0.6,
+        minimumClosureMs: 50,
+        recoveryFractionOfOpenReference: 0.8,
+        maximumRecoveryMs: 800,
+        refractoryMs: 150
+      },
+      qualityInputs: ["eligibleExposureMs", "cadenceHz", "p95FrameGapMs"],
+      withheldReasonCodes: [
+        ...FACE_WITHHELD_REASONS,
+        "insufficient-exposure",
+        "insufficient-frame-cadence"
+      ],
+      technicalVerification: "automated-test",
+      clinicalValidation: "none"
+    }
+  ]
+} as const;
+
+function deepFreeze<T>(value: T): Readonly<T> {
+  if (value !== null && typeof value === "object" && !Object.isFrozen(value)) {
+    Object.freeze(value);
+    for (const child of Object.values(value)) deepFreeze(child);
+  }
+  return value;
+}
+
+function canonicalize(value: unknown): string {
+  if (value === null || typeof value !== "object") {
+    return JSON.stringify(value);
+  }
+  if (Array.isArray(value)) {
+    return `[${value.map(canonicalize).join(",")}]`;
+  }
+  const record = value as Record<string, unknown>;
+  return `{${Object.keys(record)
+    .sort()
+    .map((key) => `${JSON.stringify(key)}:${canonicalize(record[key])}`)
+    .join(",")}}`;
+}
+
+export function protocolPackDigestInput(pack: ProtocolPackV1): string {
+  const { contentSha256: _contentSha256, ...content } = pack;
+  return canonicalize(content);
+}
+
+export async function calculateSha256Hex(value: string): Promise<string> {
+  const digest = await globalThis.crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(value)
+  );
+  return [...new Uint8Array(digest)]
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+export async function verifyProtocolPackDigest(
+  pack: ProtocolPackV1
+): Promise<boolean> {
+  return (
+    (await calculateSha256Hex(protocolPackDigestInput(pack))) ===
+    pack.contentSha256
+  );
+}
+
+export const AMBIENT_LOCAL_PROTOCOL_PACK = deepFreeze(
+  ProtocolPackV1Schema.parse(rawProtocolPack)
+);
+
+export const AMBIENT_LOCAL_PROTOCOL_REF = deepFreeze(
+  protocolRefFor(AMBIENT_LOCAL_PROTOCOL_PACK)
+);

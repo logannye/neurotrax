@@ -1,6 +1,6 @@
 ## Capability
 
-- [ ] Guided Capture
+- [ ] Ambient Capture
 - [ ] Personal Trajectory
 - [ ] Clinician Evidence Card
 - [ ] Required safety foundation
@@ -23,7 +23,8 @@ Explain why this strengthens one of the three capabilities.
 ## Checks
 
 - [ ] `npm test`
+- [ ] `pnpm test:browser`
 - [ ] Synthetic data only
 - [ ] No captured media or secrets
 - [ ] Visible agent activity is backed by a real event
-- [ ] Generated claims resolve to evidence references
+- [ ] Reported outcomes resolve to exact evidence references

@@ -27,6 +27,7 @@ class PhenoMetricVoiceCaptureProcessor extends AudioWorkletProcessor {
         };
         this.dataPort.start();
       } else if (message?.type === "capture-epoch") {
+        this.pending.fill(0);
         this.captureEpoch = message.captureEpoch;
         this.sequence = 0;
         this.absoluteSampleIndex = 0;
@@ -34,6 +35,10 @@ class PhenoMetricVoiceCaptureProcessor extends AudioWorkletProcessor {
       } else if (message?.type === "dispose") {
         this.dataPort?.close();
         this.dataPort = null;
+        this.pending.fill(0);
+        for (const buffer of this.pool) {
+          new Float32Array(buffer).fill(0);
+        }
         this.pool.length = 0;
         this.pendingLength = 0;
       }

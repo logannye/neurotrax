@@ -4,471 +4,176 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta
-      name="description"
-      content="PhenoMetric consented face and voice measurement for telehealth encounters."
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' blob: data:; media-src 'self' blob:; worker-src 'self' blob:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'; frame-ancestors 'none'"
     />
-    <title>PhenoMetric · Telehealth Signal Measurement</title>
+    <meta
+      name="description"
+      content="Local, nonclinical ambient face and voice engineering measurements."
+    />
+    <link rel="stylesheet" href="./src/styles.css" />
+    <title>PhenoMetric · Ambient Measurement</title>
   </head>
   <body>
     <div id="app">
       <header class="app-header">
-        <a class="brand" href="/" aria-label="PhenoMetric home">
+        <a class="brand" href="./" aria-label="PhenoMetric home">
           <span class="brand-mark" aria-hidden="true">P</span>
           <span>
             <strong>PhenoMetric</strong>
-            <small>Clinical observability</small>
+            <small>Local ambient measurement</small>
           </span>
         </a>
         <div class="header-status">
-          <span class="privacy-pill" id="header-privacy-state">
-            <span aria-hidden="true">●</span>
-            Devices off
-          </span>
-          <span class="encounter-status" id="header-mode">Ready</span>
+          <span class="privacy-pill" id="privacy-state">Devices off</span>
+          <span id="phase-label">Ready</span>
         </div>
       </header>
 
       <main>
-        <section class="intro-row" aria-labelledby="page-title">
-          <div>
-            <p class="eyebrow">Live telehealth encounter</p>
-            <h1 id="page-title">Ambient face and voice measurement</h1>
+        <section id="welcome-view" class="welcome-layout" aria-labelledby="welcome-title">
+          <div class="welcome-copy">
+            <p class="eyebrow">Nonclinical prototype</p>
+            <h1 id="welcome-title">Observe the conversation, locally.</h1>
+            <p class="lede">
+              PhenoMetric derives bounded face and voice engineering measurements
+              during one ambient session of up to five minutes.
+            </p>
+            <div class="boundary-card">
+              <strong>No recording or upload</strong>
+              <p>
+                Camera and microphone signals are processed in this browser.
+                Raw media, transcripts, embeddings, and results are not saved.
+              </p>
+            </div>
           </div>
-          <p class="intro-copy">
-            Audio and video are processed during the encounter and are not
-            stored.
-          </p>
+
+          <form id="consent-form" class="consent-card">
+            <h2>Before you begin</h2>
+            <ul>
+              <li>Use a quiet, well-lit space and face the camera.</li>
+              <li>Use headphones if another person’s voice may be audible.</li>
+              <li>This prototype does not verify identity or provide clinical interpretation.</li>
+            </ul>
+            <label class="consent-control" for="consent-checkbox">
+              <input id="consent-checkbox" type="checkbox" />
+              <span id="consent-text">
+                I consent to local camera and microphone analysis for this session
+                and confirm I am the intended local participant.
+              </span>
+            </label>
+            <button id="start-button" class="primary-button" type="submit" disabled>
+              Begin technical setup
+            </button>
+            <p class="secure-context-note">
+              Camera and microphone access requires HTTPS or localhost in Chrome.
+            </p>
+          </form>
         </section>
 
-        <section class="assessment-shell" aria-label="Ambient assessment">
-          <article class="capture-panel">
-            <div class="camera-stage" id="camera-stage">
+        <section id="capture-view" class="capture-layout" aria-labelledby="capture-title" hidden>
+          <div class="capture-heading">
+            <div>
+              <p class="eyebrow" id="capture-eyebrow">Technical setup</p>
+              <h1 id="capture-title">Preparing local signals</h1>
+              <p id="capture-instruction">
+                Face the camera and allow a brief quiet moment for calibration.
+              </p>
+            </div>
+            <time id="session-clock" class="session-clock" datetime="PT0S">00:00</time>
+          </div>
+
+          <div class="capture-grid">
+            <div class="preview-card">
               <video
                 id="camera-preview"
                 autoplay
                 muted
                 playsinline
-                aria-label="Live self-facing camera preview"
+                aria-label="Mirrored live camera preview"
               ></video>
-              <canvas
-                id="landmark-overlay"
-                class="landmark-overlay"
-                aria-hidden="true"
-              ></canvas>
-              <canvas
-                id="face-overlay"
-                class="face-overlay"
-                aria-hidden="true"
-              ></canvas>
-              <div class="camera-empty" id="camera-empty">
-                <span class="camera-aperture" aria-hidden="true"></span>
-                <strong>Ready for system check</strong>
-                <span>Confirm consent to begin.</span>
+              <canvas id="landmark-overlay" aria-hidden="true" hidden></canvas>
+              <div id="camera-placeholder" class="camera-placeholder">
+                Camera is preparing
               </div>
-              <div class="live-strip" id="live-strip" hidden>
-                <span class="live-dot" aria-hidden="true"></span>
-                Ambient assessment active
+              <span class="local-badge">Local processing · not saved</span>
+              <span id="face-mesh-status" class="mesh-status" hidden></span>
+            </div>
+
+            <aside class="lane-panel" aria-label="Capture quality">
+              <section class="live-voice-panel" aria-labelledby="live-voice-title">
+                <div class="live-panel-heading">
+                  <div>
+                    <h2 id="live-voice-title">Live voice signal</h2>
+                    <p>Preview only · not report values</p>
+                  </div>
+                  <strong id="voice-live-state" data-state="waiting">Waiting for signal</strong>
+                </div>
+                <div class="voice-chart-block">
+                  <div><span>Energy</span><small>−60 to 0 dBFS · last 8 seconds</small></div>
+                  <canvas id="voice-energy-chart" aria-label="Live microphone energy history"></canvas>
+                </div>
+                <div class="voice-chart-block">
+                  <div><span>Pitch</span><small>60 to 400 Hz · periodic signal only</small></div>
+                  <canvas id="voice-pitch-chart" aria-label="Live periodic pitch history"></canvas>
+                </div>
+                <dl class="voice-live-values">
+                  <div><dt>Level</dt><dd id="voice-level-value">—</dd></div>
+                  <div><dt>Pitch</dt><dd id="voice-pitch-value">—</dd></div>
+                  <div><dt>SNR</dt><dd id="voice-snr-value">—</dd></div>
+                  <div><dt>F0 confidence</dt><dd id="voice-confidence-value">—</dd></div>
+                  <div><dt>Agreement</dt><dd id="voice-agreement-value">—</dd></div>
+                </dl>
+                <p id="voice-quality-state" class="voice-quality-state">No live signal yet.</p>
+              </section>
+              <h2 class="readiness-heading">Signal readiness</h2>
+              <article class="lane-card">
+                <div><span>Microphone</span><strong id="audio-lane-state">Requesting</strong></div>
+                <p id="audio-lane-detail">Waiting for permission.</p>
+              </article>
+              <article class="lane-card">
+                <div><span>Camera</span><strong id="face-lane-state">Requesting</strong></div>
+                <p id="face-lane-detail">Waiting for permission.</p>
+              </article>
+              <div class="capture-notice" role="status" aria-live="polite" id="capture-status">
+                Devices are only active during this session.
               </div>
-              <div
-                class="mesh-disclosure"
-                id="mesh-disclosure"
-                hidden
-              >
-                Live 478-point facial mesh · display only · not stored
-              </div>
-              <button
-                class="end-assessment"
-                id="stop-button"
-                type="button"
-                hidden
-              >
-                End assessment
+              <button id="finish-button" class="secondary-button" type="button" disabled>
+                End session and view report
               </button>
-              <div class="camera-callout" id="camera-callout" hidden>
-                <span aria-hidden="true"></span>
-                <strong id="camera-callout-text"></strong>
-              </div>
-              <div class="session-clock" id="session-clock">00:00</div>
-              <div
-                class="guidance-card"
-                id="guidance-card"
-                aria-live="polite"
-                hidden
-              >
-                <span id="guidance-step">System check</span>
-                <strong id="guidance-title">Calibrating environment</strong>
-                <p id="guidance-detail">Remain centered and follow the prompts.</p>
-                <div
-                  class="guidance-progress"
-                  id="guidance-progress"
-                  role="progressbar"
-                  aria-label="Current exercise completion"
-                  aria-valuemin="0"
-                  aria-valuemax="100"
-                  aria-valuenow="0"
-                >
-                  <span id="guidance-progress-fill"></span>
-                </div>
-              </div>
-            </div>
-
-            <div class="signal-grid">
-              <section class="signal-card" aria-label="Speech signal">
-                <div class="signal-heading">
-                  <span>Speech</span>
-                  <strong id="voice-state">Waiting</strong>
-                </div>
-                <div
-                  class="meter-track"
-                  role="meter"
-                  aria-label="Microphone level"
-                  aria-valuemin="0"
-                  aria-valuemax="100"
-                  aria-valuenow="0"
-                  id="mic-meter"
-                >
-                  <span id="mic-meter-fill"></span>
-                </div>
-                <div class="signal-meta">
-                  <span><strong id="speech-duration-value">0.0 s</strong> usable</span>
-                  <span><strong id="pitch-coverage-value">0%</strong> pitch coverage</span>
-                </div>
-                <p class="signal-standby" id="speech-signal-caption">
-                  Analysis standing by
-                </p>
-              </section>
-
-              <section class="signal-card" aria-label="Facial signal">
-                <div class="signal-heading">
-                  <span>Facial</span>
-                  <strong id="face-state">Waiting</strong>
-                </div>
-                <div class="meter-track face-quality-track">
-                  <span id="face-quality-fill"></span>
-                </div>
-                <div class="signal-meta">
-                  <span><strong id="face-usability-value">0%</strong> usable</span>
-                  <span><strong id="face-recovery-value">0/3</strong> tasks</span>
-                </div>
-                <p class="signal-standby" id="face-signal-caption">
-                  Analysis preparing
-                </p>
-              </section>
-            </div>
-
-            <div class="capture-controls">
-              <fieldset class="protocol-selector" id="protocol-selector">
-                <legend>Choose a foundation protocol</legend>
-                <label>
-                  <input
-                    type="radio"
-                    name="protocol"
-                    value="facial-foundation.v1"
-                    checked
-                  />
-                  <span>
-                    <strong>Facial Foundation</strong>
-                    <small>Camera + microphone · facial task measurements</small>
-                  </span>
-                </label>
-                <label>
-                  <input
-                    type="radio"
-                    name="protocol"
-                    value="voice-foundation.v1"
-                  />
-                  <span>
-                    <strong>Voice Foundation</strong>
-                    <small>Microphone only · acoustic task measurements</small>
-                  </span>
-                </label>
-              </fieldset>
-              <label class="consent-control">
-                <input id="consent-checkbox" type="checkbox" />
-                <span>
-                  <strong id="consent-label">I consent to in-session audiovisual analysis</strong>
-                  <small>I am using my own non-patient data.</small>
-                </span>
-              </label>
-              <div class="button-row">
-                <button class="button button-primary" id="start-button" disabled>
-                  Run system check
-                </button>
-                <button class="button button-quiet" id="reset-button" hidden>
-                  New assessment
-                </button>
-              </div>
-              <p class="capture-hint" id="capture-hint">
-                The system check verifies framing, room conditions, and speech.
-              </p>
-            </div>
-          </article>
-
-          <aside class="activity-panel" aria-labelledby="activity-heading">
-            <div class="panel-heading">
-              <div>
-                <p class="eyebrow">Live orchestration</p>
-                <h2 id="activity-heading">Agent coordination</h2>
-              </div>
-              <span class="event-count" id="event-count">Agents ready</span>
-            </div>
-
-            <div class="milestone-rail" id="milestone-rail">
-              <div class="milestone" data-milestone="speech">
-                <span>01</span><strong>Signals established</strong>
-              </div>
-              <div class="milestone" data-milestone="withheld">
-                <span>02</span><strong>Facial branch paused</strong>
-              </div>
-              <div class="milestone" data-milestone="neutral">
-                <span>03</span><strong>Neutral baseline</strong>
-              </div>
-              <div class="milestone" data-milestone="smile">
-                <span>04</span><strong>Smile measured</strong>
-              </div>
-              <div class="milestone" data-milestone="eye-closure">
-                <span>05</span><strong>Eye closure measured</strong>
-              </div>
-            </div>
-
-            <div class="agent-graph" id="agent-graph">
-              <article class="agent-node coordinator-node" data-lane="capture-conductor">
-                <span class="node-icon" aria-hidden="true">C</span>
-                <div>
-                  <strong>Encounter Coordinator</strong>
-                  <p id="conductor-status">Ready for a consented system check.</p>
-                </div>
-                <span class="lane-state" id="conductor-state">Ready</span>
-              </article>
-              <div class="graph-connector graph-split" aria-hidden="true"></div>
-              <div class="parallel-nodes">
-                <article class="agent-node" data-lane="voice-analysis">
-                  <span class="node-icon" aria-hidden="true">S</span>
-                  <div>
-                    <strong id="voice-lane-title">Voice Analysis</strong>
-                    <p id="speech-status">Waiting for room calibration.</p>
-                  </div>
-                  <span class="lane-state" id="speech-state">Waiting</span>
-                </article>
-                <article class="agent-node" data-lane="facial-expressivity">
-                  <span class="node-icon" aria-hidden="true">F</span>
-                  <div>
-                    <strong>Facial Analysis</strong>
-                    <p id="face-status">Preparing facial analysis.</p>
-                  </div>
-                  <span class="lane-state" id="face-lane-state">Preparing</span>
-                </article>
-              </div>
-              <div class="evidence-packet" id="evidence-packet" hidden>
-                Window accepted
-              </div>
-              <p class="coordinator-decision" id="coordinator-decision">
-                Waiting to coordinate the assessment.
-              </p>
-              <div class="graph-connector" aria-hidden="true"></div>
-              <article class="agent-node synthesis-node" data-lane="evidence-card">
-                <span class="node-icon" aria-hidden="true">G</span>
-                <div>
-                  <strong>Clinical Synthesis</strong>
-                  <p id="evidence-status">Waiting for a completed assessment.</p>
-                </div>
-                <span class="lane-state" id="evidence-state">Waiting</span>
-              </article>
-              <div class="graph-connector" aria-hidden="true"></div>
-              <article class="agent-node review-node" data-lane="clinician-review">
-                <span class="node-icon" aria-hidden="true">R</span>
-                <div>
-                  <strong>Clinician Review</strong>
-                  <p id="review-status">No summary awaiting review.</p>
-                </div>
-                <span class="lane-state" id="review-state">Waiting</span>
-              </article>
-            </div>
-
-            <div class="activity-stream">
-              <div class="activity-heading">
-                <h3>Agent decisions</h3>
-                <span>Observable workflow events</span>
-              </div>
-              <ol class="event-list" id="event-list">
-                <li class="event-placeholder">
-                  Activity will appear when the assessment begins.
-                </li>
-              </ol>
-            </div>
-            <details class="operator-diagnostics" id="operator-diagnostics" hidden>
-              <summary>Operator diagnostics</summary>
-              <pre id="operator-output"></pre>
-            </details>
-          </aside>
+              <button id="discard-button" class="text-button" type="button">
+                Discard session
+              </button>
+            </aside>
+          </div>
         </section>
 
-        <section class="results-panel" id="results-panel" hidden aria-live="polite">
-          <div class="results-heading">
+        <section id="message-view" class="message-card" aria-live="assertive" hidden>
+          <p class="eyebrow">Session ended</p>
+          <h1 id="message-title">Session discarded</h1>
+          <p id="message-detail">No report was created and all local session data was cleared.</p>
+          <button id="message-reset-button" class="primary-button" type="button">Start again</button>
+        </section>
+
+        <section id="report-view" class="report-layout" aria-labelledby="report-title" hidden>
+          <header class="report-header">
             <div>
-              <p class="eyebrow">Assessment complete</p>
-              <h2>Clinician encounter summary</h2>
+              <p class="eyebrow">Session complete · devices off</p>
+              <h1 id="report-title">Ambient session measurement report</h1>
+              <p id="report-boundary" class="report-boundary"></p>
+              <p id="report-source" class="report-source"></p>
             </div>
-            <div class="result-summary" id="result-summary"></div>
-          </div>
-
-          <div
-            class="results-handoff"
-            id="results-handoff"
-            aria-label="Agent handoff"
-          >
-            <div class="handoff-label">
-              <span class="handoff-pulse" aria-hidden="true"></span>
-              <div>
-                <strong>Agent handoff</strong>
-                <small>From ambient signals to clinician review</small>
-              </div>
-            </div>
-            <div class="handoff-flow">
-              <article class="handoff-step" id="capture-handoff">
-                <span class="handoff-icon">C</span>
-                <div>
-                  <strong>Signals analyzed</strong>
-                  <small>Speech + facial evidence</small>
-                </div>
-                <span class="handoff-state">Complete</span>
-              </article>
-              <span class="handoff-connector" aria-hidden="true"></span>
-              <article class="handoff-step" id="grounding-handoff">
-                <span class="handoff-icon">G</span>
-                <div>
-                  <strong>Evidence grounding</strong>
-                  <small>Matching claims to source</small>
-                </div>
-                <span class="handoff-state">Preparing</span>
-              </article>
-              <span class="handoff-connector" aria-hidden="true"></span>
-              <article class="handoff-step" id="review-handoff">
-                <span class="handoff-icon">R</span>
-                <div>
-                  <strong>Clinician review</strong>
-                  <small>Human decision required</small>
-                </div>
-                <span class="handoff-state">Next</span>
-              </article>
-            </div>
-          </div>
-
-          <div class="result-section">
-            <div class="section-heading">
-              <span class="section-number">01</span>
-              <h3>Digital biomarker profile</h3>
-            </div>
-            <div class="aggregate-grid" id="aggregate-grid"></div>
-          </div>
-
-          <div class="result-section evidence-section" id="evidence-panel">
-            <div class="section-heading">
-              <span class="section-number">02</span>
-              <h3>Clinician note</h3>
-              <span class="summary-status" id="evidence-status-chip"
-                >Preparing</span
-              >
-            </div>
-            <div class="evidence-loading" id="evidence-loading">
-              Preparing a grounded summary from the measured signals.
-            </div>
-            <div class="evidence-error" id="evidence-error" hidden></div>
-            <button
-              class="button button-quiet"
-              id="retry-evidence-button"
-              hidden
-            >
-              Retry
-            </button>
-            <article class="evidence-card" id="evidence-card" hidden>
-              <p class="eyebrow">For clinician review</p>
-              <h3 id="evidence-headline"></h3>
-              <p id="evidence-summary"></p>
-              <section class="report-metrics" aria-labelledby="report-metrics-title">
-                <div class="report-metrics-heading">
-                  <strong id="report-metrics-title">Quantitative encounter profile</strong>
-                  <span>Captured during this visit</span>
-                </div>
-                <div class="report-metric-grid" id="report-metric-grid"></div>
-              </section>
-              <div class="evidence-claims" id="evidence-claims"></div>
-              <p class="boundary-statement" id="boundary-statement"></p>
-              <div class="review-controls" id="review-controls">
-                <button class="button button-quiet" id="copy-report-button">
-                  Copy EHR-ready report
-                </button>
-                <button class="button button-primary" id="accept-button">
-                  Approve summary
-                </button>
-                <button class="button button-quiet" id="reject-button">
-                  Dismiss
-                </button>
-              </div>
-              <div
-                class="approval-confirmation"
-                id="approval-confirmation"
-                hidden
-              >
-                <span aria-hidden="true">✓</span>
-                <strong>Approved for this encounter · Visit 1 established</strong>
-              </div>
-              <p class="review-outcome" id="review-outcome"></p>
-            </article>
-          </div>
-
-          <section class="baseline-panel" id="baseline-panel" hidden>
-            <div>
-              <p class="eyebrow">Patient-specific trajectory</p>
-              <h3>Today establishes Visit 1</h3>
-              <p>
-                Repeated routine visits can build a within-patient trajectory of
-                speech and facial function, helping clinicians recognize subtle
-                functional change remotely without extra hardware or a separate
-                testing session.
-              </p>
-            </div>
-            <div class="visit-timeline" aria-label="Future visit timeline">
-              <div class="visit-point visit-current">
-                <span>1</span><strong>Visit 1</strong><small>Established today</small>
-              </div>
-              <div class="visit-line" aria-hidden="true"></div>
-              <div class="visit-point visit-future">
-                <span>2</span><strong>Future visit</strong><small>Awaiting encounter</small>
-              </div>
-              <div class="visit-line" aria-hidden="true"></div>
-              <div class="visit-point visit-future">
-                <span>3</span><strong>Future visit</strong><small>Awaiting encounter</small>
-              </div>
-            </div>
-          </section>
-
-          <div class="trace-backdrop" id="trace-backdrop" hidden></div>
-          <aside
-            class="trace-drawer"
-            id="trace-drawer"
-            hidden
-            aria-label="Grounding trace"
-          >
-            <button
-              class="trace-close"
-              id="trace-close-button"
-              aria-label="Close evidence trace"
-            >
-              ×
-            </button>
-            <p class="eyebrow">Grounding trace</p>
-            <h3 id="trace-title">Evidence trace</h3>
-            <div id="trace-content"></div>
-          </aside>
+            <button id="reset-button" class="secondary-button" type="button">Clear and start again</button>
+          </header>
+          <section id="report-sections" class="report-sections"></section>
         </section>
       </main>
 
-      <footer class="app-footer">
-        <span id="privacy-status">Camera and microphone are off.</span>
-        <span>Demonstration use only · Not for clinical decisions</span>
+      <footer>
+        <span>PhenoMetric stable prototype</span>
+        <span>Session memory only · No clinical use</span>
       </footer>
     </div>
-    <script type="module" src="/src/main.ts"></script>
+    <script type="module" src="./src/main.ts"></script>
   </body>
 </html>

@@ -1,16 +1,7 @@
 import type {
-  CaptureAdapter,
-  CaptureCalibration,
-  CaptureMode,
-  AudioCaptureSettings,
-  AudioPipelineProvenance,
   AudioQualityReasonCode,
-  AudioStreamDiagnostics,
   BrowserAudioProcessingState,
-  VoiceModelProvenance,
   VoiceTaskContext,
-  VideoCaptureSettings,
-  VisualPipelineProvenance,
   VisualQualityReasonCode,
   VisualTaskContext
 } from "@phenometric/contracts";
@@ -23,21 +14,16 @@ export interface VoiceSignalFrameV1 {
   sequence: number;
   absoluteSampleIndex: number;
   taskContext: VoiceTaskContext;
-  voiced: boolean;
-  voicingProbability: number;
+  /** Ambient speech activity; distinct from periodic phonation. */
+  speechActive: boolean;
+  /** Whether the frame contains reliable periodic phonation. */
+  periodic: boolean;
+  /** Changes whenever acquisition continuity or the local input track changes. */
+  trackSegmentId: string;
   rms: number;
-  intensityDbfs: number;
   f0Hz: number | null;
   f0Confidence: number;
   estimatorAgreement: number;
-  periodicity: number;
-  cppsDb: number | null;
-  hnrDb: number | null;
-  jitterLocal: number | null;
-  shimmerLocal: number | null;
-  formantF1Hz: number | null;
-  formantF2Hz: number | null;
-  spectralFlux: number;
   syllabicNucleus: boolean;
   clippedSampleFraction: number;
   dcOffset: number;
@@ -83,6 +69,10 @@ export interface FacialKinematicsFrameV1 {
   sequence: number;
   captureEpoch: number;
   taskContext: VisualTaskContext;
+  /** Detector count capped at two; ambient extraction requires exactly one. */
+  faceCount?: number;
+  /** Changes after loss, reacquisition, or processor continuity breaks. */
+  trackSegmentId?: string;
   faceVisible: boolean;
   boundingBox: FacialBoundingBox | null;
   anatomicalLaterality: "subject-anatomical";
@@ -106,26 +96,4 @@ export interface FacialKinematicsFrameV1 {
   processingLatencyMs: number;
   qualityReasons: VisualQualityReasonCode[];
   processorRef: string;
-}
-
-export interface FrameStream {
-  schemaVersion: "phenometric.frame-stream.v2";
-  containsPHI: false;
-  visitId: string;
-  participantId: string;
-  captureMode: CaptureMode;
-  selectedProtocolId:
-    | "facial-foundation.v1"
-    | "voice-foundation.v1";
-  occurredAt?: string;
-  captureAdapter?: CaptureAdapter;
-  calibration?: CaptureCalibration;
-  audioPipeline: AudioPipelineProvenance | null;
-  audioCaptureSettings: AudioCaptureSettings | null;
-  voiceModel: VoiceModelProvenance | null;
-  audioStreamDiagnostics: AudioStreamDiagnostics | null;
-  visualPipeline: VisualPipelineProvenance | null;
-  videoCaptureSettings: VideoCaptureSettings | null;
-  audio: VoiceSignalFrameV1[];
-  face: FacialKinematicsFrameV1[];
 }

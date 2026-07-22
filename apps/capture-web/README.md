@@ -1,55 +1,50 @@
 # Capture web application
 
-The web application owns protocol selection, the consented system check,
-guided facial or microphone-only voice assessment, clinician encounter
-summary, grounding trace, and human review.
+This is the static ambient-v3 browser application.
 
 ## Runtime responsibilities
 
-- Requests camera plus microphone for Facial Foundation or microphone only for
-  Voice Foundation, then releases every track and processing resource.
-- Calibrates room noise and continuous voice quality; facial mode additionally
-  calibrates visual cadence, face geometry, illumination, and sharpness.
-- Captures continuous 20 ms audio blocks in an `AudioWorklet`, transfers them
-  to a dedicated worker, and analyzes 40 ms windows every 10 ms with bounded
-  memory and explicit discontinuity handling.
-- Runs two sustained vowels, reading, rapid syllables, and spontaneous response
-  as completion-gated Voice Foundation tasks.
-- Produces task-specific `prototype.voice.*` measurements and independent
-  abstentions without retaining native audio observations.
-- Schedules camera analysis from presented video frames with bounded
-  latest-frame-wins backpressure.
-- Runs MediaPipe facial inference in an isolated browser worker and keeps
-  native landmarks, blendshapes, matrices, and media inside that boundary.
-- Renders a full 478-point facial mesh directly to a transferred worker-owned
-  canvas at no more than 12 Hz; native landmark coordinates and overlay pixels
-  never return to the application thread or enter serialized artifacts.
-- Streams only compact, versioned facial kinematics into the encounter
-  coordinator with anatomical subject-left and subject-right labels.
-- Advances the establishing, turn-away, neutral-face, smile, and eye-closure
-  exercises only after their signal criteria are continuously satisfied,
-  resetting a streak after a visual-result gap over 200 ms.
-- Preserves only the final qualifying task interval for facial measurement;
-  failed attempts remain transient and cannot alter the neutral baseline.
-- Lets the participant end and discard capture at any time without producing
-  a report.
-- Sends bounded current-encounter facts to the server-side synthesis endpoint.
-- Displays only deterministically grounded statements.
+- record explicit session-local consent;
+- request microphone and camera independently;
+- verify the committed local asset manifest;
+- run bounded voice and face calibration;
+- maintain independent worker-backed capture lanes;
+- draw a presentation-only 478-point face mesh and a bounded live voice signal
+  dashboard during capture;
+- collect compact derived frames for at most five minutes;
+- finalize all 16 deterministic metrics into ObservationV3;
+- validate and render the session-only structured report; and
+- dispose devices, workers, timers, buffers, and journal state.
 
-The optional loopback WavLM service is disabled by default. Representation
-summaries remain transient; only processor provenance can enter the
-observation. See
-[`../../docs/voice-foundation.md`](../../docs/voice-foundation.md).
+The application has no server route, API key, LLM, persistence layer, export,
+guided task mode, or synthetic production capture mode.
+
+## Worker boundaries
+
+The voice worker receives PCM from the AudioWorklet and emits compact signal
+frames. The face worker owns native MediaPipe results and emits compact
+kinematics. It also draws the dense mesh directly to a transferred
+`OffscreenCanvas`; landmark coordinates never return to the application. The
+voice dashboard retains at most eight seconds/800 derived level and pitch
+points and is cleared with the capture lifecycle. Neither live visualization
+is application, ObservationV3, or report evidence.
 
 ## Commands
 
+From the repository root:
+
 ```bash
 pnpm dev
-pnpm test:unit
-pnpm test:browser
-pnpm typecheck
-pnpm build
+pnpm --filter @phenometric/capture-web verify:assets
+pnpm --filter @phenometric/capture-web test:unit
+pnpm --filter @phenometric/capture-web typecheck
+pnpm --filter @phenometric/capture-web test:browser
+pnpm --filter @phenometric/capture-web build
 ```
 
-Credential configuration, the service smoke test, and operator-only capture
-testing are documented in [`../../docs/operator-guide.md`](../../docs/operator-guide.md).
+The Playwright suite injects media and worker mocks with `page.addInitScript`.
+Those fixtures are not compiled into the production application.
+
+In development, open `http://127.0.0.1:4173/` in current Chrome. The browser UI
+owns consent, capture start, end/discard, and reset. Stop the Vite process with
+`Ctrl-C` when development is complete.

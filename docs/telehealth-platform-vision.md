@@ -1,5 +1,12 @@
 # PhenoMetric platform vision
 
+> **Current implementation note (2026-07-21):** this document describes a
+> long-term platform direction. The shipping research prototype is the
+> session-only ambient-v3 path documented in `README.md` and
+> `docs/architecture.md`. Persistence, trajectory wiring, retained snippets,
+> narrative drafting, clinician review, export, PHI workflows, and clinical
+> validation below are future work.
+
 ## Purpose
 
 This document defines the long-term direction for PhenoMetric, which began as
@@ -147,15 +154,13 @@ clinically usable when a modality or task fails.
 
 ### Current prototype foundation
 
-The current implementation offers two independent nonclinical protocols.
-Facial Foundation uses MediaPipe as its only visual model and reports six
-bilateral smile and eye-closure measurements; its microphone signal is used
-only for behavioral gating. Voice Foundation is microphone-only and uses a
-continuous `AudioWorklet`/worker path for completion-gated sustained vowel,
-reading, rapid-syllable, and spontaneous-response tasks. It exposes eighteen
-task-specific measurement types under `prototype.voice.*`. Each exercise must
-satisfy its engineering signal criterion; elapsed time cannot advance or skip
-it. These are descriptive prototype measurements, not validated clinical
+The current participant experience offers one nonclinical ambient observation
+of up to five minutes. It has no exercises or scripted prompts. Camera and
+microphone permissions and calibration remain independent, so one lane can
+continue when the other is unavailable. The immutable protocol registry emits
+seven voice and nine face metric outcomes under `ambient.*`, each measured or
+specifically withheld. There is no fused score or cross-modal interpretation.
+These are descriptive engineering measurements, not validated clinical
 endpoints or scores.
 
 Subject-left and subject-right are anatomical labels and do not change when the
@@ -168,9 +173,9 @@ pixels are not returned, retained, or serialized.
 
 Native audio has the same boundary. PCM, waveform and spectral arrays, pitch
 cycles, cepstra, MFCCs, formant tracks, spectrograms, transcripts, and
-embeddings remain transient. An optional loopback WavLM Large service can
-produce layer summaries for research, but the summaries are not measurements
-and do not enter evidence or trajectory artifacts.
+embeddings remain transient. An optional loopback WavLM Large service is
+retained for isolated research, but the browser does not call it and its
+summaries do not enter observations, reports, or trajectory artifacts.
 
 ## Measurement domains
 

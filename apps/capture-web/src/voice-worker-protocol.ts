@@ -17,13 +17,6 @@ export const VOICE_DSP_ALGORITHM_VERSION =
   "voice-analysis-1.0" as const;
 export const VOICE_DSP_PROCESSOR_REF =
   "browser-voice-dsp@1.0" as const;
-export const WAVLM_MODEL_ID = "microsoft/wavlm-large" as const;
-export const WAVLM_REVISION =
-  "c1423ed94bb01d80a3f5ce5bc39f6026a0f4828c" as const;
-export const WAVLM_WEIGHT_SHA256 =
-  "fdee460e529396ddb2f8c8e8ce0ad74cfb747b726bc6f612e666c7c1e1963c9d" as const;
-export const WAVLM_LAYERS = [6, 12, 18, 24] as const;
-
 export type VoiceWorkerRequest =
   | {
       schemaVersion: typeof VOICE_WORKER_MESSAGE_VERSION;
@@ -58,19 +51,7 @@ export type VoiceWorkerRequest =
       type: "dispose";
       captureEpoch: number;
     }
-  | {
-      schemaVersion: typeof VOICE_WORKER_MESSAGE_VERSION;
-      type: "request-representation";
-      captureEpoch: number;
-      endpoint: string;
-      requestRef: string;
-      windowRef: string;
-      taskContext: Exclude<
-        VoiceTaskContext,
-        "quiet-calibration" | "natural-speech-check"
-      >;
-      durationMs: number;
-    };
+  ;
 
 export type VoiceWorkerResponse =
   | {
@@ -94,20 +75,17 @@ export type VoiceWorkerResponse =
     }
   | {
       schemaVersion: typeof VOICE_WORKER_MESSAGE_VERSION;
+      type: "disposed";
+      captureEpoch: number;
+      diagnostics: AudioStreamDiagnostics;
+    }
+  | {
+      schemaVersion: typeof VOICE_WORKER_MESSAGE_VERSION;
       type: "error";
       captureEpoch: number;
       reason: string;
     }
-  | {
-      schemaVersion: typeof VOICE_WORKER_MESSAGE_VERSION;
-      type: "representation-status";
-      captureEpoch: number;
-      requestRef: string;
-      windowRef: string;
-      status: "available" | "abstained";
-      provenance?: import("@phenometric/contracts").VoiceModelProvenance;
-      reasonCode?: string;
-    };
+  ;
 
 export interface VoiceWorkletPcmBlock {
   schemaVersion: typeof VOICE_WORKLET_MESSAGE_VERSION;
@@ -145,7 +123,7 @@ export function audioPipelineProvenance(): AudioPipelineProvenance {
     signalFrameSchemaVersion: VOICE_SIGNAL_FRAME_VERSION,
     analysisWindowMs: 40,
     analysisHopMs: 10,
-    ringBufferSeconds: 30,
+    ringBufferSeconds: 2,
     algorithmVersion: VOICE_DSP_ALGORITHM_VERSION
   };
 }

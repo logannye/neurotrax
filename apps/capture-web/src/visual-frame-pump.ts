@@ -72,10 +72,9 @@ function trimTimeline(
 }
 
 /**
- * One inference may be in flight. While it is running, at most one captured
- * frame is retained and newer frames replace it. Transferred in-flight frames
- * remain owned by the worker; locally retained frames are always closed when
- * discarded.
+ * Exactly one inference may be in flight. Busy frames are dropped before a
+ * bitmap is retained. Transferred frames belong to the worker, which closes
+ * them in a finally block.
  */
 export class LatestFrameScheduler<TFrame extends CloseableFrame> {
   private captureEpoch: number;
@@ -95,7 +94,6 @@ export class LatestFrameScheduler<TFrame extends CloseableFrame> {
   // The transferable frame itself is deliberately not retained after submit.
   // Its lifecycle belongs to the worker, which closes it in a finally block.
   private inFlight: VisualFrameResult | null = null;
-  private pending: PresentedVisualFrame<TFrame> | null = null;
   private latestPresentedTimestampMs: number | null = null;
   private latestProcessedTimestampMs: number | null = null;
   private latestInterResultGapMs: number | null = null;
@@ -144,10 +142,11 @@ export class LatestFrameScheduler<TFrame extends CloseableFrame> {
       return true;
     }
 
-    if (this.pending !== null) {
-      this.discardPending();
-    }
-    this.pending = frame;
+    this.counters.skipped += 1;
+    this.skippedTimeline.push({
+      timestampMs: frame.acquisitionTimestampMs
+    });
+    frame.frame.close();
     return false;
   }
 
@@ -172,7 +171,6 @@ export class LatestFrameScheduler<TFrame extends CloseableFrame> {
       timestampMs: result.acquisitionTimestampMs
     });
     this.inFlight = null;
-    this.submitPending();
     return true;
   }
 
@@ -183,7 +181,6 @@ export class LatestFrameScheduler<TFrame extends CloseableFrame> {
     }
     this.counters.failed += 1;
     this.inFlight = null;
-    this.submitPending();
     return true;
   }
 
@@ -194,8 +191,20 @@ export class LatestFrameScheduler<TFrame extends CloseableFrame> {
     }
     this.counters.stale += 1;
     this.inFlight = null;
-    this.submitPending();
     return true;
+  }
+
+  recordBusyDrop(acquisitionTimestampMs: number): void {
+    this.counters.presented += 1;
+    this.counters.skipped += 1;
+    if (finiteNonnegative(acquisitionTimestampMs)) {
+      this.presentedTimeline.push({ timestampMs: acquisitionTimestampMs });
+      this.skippedTimeline.push({ timestampMs: acquisitionTimestampMs });
+      this.latestPresentedTimestampMs = Math.max(
+        this.latestPresentedTimestampMs ?? 0,
+        acquisitionTimestampMs
+      );
+    }
   }
 
   recordCaptureFailure(acquisitionTimestampMs: number): void {
@@ -214,7 +223,6 @@ export class LatestFrameScheduler<TFrame extends CloseableFrame> {
     if (!Number.isInteger(captureEpoch) || captureEpoch < 0) {
       throw new Error("captureEpoch must be a nonnegative integer.");
     }
-    if (this.pending !== null) this.discardPending();
     this.captureEpoch = captureEpoch;
     this.sequence = 0;
     this.counters = {
@@ -238,7 +246,6 @@ export class LatestFrameScheduler<TFrame extends CloseableFrame> {
 
   stop(): void {
     this.stopped = true;
-    if (this.pending !== null) this.discardPending();
     this.inFlight = null;
   }
 
@@ -308,21 +315,6 @@ export class LatestFrameScheduler<TFrame extends CloseableFrame> {
     }
   }
 
-  private submitPending(): void {
-    if (this.pending === null || this.stopped) return;
-    const pending = this.pending;
-    this.pending = null;
-    this.submit(pending);
-  }
-
-  private discardPending(): void {
-    if (this.pending === null) return;
-    const discardedAt = this.pending.acquisitionTimestampMs;
-    this.pending.frame.close();
-    this.pending = null;
-    this.counters.skipped += 1;
-    this.skippedTimeline.push({ timestampMs: discardedAt });
-  }
 }
 
 export const MAX_WORKER_RESTARTS_PER_CAPTURE = 1;
@@ -498,6 +490,7 @@ export class VideoFramePump<TFrame extends CloseableFrame> {
   private generation = 0;
   private callbackKind: "video" | "animation" | null = null;
   private lastObservedMediaTime: number | null = null;
+  private capturePending = false;
 
   constructor(options: VideoFramePumpOptions<TFrame>) {
     this.options = options;
@@ -508,6 +501,7 @@ export class VideoFramePump<TFrame extends CloseableFrame> {
     this.running = true;
     this.generation += 1;
     this.lastObservedMediaTime = null;
+    this.capturePending = false;
     this.schedule(this.generation);
   }
 
@@ -529,6 +523,7 @@ export class VideoFramePump<TFrame extends CloseableFrame> {
     }
     this.callbackHandle = null;
     this.callbackKind = null;
+    this.capturePending = false;
     this.options.scheduler.stop();
   }
 
@@ -586,11 +581,17 @@ export class VideoFramePump<TFrame extends CloseableFrame> {
     width: number,
     height: number
   ): void {
+    if (this.capturePending || this.options.scheduler.activeRequest !== null) {
+      this.options.scheduler.recordBusyDrop(acquisitionTimestampMs);
+      return;
+    }
+    this.capturePending = true;
     const taskContext =
       this.options.taskContextAtAcquisition?.();
     void this.options
       .capture(this.options.source)
       .then((frame) => {
+        this.capturePending = false;
         if (!this.running || generation !== this.generation) {
           frame.close();
           return;
@@ -604,6 +605,7 @@ export class VideoFramePump<TFrame extends CloseableFrame> {
         });
       })
       .catch(() => {
+        this.capturePending = false;
         if (generation === this.generation) {
           this.options.scheduler.recordCaptureFailure(
             acquisitionTimestampMs

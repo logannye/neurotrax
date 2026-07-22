@@ -64,17 +64,22 @@ export interface AudioPipelineProvenance {
   signalFrameSchemaVersion: "phenometric.voice-signal-frame.v1";
   analysisWindowMs: 40;
   analysisHopMs: 10;
-  ringBufferSeconds: 30;
+  ringBufferSeconds: 2;
   algorithmVersion: string;
 }
 
+/**
+ * @deprecated Legacy v2 conductor compatibility only. The ambient prototype
+ * has no external speech-representation runtime and ObservationV3 does not
+ * expose this shape.
+ */
 export interface VoiceModelProvenance {
-  processorType: "speech-representation";
+  processorType: "legacy-speech-representation";
   processorRef: string;
-  modelId: "microsoft/wavlm-large";
+  modelId: string;
   revision: string;
   weightSha256: string;
-  requestedLayers: readonly [6, 12, 18, 24];
+  requestedLayers: readonly number[];
   runtime: string;
   device: string;
 }
@@ -127,6 +132,11 @@ export interface BiomarkerAggregate {
   clinicalValidation: "none";
 }
 
+export type FoundationProtocolId =
+  | "facial-foundation.v1"
+  | "voice-foundation.v1"
+  | "unified-foundation.v1";
+
 export interface EncounterObservation {
   schemaVersion: "phenometric.encounter-observation.v2";
   containsPHI: false;
@@ -136,9 +146,7 @@ export interface EncounterObservation {
   transcriptRetained: false;
   voiceEmbeddingsRetained: false;
   nativeVisualObservationsRetained: false;
-  selectedProtocolId:
-    | "facial-foundation.v1"
-    | "voice-foundation.v1";
+  selectedProtocolId: FoundationProtocolId;
   captureMode: CaptureMode;
   visitId: string;
   participantId: string;

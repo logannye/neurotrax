@@ -5,6 +5,7 @@ import type {
   EncounterObservation,
   EventEnvelope,
   TrajectoryComparison,
+  TrajectoryCompatibilityReasonCode,
   TrajectoryDirection,
   TrajectoryHistoryRecord,
   TrajectoryPolicy
@@ -13,6 +14,7 @@ import { createEventFactory } from "@phenometric/ambient-core";
 
 export const DEFAULT_TRAJECTORY_POLICY: TrajectoryPolicy = {
   id: "ambient-context-and-confounds.v0.1",
+  minimumPriorObservations: 3,
   speechSnrToleranceDb: 6,
   faceFramingTolerance: 0.15,
   frameRateToleranceFraction: 0.25,
@@ -56,9 +58,9 @@ function confoundReasons(
   current: BiomarkerAggregate,
   prior: BiomarkerAggregate,
   policy: TrajectoryPolicy
-): string[] {
-  const reasons: string[] = [];
-  if (current.code.startsWith("prototype.voice.")) {
+): TrajectoryCompatibilityReasonCode[] {
+  const reasons: TrajectoryCompatibilityReasonCode[] = [];
+  if (current.code.includes(".voice.")) {
     if (
       current.confounds.kind !== "speech" ||
       prior.confounds.kind !== "speech"
@@ -84,7 +86,7 @@ function confoundReasons(
       reasons.push("voice-browser-processing-mismatch");
     }
   }
-  if (current.code.startsWith("prototype.face.")) {
+  if (current.code.includes(".face.")) {
     if (
       current.confounds.kind !== "visual" ||
       prior.confounds.kind !== "visual"
@@ -135,24 +137,30 @@ function compatibleAggregate(
   current: BiomarkerAggregate,
   record: TrajectoryHistoryRecord,
   policy: TrajectoryPolicy
-): { aggregate: BiomarkerAggregate | null; reasons: string[] } {
+): {
+  aggregate: BiomarkerAggregate | null;
+  reasons: TrajectoryCompatibilityReasonCode[];
+} {
   const sameCode = record.aggregates.find(
     (aggregate) =>
       aggregate.code === current.code &&
       aggregate.contextKind === current.contextKind
   );
   if (!sameCode) return { aggregate: null, reasons: [] };
+  if (sameCode.unit !== current.unit) {
+    return { aggregate: null, reasons: ["unit-mismatch"] };
+  }
   if (sameCode.algorithmVersion !== current.algorithmVersion) {
     return { aggregate: null, reasons: ["algorithm-version-mismatch"] };
   }
   if (
-    current.code.startsWith("prototype.voice.") &&
+    current.code.includes(".voice.") &&
     sameCode.processorRef !== current.processorRef
   ) {
     return { aggregate: null, reasons: ["voice-processor-mismatch"] };
   }
   if (
-    current.code.startsWith("prototype.face.") &&
+    current.code.includes(".face.") &&
     sameCode.processorRef !== current.processorRef
   ) {
     return { aggregate: null, reasons: ["visual-processor-mismatch"] };
@@ -167,14 +175,97 @@ function aggregateKey(
   return `${aggregate.code}\u0000${aggregate.contextKind}`;
 }
 
+function validatePolicy(policy: TrajectoryPolicy): void {
+  if (!policy || policy.id.trim().length === 0) {
+    throw new Error("Trajectory comparison requires an explicit policy.");
+  }
+  if (
+    !Number.isSafeInteger(policy.minimumPriorObservations) ||
+    policy.minimumPriorObservations < 1
+  ) {
+    throw new Error("Trajectory policy minimumPriorObservations must be positive.");
+  }
+  for (const [name, value] of Object.entries(policy)) {
+    if (
+      name !== "id" &&
+      (!Number.isFinite(value) || (value as number) < 0)
+    ) {
+      throw new Error(`Trajectory policy ${name} must be finite and non-negative.`);
+    }
+  }
+}
+
+function aggregateValidationReasons(
+  aggregate: BiomarkerAggregate
+): TrajectoryCompatibilityReasonCode[] {
+  const reasons: TrajectoryCompatibilityReasonCode[] = [];
+  if (
+    !Number.isFinite(aggregate.value) ||
+    !Number.isFinite(aggregate.spread) ||
+    !Number.isFinite(aggregate.confidence) ||
+    Object.values(aggregate.confounds).some(
+      (value) => typeof value === "number" && !Number.isFinite(value)
+    )
+  ) {
+    reasons.push("nonfinite-aggregate");
+  }
+  if (aggregate.spread < 0) reasons.push("negative-aggregate-spread");
+  if (aggregate.confidence < 0 || aggregate.confidence > 1) {
+    reasons.push("aggregate-confidence-out-of-range");
+  }
+  if (aggregate.sourceWindowRefs.length === 0) {
+    reasons.push("missing-aggregate-evidence");
+  }
+  if (
+    aggregate.code.trim().length === 0 ||
+    aggregate.label.trim().length === 0 ||
+    aggregate.unit.trim().length === 0 ||
+    aggregate.algorithmVersion.trim().length === 0 ||
+    aggregate.processorRef.trim().length === 0 ||
+    aggregate.windowCount < 1 ||
+    aggregate.sourceWindowRefs.some((reference) => reference.trim().length === 0)
+  ) {
+    reasons.push("invalid-aggregate-metadata");
+  }
+  return reasons;
+}
+
+function duplicateAggregateIdentities(
+  aggregates: BiomarkerAggregate[]
+): boolean {
+  const keys = aggregates.map((aggregate) => aggregateKey(aggregate));
+  return new Set(keys).size !== keys.length;
+}
+
 export function compareTrajectory(
   current: EncounterObservation,
   history: TrajectoryHistoryRecord[],
-  policy: TrajectoryPolicy = DEFAULT_TRAJECTORY_POLICY,
+  policy: TrajectoryPolicy,
   options: TrajectoryOptions = {}
 ): { comparison: TrajectoryComparison; events: EventEnvelope[] } {
   if (current.containsPHI !== false) {
     throw new Error("Trajectory comparison requires containsPHI: false.");
+  }
+  validatePolicy(policy);
+  const currentTime = Date.parse(current.occurredAt);
+  if (!Number.isFinite(currentTime)) {
+    throw new Error("Current observation occurredAt must be a valid timestamp.");
+  }
+  if (current.aggregates.length === 0) {
+    throw new Error("Current observation requires at least one aggregate.");
+  }
+  if (duplicateAggregateIdentities(current.aggregates)) {
+    throw new Error("Current observation contains duplicate aggregate identities.");
+  }
+  const currentAggregateReasons = current.aggregates.flatMap(
+    aggregateValidationReasons
+  );
+  if (currentAggregateReasons.length > 0) {
+    throw new Error(
+      `Current observation contains invalid aggregates: ${[
+        ...new Set(currentAggregateReasons)
+      ].join(", ")}.`
+    );
   }
 
   const baseTimeMs =
@@ -198,16 +289,47 @@ export function compareTrajectory(
     Array<{ record: TrajectoryHistoryRecord; aggregate: BiomarkerAggregate }>
   >();
 
+  const encounterIdCounts = new Map<string, number>();
   for (const record of history) {
-    const recordReasons = new Set<string>();
+    encounterIdCounts.set(
+      record.visitId,
+      (encounterIdCounts.get(record.visitId) ?? 0) + 1
+    );
+  }
+
+  for (const record of history) {
+    const recordReasons = new Set<TrajectoryCompatibilityReasonCode>();
     if (record.containsPHI !== false) {
       recordReasons.add("history-not-explicitly-non-phi");
     }
     if (record.reviewStatus !== "accepted") {
       recordReasons.add("history-not-accepted");
     }
+    if (record.selectedProtocolId !== current.selectedProtocolId) {
+      recordReasons.add("protocol-id-mismatch");
+    }
     if (record.participantId !== current.participantId) {
       recordReasons.add("participant-mismatch");
+    }
+    if (record.visitId === current.visitId) {
+      recordReasons.add("same-as-current-encounter");
+    }
+    const recordTime = Date.parse(record.occurredAt);
+    if (!Number.isFinite(recordTime)) {
+      recordReasons.add("invalid-occurred-at");
+    } else if (recordTime >= currentTime) {
+      recordReasons.add("not-prior-to-current");
+    }
+    if ((encounterIdCounts.get(record.visitId) ?? 0) > 1) {
+      recordReasons.add("duplicate-encounter-id");
+    }
+    if (duplicateAggregateIdentities(record.aggregates)) {
+      recordReasons.add("duplicate-aggregate-identity");
+    }
+    for (const aggregate of record.aggregates) {
+      for (const reason of aggregateValidationReasons(aggregate)) {
+        recordReasons.add(reason);
+      }
     }
     let matchedCount = 0;
     if (recordReasons.size === 0) {
@@ -266,7 +388,7 @@ export function compareTrajectory(
       compatibleByCodeAndContext.get(
         aggregateKey(currentAggregate)
       ) ?? [];
-    if (matches.length === 0) continue;
+    if (matches.length < policy.minimumPriorObservations) continue;
     const values = matches.map((match) => match.aggregate.value);
     const priorMedian = median(values);
     const priorMinimum = Math.min(...values);
@@ -297,11 +419,10 @@ export function compareTrajectory(
         priorMaximum,
         priorMad
       ),
-      currentEvidenceRefs: current.measurements
-        .filter((measurement) => measurement.code === currentAggregate.code)
-        .flatMap((measurement) => measurement.sourceWindowRefs),
+      currentEvidenceRefs: [...currentAggregate.sourceWindowRefs],
       referenceMeasurementRefs: matches.map(
-        ({ record }) => `${record.visitId}:${currentAggregate.code}`
+        ({ record }) =>
+          `${record.visitId}:${currentAggregate.code}:${currentAggregate.contextKind}:${currentAggregate.unit}`
       )
     });
   }
@@ -324,10 +445,14 @@ export function compareTrajectory(
     decisions,
     includedEncounterIds,
     excludedEncounters,
-    biomarkers: biomarkers.sort((left, right) =>
-      left.code.localeCompare(right.code)
+    biomarkers: biomarkers.sort(
+      (left, right) =>
+        left.code.localeCompare(right.code) ||
+        left.contextKind.localeCompare(right.contextKind)
     ),
-    status: "provisional",
+    status: biomarkers.length > 0 ? "provisional" : "not-comparable",
+    reasonCodes:
+      biomarkers.length > 0 ? [] : ["insufficient-prior-observations"],
     claimBoundary:
       "No disease progression, diagnosis, cause, or treatment inference."
   };

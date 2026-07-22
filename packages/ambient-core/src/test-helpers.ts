@@ -1,56 +1,11 @@
-import type {
-  VideoCaptureSettings,
-  SpeechConfoundEnvelope,
-  VisualPipelineProvenance,
-  VisualTaskContext
-} from "@phenometric/contracts";
+import type { VisualTaskContext } from "@phenometric/contracts";
 import type {
   FacialKinematicsFrameV1,
-  FrameStream,
   VoiceSignalFrameV1
 } from "./primitives.js";
 
-export const SYNTHETIC_VISUAL_PIPELINE: VisualPipelineProvenance = {
-  processorRef: "mediapipe-face-landmarker@0.10.35+synthetic-model",
-  runtime: "mediapipe-tasks-vision",
-  mediaPipeVersion: "0.10.35",
-  modelAsset: "face_landmarker.task",
-  modelSha256: "synthetic-model",
-  delegate: "CPU",
-  geometryVersion: "facial-kinematics-v1"
-};
-
-export const SYNTHETIC_VIDEO_SETTINGS: VideoCaptureSettings = {
-  requested: { width: 1280, height: 720, frameRate: 30 },
-  actual: { width: 1280, height: 720, frameRate: 30 },
-  facingMode: "user",
-  coordinateSpace: "normalized-unmirrored-image",
-  displayMirrored: true,
-  lateralityConvention: "subject-anatomical"
-};
-
-export function syntheticSpeechConfounds(
-  overrides: Partial<SpeechConfoundEnvelope> = {}
-): SpeechConfoundEnvelope {
-  return {
-    kind: "speech",
-    sampleRateHz: 48_000,
-    sampleRateClass: "48khz-or-higher",
-    browserProcessing: {
-      echoCancellation: false,
-      noiseSuppression: false,
-      autoGainControl: false
-    },
-    snrDb: 26,
-    clippingFraction: 0,
-    dcOffset: 0.001,
-    lostBlockFraction: 0,
-    maximumBlockGapMs: 20,
-    usableCoverage: 1,
-    periodicityCoverage: 0.9,
-    ...overrides
-  };
-}
+const SYNTHETIC_FACE_PROCESSOR_REF =
+  "mediapipe-face-landmarker@0.10.35+synthetic-model";
 
 export function syntheticVoiceFrame(
   tMs: number,
@@ -63,22 +18,14 @@ export function syntheticVoiceFrame(
     captureEpoch: 1,
     sequence: Math.floor(tMs / 10) + 1,
     absoluteSampleIndex: Math.round(tMs * 48),
-    taskContext: "spontaneous-response",
-    voiced: true,
-    voicingProbability: 0.94,
+    taskContext: "ambient-speech-turn",
+    speechActive: true,
+    periodic: true,
+    trackSegmentId: "local-microphone-1",
     rms: 0.08,
-    intensityDbfs: -21.9,
     f0Hz: 140 + Math.sin(tMs / 200) * 5,
     f0Confidence: 0.92,
     estimatorAgreement: 0.95,
-    periodicity: 0.9,
-    cppsDb: 14,
-    hnrDb: 21,
-    jitterLocal: 0.009,
-    shimmerLocal: 0.03,
-    formantF1Hz: 730,
-    formantF2Hz: 1_090,
-    spectralFlux: 0.06,
     syllabicNucleus: tMs % 400 < 10,
     clippedSampleFraction: 0,
     dcOffset: 0.001,
@@ -139,46 +86,7 @@ export function syntheticFacialFrame(
     skippedFrameFraction: 0,
     processingLatencyMs: 8,
     qualityReasons: [],
-    processorRef: SYNTHETIC_VISUAL_PIPELINE.processorRef,
+    processorRef: SYNTHETIC_FACE_PROCESSOR_REF,
     ...overrides
-  };
-}
-
-export function syntheticTaskFrames(
-  taskContext: VisualTaskContext,
-  startMs: number,
-  overrides: (
-    frame: FacialKinematicsFrameV1,
-    index: number
-  ) => Partial<FacialKinematicsFrameV1> = () => ({})
-): FacialKinematicsFrameV1[] {
-  return Array.from({ length: 33 }, (_, index) => {
-    const tMs = startMs + index * 50;
-    const base = syntheticFacialFrame(tMs, taskContext);
-    return { ...base, ...overrides(base, index) };
-  });
-}
-
-export function syntheticFrameStream(
-  partial: Partial<FrameStream> = {}
-): FrameStream {
-  return {
-    schemaVersion: "phenometric.frame-stream.v2",
-    containsPHI: false,
-    visitId: "synthetic-visit",
-    participantId: "synthetic-participant",
-    captureMode: "fixture-playback",
-    selectedProtocolId: "facial-foundation.v1",
-    occurredAt: "2026-07-18T16:00:00.000Z",
-    captureAdapter: { id: "fixture-replay", version: "1.0.0" },
-    audioPipeline: null,
-    audioCaptureSettings: null,
-    voiceModel: null,
-    audioStreamDiagnostics: null,
-    visualPipeline: SYNTHETIC_VISUAL_PIPELINE,
-    videoCaptureSettings: SYNTHETIC_VIDEO_SETTINGS,
-    audio: [],
-    face: [],
-    ...partial
   };
 }

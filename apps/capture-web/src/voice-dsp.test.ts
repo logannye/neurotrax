@@ -63,39 +63,27 @@ describe("continuous voice DSP", () => {
     );
     expect(result.rms).toBeCloseTo(0.1 / Math.sqrt(2), 2);
     expect(result.f0Hz).toBeCloseTo(220, -1);
-    expect(result.hnrDb).toBeGreaterThan(20);
-    expect(result.cppsDb).toBeGreaterThan(10);
-    expect(result.jitterLocal).not.toBeNull();
-    expect(result.jitterLocal!).toBeLessThan(0.002);
-    expect(result.shimmerLocal).not.toBeNull();
-    expect(result.shimmerLocal!).toBeLessThan(0.01);
+    expect(result.estimatorAgreement).toBeGreaterThan(0.7);
   });
 
-  it("recovers generated vowel-like LPC resonances with broad reference tolerances", () => {
-    const sampleRate = 48_000;
-    const f0 = 120;
-    const samples = Float32Array.from(
-      { length: Math.round(sampleRate * 0.04) },
-      (_, index) => {
-        let value = 0;
-        for (let harmonic = 1; harmonic * f0 < 4_000; harmonic += 1) {
-          const hz = harmonic * f0;
-          const weight =
-            Math.exp(-Math.pow((hz - 700) / 180, 2)) +
-            0.8 * Math.exp(-Math.pow((hz - 1_200) / 220, 2));
-          value +=
-            weight *
-            Math.sin((2 * Math.PI * hz * index) / sampleRate);
-        }
-        return value * 0.03;
-      }
+  it("retains only bounded pitch, quality, and acoustic-nucleus primitives", () => {
+    const first = analyzeVoiceWindow(sine(220, 48_000), 48_000);
+    const changed = analyzeVoiceWindow(
+      sine(330, 48_000),
+      48_000,
+      first.bandEnergies
     );
-    const result = analyzeVoiceWindow(samples, sampleRate, null);
-    expect(result.f0Hz).toBeCloseTo(120, -1);
-    expect(result.formantF1Hz).toBeGreaterThanOrEqual(500);
-    expect(result.formantF1Hz).toBeLessThanOrEqual(900);
-    expect(result.formantF2Hz).toBeGreaterThanOrEqual(1_000);
-    expect(result.formantF2Hz).toBeLessThanOrEqual(1_500);
+    expect(changed.spectralFlux).toBeGreaterThanOrEqual(0);
+    expect(Object.keys(changed).sort()).toEqual([
+      "bandEnergies",
+      "clippedSampleFraction",
+      "dcOffset",
+      "estimatorAgreement",
+      "f0Confidence",
+      "f0Hz",
+      "rms",
+      "spectralFlux"
+    ]);
   });
 
   it("keeps the PCM ring strictly bounded and ordered", () => {

@@ -2,7 +2,7 @@
   "name": "phenometric",
   "version": "0.1.0",
   "private": true,
-  "description": "A clinical observability prototype for quality-aware face and voice measurement across telehealth encounters.",
+  "description": "A nonclinical local prototype for quality-aware ambient face and voice measurement.",
   "license": "MIT",
   "packageManager": "pnpm@9.12.3",
   "scripts": {
@@ -12,7 +12,6 @@
     "check": "bash scripts/validate-structure.sh",
     "test:unit": "pnpm -r --if-present run test:unit",
     "test:browser": "pnpm --filter @phenometric/capture-web test:browser",
-    "test:python": "uv run --project services/voice-inference --extra dev pytest services/voice-inference/tests",
     "typecheck": "pnpm -r --if-present run typecheck",
     "test": "npm run check && npm run test:unit && npm run typecheck && npm run build"
   },

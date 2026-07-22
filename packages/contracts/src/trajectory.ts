@@ -1,4 +1,8 @@
-import type { BiomarkerAggregate, CaptureAdapter } from "./observation.js";
+import type {
+  BiomarkerAggregate,
+  CaptureAdapter,
+  FoundationProtocolId
+} from "./observation.js";
 import type { CaptureMode } from "./capture-mode.js";
 import type { MeasurementContextKind } from "./measurement.js";
 
@@ -13,22 +17,53 @@ export interface TrajectoryHistoryRecord {
   occurredAt: string;
   captureMode: CaptureMode;
   captureAdapter: CaptureAdapter;
+  selectedProtocolId: FoundationProtocolId;
   reviewStatus: ReviewStatus;
   aggregates: BiomarkerAggregate[];
 }
 
 export interface TrajectoryPolicy {
   id: string;
+  minimumPriorObservations: number;
   speechSnrToleranceDb: number;
   faceFramingTolerance: number;
   frameRateToleranceFraction: number;
   illuminationTolerance: number;
 }
 
+export type TrajectoryCompatibilityReasonCode =
+  | "history-not-explicitly-non-phi"
+  | "history-not-accepted"
+  | "protocol-id-mismatch"
+  | "participant-mismatch"
+  | "same-as-current-encounter"
+  | "not-prior-to-current"
+  | "invalid-occurred-at"
+  | "duplicate-encounter-id"
+  | "duplicate-aggregate-identity"
+  | "invalid-aggregate-metadata"
+  | "nonfinite-aggregate"
+  | "negative-aggregate-spread"
+  | "aggregate-confidence-out-of-range"
+  | "missing-aggregate-evidence"
+  | "unit-mismatch"
+  | "algorithm-version-mismatch"
+  | "voice-processor-mismatch"
+  | "visual-processor-mismatch"
+  | "confound-envelope-kind-mismatch"
+  | "speech-snr-out-of-tolerance"
+  | "voice-sample-rate-class-mismatch"
+  | "voice-browser-processing-mismatch"
+  | "face-framing-out-of-tolerance"
+  | "frame-rate-out-of-tolerance"
+  | "illumination-out-of-tolerance"
+  | "no-compatible-biomarkers"
+  | "insufficient-prior-observations";
+
 export interface CompatibilityDecision {
   encounterId: string;
   status: "included" | "excluded";
-  reasonCodes: string[];
+  reasonCodes: TrajectoryCompatibilityReasonCode[];
 }
 
 export type TrajectoryDirection =
@@ -71,9 +106,10 @@ export interface TrajectoryComparison {
   includedEncounterIds: string[];
   excludedEncounters: Array<{
     encounterId: string;
-    reasonCodes: string[];
+    reasonCodes: TrajectoryCompatibilityReasonCode[];
   }>;
   biomarkers: BiomarkerComparison[];
-  status: "provisional";
+  status: "provisional" | "not-comparable";
+  reasonCodes: TrajectoryCompatibilityReasonCode[];
   claimBoundary: string;
 }

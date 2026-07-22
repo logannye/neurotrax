@@ -24,7 +24,10 @@ export type CalibrationQuality = "strong" | "limited" | "unavailable";
 
 export interface CaptureCalibration {
   schemaVersion: "phenometric.capture-calibration.v2";
-  profileId: "visual-foundation-v1" | "voice-foundation-v1";
+  profileId:
+    | "visual-foundation-v1"
+    | "voice-foundation-v1"
+    | "unified-foundation-v1";
   calibratedAt: string;
   audio: AudioCalibration;
   audioQuality: CalibrationQuality;
@@ -62,12 +65,14 @@ export interface CaptureQualityPolicy {
 export type VisualTaskContext =
   | "establishing"
   | "turn-away"
+  | "ambient-frontal"
   | "neutral-face"
   | "smile"
   | "eye-closure";
 
 export type VisualQualityReasonCode =
   | "face-not-visible"
+  | "multiple-faces"
   | "face-too-small"
   | "face-too-large"
   | "face-edge-margin"
@@ -131,6 +136,7 @@ export interface GuidedTaskEvidenceInterval {
 export type VoiceTaskContext =
   | "quiet-calibration"
   | "natural-speech-check"
+  | "ambient-speech-turn"
   | "sustained-vowel-1"
   | "sustained-vowel-2"
   | "standardized-reading"

@@ -6,20 +6,15 @@ export default defineConfig({
   fullyParallel: false,
   workers: 1,
   use: {
-    baseURL: "http://127.0.0.1:4173",
+    baseURL: "http://127.0.0.1:4173/phenometric/",
     channel: "chrome",
     headless: true,
     trace: "retain-on-failure"
   },
   webServer: {
-    command: "pnpm dev",
-    url: "http://127.0.0.1:4173/api/model-readiness",
-    env: {
-      ...process.env,
-      OPENAI_API_KEY: "fixture-browser-test-key",
-      PHENOMETRIC_SKIP_SYNTHESIS_WARMUP: "1"
-    },
-    reuseExistingServer: true,
+    command: "pnpm exec tsx e2e/static-server.ts",
+    url: "http://127.0.0.1:4173/phenometric/",
+    reuseExistingServer: false,
     timeout: 30_000
   }
 });

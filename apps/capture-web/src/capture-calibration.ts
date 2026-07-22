@@ -24,9 +24,9 @@ export type FaceGuidance =
   | "Move farther back"
   | "Center your face"
   | "Face the camera"
-  | "Adjust lighting"
+  | "Please turn on a light"
   | "Hold still"
-  | "Camera signal is unstable";
+  | "Camera needs a moment";
 
 export interface CalibratedFaceFrame {
   frame: FacialKinematicsFrameV1;
@@ -114,7 +114,7 @@ function guidanceForReasons(
   if (reasons.includes("face-too-large")) return "Move farther back";
   if (reasons.includes("face-edge-margin")) return "Center your face";
   if (reasons.includes("illumination-out-of-range")) {
-    return "Adjust lighting";
+    return "Please turn on a light";
   }
   if (reasons.includes("blur")) return "Hold still";
   if (
@@ -122,7 +122,7 @@ function guidanceForReasons(
     reasons.includes("visual-frame-gap") ||
     reasons.includes("too-many-skipped-frames")
   ) {
-    return "Camera signal is unstable";
+    return "Camera needs a moment";
   }
   return "Face ready";
 }

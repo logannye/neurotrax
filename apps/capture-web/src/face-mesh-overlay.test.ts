@@ -3,7 +3,8 @@ import { describe, expect, it, vi } from "vitest";
 import {
   FACE_MESH_LANDMARK_COUNT,
   FaceMeshOverlayRenderer,
-  MAX_FACE_MESH_RENDER_HZ
+  MAX_FACE_MESH_RENDER_HZ,
+  faceMeshPresentationEligible
 } from "./face-mesh-overlay.js";
 
 function landmarks(): NormalizedLandmark[] {
@@ -68,6 +69,19 @@ function canvasFixture() {
 }
 
 describe("FaceMeshOverlayRenderer", () => {
+  it("keeps display eligibility independent from measurement-quality warnings", () => {
+    const warningFrame = {
+      faceCount: 1,
+      qualityReasons: ["blur", "illumination-out-of-range"]
+    };
+    expect(
+      faceMeshPresentationEligible(warningFrame.faceCount, 3, 3)
+    ).toBe(true);
+    expect(faceMeshPresentationEligible(0, 3, 3)).toBe(false);
+    expect(faceMeshPresentationEligible(2, 3, 3)).toBe(false);
+    expect(faceMeshPresentationEligible(1, 3, 2)).toBe(false);
+  });
+
   it("draws every landmark and the complete MediaPipe tessellation", () => {
     const renderer = new FaceMeshOverlayRenderer();
     const fixture = canvasFixture();
@@ -92,7 +106,7 @@ describe("FaceMeshOverlayRenderer", () => {
     expect(fixture.context.stroke).toHaveBeenCalledTimes(5);
   });
 
-  it("caps rendering at twelve hertz even when a higher rate is requested", () => {
+  it("caps rendering at twenty-four hertz even when a higher rate is requested", () => {
     const renderer = new FaceMeshOverlayRenderer();
     const fixture = canvasFixture();
     renderer.attach(fixture.canvas, 60);
@@ -107,12 +121,12 @@ describe("FaceMeshOverlayRenderer", () => {
       renderer.render({ ...input, acquiredAtMs: 1_000 }).rendered
     ).toBe(true);
     expect(
-      renderer.render({ ...input, acquiredAtMs: 1_082 }).rendered
+      renderer.render({ ...input, acquiredAtMs: 1_041 }).rendered
     ).toBe(false);
     expect(
-      renderer.render({ ...input, acquiredAtMs: 1_084 }).rendered
+      renderer.render({ ...input, acquiredAtMs: 1_042 }).rendered
     ).toBe(true);
-    expect(MAX_FACE_MESH_RENDER_HZ).toBe(12);
+    expect(MAX_FACE_MESH_RENDER_HZ).toBe(24);
   });
 
   it("rejects non-finite points and preserves unmirrored coordinates", () => {

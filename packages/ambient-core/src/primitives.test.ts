@@ -1,27 +1,30 @@
 import { describe, expect, it } from "vitest";
 import {
   syntheticFacialFrame,
-  syntheticFrameStream,
   syntheticVoiceFrame
 } from "./test-helpers.js";
 
 describe("primitive frame types", () => {
-  it("models a versioned stream of compact, anatomical facial kinematics", () => {
-    const frame = syntheticFacialFrame(0, "neutral-face");
-    const stream = syntheticFrameStream({
-      audio: [
-        syntheticVoiceFrame(0)
-      ],
-      face: [frame]
+  it("models compact ambient signal frames without native media", () => {
+    const face = syntheticFacialFrame(0, "ambient-frontal", {
+      faceCount: 1,
+      trackSegmentId: "face-track-1"
+    });
+    const voice = syntheticVoiceFrame(0, {
+      speechActive: true,
+      periodic: true,
+      trackSegmentId: "audio-track-1"
     });
 
-    expect(stream.schemaVersion).toBe("phenometric.frame-stream.v2");
-    expect(frame.schemaVersion).toBe(
+    expect(face.schemaVersion).toBe(
       "phenometric.facial-kinematics-frame.v1"
     );
-    expect(frame.anatomicalLaterality).toBe("subject-anatomical");
-    expect(frame.eyeAperture?.left).toBe(0.3);
-    expect(JSON.stringify(stream)).not.toMatch(
+    expect(voice.schemaVersion).toBe("phenometric.voice-signal-frame.v1");
+    expect(face.anatomicalLaterality).toBe("subject-anatomical");
+    expect(face.eyeAperture?.left).toBe(0.3);
+    expect(voice.speechActive).toBe(true);
+    expect(voice.periodic).toBe(true);
+    expect(JSON.stringify({ face, voice })).not.toMatch(
       /faceLandmarks|meshConnections|overlayPixels|offscreenCanvas|screenshot|blendshapes|transformationMatrix|deviceId|deviceLabel/
     );
   });

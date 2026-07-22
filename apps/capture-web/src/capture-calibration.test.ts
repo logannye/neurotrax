@@ -194,7 +194,7 @@ describe("guided face calibration", () => {
           }
         })
       )
-    ).toBe("Adjust lighting");
+    ).toBe("Please turn on a light");
   });
 
   it("applies the calibration-relative sharpness floor and accepts recovery", () => {

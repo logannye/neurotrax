@@ -1,487 +1,174 @@
 # PhenoMetric
 
-**A clinical observability layer for telehealth**
+> Nonclinical research prototype. Not a medical device. Not for diagnosis,
+> treatment, emergency detection, or use with protected health information.
 
-PhenoMetric is a research prototype for turning consented face and voice signals
-from an ordinary remote encounter into quality-controlled, traceable, and
-longitudinal clinical observations.
-
-The name combines **phenotype**—the observable expression of health and
-disease—with **metric**—a bounded, reproducible measurement. PhenoMetric began
-as NeuroTrax, a neurological hackathon demonstration. The platform vision is
-broader: a reusable audiovisual measurement system that can support carefully
-validated screening, assessment, monitoring, trending, and treatment-response
-workflows across medical specialties.
-
-> **Current status: research and engineering prototype. Not a medical device.
-> Not for clinical decisions.**
-
-## The thesis
-
-Telehealth made the clinical conversation remote, but much of the observable
-examination remains informal. Speech timing, vocal function, facial symmetry,
-eyelid movement, oral aperture, articulatory coordination, respiratory effort,
-and other visible or audible features may be noticed during a visit but are
-rarely measured consistently. Most disappear when the call ends.
-
-PhenoMetric explores a different care model:
-
-1. use the camera and microphone already present in a telehealth encounter;
-2. identify technically valid moments without assuming every moment is usable;
-3. calculate bounded, versioned face and voice measurements;
-4. retain structured measurements and provenance instead of raw media;
-5. compare compatible observations with the patient's own prior baseline; and
-6. present the result as inspectable evidence for a clinician to accept or
-   dismiss.
-
-The goal is not to create an autonomous doctor that diagnoses a person from
-their face or voice. The goal is to add instrumentation to remote care: make
-selected parts of the observable phenotype measurable, comparable, and
-reviewable.
-
-## Why this could matter for patient care
-
-Routine care is episodic. Many clinically relevant changes are gradual,
-fluctuating, or treatment-dependent, and a specialist may see a patient only a
-few times per year. A structured audiovisual observation layer could make
-remote care:
-
-- **more sensitive to change:** repeated measurements can reveal a deviation
-  from a patient's own baseline that is difficult to recognize from memory;
-- **more consistent:** the same acquisition, quality, and calculation policy
-  can be applied across encounters;
-- **more accessible:** a standard laptop or phone can extend structured
-  assessment beyond specialty centers;
-- **more efficient:** evidence can be curated and documented while the
-  clinician remains responsible for interpretation and action;
-- **more inspectable:** every reported value can retain its source interval,
-  quality conditions, algorithm version, and review history; and
-- **more useful for research:** repeated remote measures may support
-  decentralized studies and treatment-response endpoints.
-
-The strongest near-term opportunity is usually longitudinal measurement in a
-patient with a known condition, not stand-alone population diagnosis.
-
-## The three product capabilities
-
-The platform has exactly three product capabilities. New clinical applications
-should be implemented as validated protocol packs within these capabilities,
-not as additional autonomous product layers.
-
-### 1. Ambient Capture
-
-Ambient Capture coordinates consent, device access, calibration, signal
-quality, measurement windows, and independent face and voice analysis.
-
-It supports two complementary modes:
-
-- **ambient observation** during natural conversation; and
-- **brief prompted microtasks** when a standardized context is necessary, such
-  as smiling, sustained gaze, eye closure, counting, reading, repeated
-  syllables, or sustained phonation.
-
-Each modality remains independent. A face window can be withheld while voice
-analysis continues, or a voice measurement can be omitted while technically
-valid facial evidence remains available. An unusable interval produces
-`not measurable`, not an invented value.
-
-### 2. Personal Trajectory
-
-Personal Trajectory compares a current observation only with compatible,
-accepted measurements from the same person.
-
-Compatibility depends on more than the metric name. It includes:
-
-- measurement context and task;
-- algorithm and protocol version;
-- camera, microphone, and capture-adapter provenance;
-- signal-to-noise, illumination, pose, framing, and frame rate;
-- clinically relevant timing such as medication state or time of day; and
-- condition-specific confound rules.
-
-The intended output is a transparent within-patient trajectory with uncertainty
-and exact inclusion or exclusion reasons. It is not a claim of disease
-progression unless a specific context of use has been clinically validated and
-approved.
-
-### 3. Clinician Evidence Card
-
-The Clinician Evidence Card turns structured measurements into a concise
-review artifact without changing the underlying evidence.
-
-It can contain:
-
-- a quantitative encounter profile;
-- current-versus-personal-baseline comparisons;
-- acquisition quality and uncertainty;
-- a trace from every statement to its source measurement;
-- a copyable or interoperable clinical-documentation format; and
-- an explicit clinician approval, correction, or dismissal decision.
-
-Generative AI may help organize or phrase the report, but it does not create
-measurements, select unsupported evidence, diagnose a condition, or execute a
-clinical action.
-
-## Platform model
-
-```mermaid
-flowchart LR
-    CONSENT["Consent and intended use"] --> CAPTURE["Ambient Capture"]
-    CAPTURE --> QUALITY["Calibration, quality gates, and abstention"]
-    QUALITY --> FACE["Versioned face measurements"]
-    QUALITY --> VOICE["Versioned voice measurements"]
-    FACE --> PACK["Clinical protocol pack"]
-    VOICE --> PACK
-    PACK --> OBS["Structured encounter observation"]
-    OBS --> TRAJECTORY["Personal Trajectory"]
-    OBS --> CARD["Clinician Evidence Card"]
-    TRAJECTORY --> CARD
-    CARD --> REVIEW["Human interpretation and action"]
-```
-
-A **clinical protocol pack** binds the shared platform to one narrow context of
-use. It defines the target population, tasks, measurements, quality contract,
-confounders, reference standard, validated thresholds, uncertainty model,
-report language, and expected clinician workflow.
-
-There should be no universal disease classifier. Facial palsy rehabilitation,
-myasthenia monitoring, thyroid-eye measurement, laryngology follow-up, and
-acromegaly referral enrichment require different tasks, models, evidence, and
-regulatory claims even though they share a capture substrate.
-
-See [`docs/telehealth-platform-vision.md`](docs/telehealth-platform-vision.md)
-for the complete product, clinical, validation, and development roadmap.
-
-## Clinical opportunity landscape
-
-Face and voice analysis can be clinically relevant when a condition changes
-facial morphology or movement, eyelid and ocular function, oral motor control,
-phonation, articulation, respiratory support, language production, or the
-coordination among those systems.
-
-| Clinical area | Candidate observables | Most defensible initial use |
-| --- | --- | --- |
-| Facial nerve palsy and post-stroke rehabilitation | facial symmetry, smile excursion, eyelid closure, brow motion, dysarthria | objective grading and recovery tracking after a known event |
-| Myasthenia gravis | ptosis, sustained-gaze fatigue, eye closure, facial weakness, counting and voice fatigue | repeated symptom and treatment-response monitoring |
-| ALS and bulbar neuromuscular disease | articulation, phonation, pauses, intelligibility, lip and jaw movement, breath support | longitudinal bulbar-function measurement |
-| Parkinsonism, Huntington disease, multiple sclerosis, and ataxia | facial movement, blinking, tremor-related motion, rhythm, articulation, prosody | known-disease monitoring and clinical-trial endpoints |
-| Cognitive impairment and dementia | pauses, fluency, word retrieval, turn-taking, linguistic structure, facial dynamics | clinician-supported screening and repeated cognitive assessment |
-| Laryngology and head-and-neck care | dysphonia, phonation stability, vocal breaks, articulation, lip and jaw rehabilitation | voice-function assessment, therapy response, and referral support |
-| Thyroid eye disease and oculoplastics | eyelid retraction, ptosis, aperture, closure, blink, symmetry | remote measurement and postoperative monitoring |
-| Acromegaly and selected endocrine disorders | craniofacial morphology, facial ratios, deepened voice, vocal-tract change | referral enrichment in an appropriate high-risk population |
-| Systemic sclerosis and craniofacial rehabilitation | oral aperture, lip mobility, facial restriction, speech effects | microstomia and rehabilitation monitoring |
-| Heart failure, asthma, and COPD | breath support, speech breathlessness, phonation change, cough acoustics | research-stage exacerbation or decompensation monitoring |
-| Depression and bipolar disorder | speech quantity, pauses, prosody, head movement, facial mobility | explicitly consented symptom and treatment-response tracking |
-| Pain, fatigue, and frailty | facial action units, guarded movement, vocal effort, speech strength and tempo | supplemental human-reviewed functional assessment |
-| Autism and developmental conditions | gaze, prosody, facial-vocal coordination, social timing | specialist support during standardized assessment and therapy |
-| Rare genetic syndromes | static facial morphology and developmental voice patterns | candidate prioritization for a clinical geneticist followed by molecular testing |
-
-These are research and product-development directions, not claims supported by
-the current prototype. Several areas have encouraging primary research:
-
-- disease-specific facial landmarks can quantify facial palsy more reliably
-  than models trained only on healthy faces
-  ([JAMA Otolaryngology study](https://pubmed.ncbi.nlm.nih.gov/32053425/));
-- remote voice and video tasks can capture fatigable signs relevant to
-  myasthenia gravis
-  ([BioDigit MG feasibility study](https://pmc.ncbi.nlm.nih.gov/articles/PMC12661141/));
-- remote speech measures have tracked longitudinal change in ALS
-  ([npj Digital Medicine study](https://www.nature.com/articles/s41746-020-00335-x));
-- marker-free eyelid measurement has been evaluated for thyroid eye disease
-  ([multicenter validation study](https://pmc.ncbi.nlm.nih.gov/articles/PMC13199772/));
-- facial and voice models have independently shown promise for acromegaly
-  referral enrichment
-  ([facial study](https://pmc.ncbi.nlm.nih.gov/articles/PMC12838525/),
-  [voice study](https://pmc.ncbi.nlm.nih.gov/articles/PMC11913075/)); and
-- voice analysis can detect laryngeal abnormality more readily than it can
-  distinguish malignant from benign disease
-  ([laryngeal disease study](https://pubmed.ncbi.nlm.nih.gov/38654036/)).
-
-Promising research is not deployment evidence. Every intended use still
-requires technical verification, analytical validation, clinical validation in
-the proposed population, usability testing, and workflow evaluation.
-
-## Context-of-use ladder
-
-The same measurement can support very different claims. Development should
-advance deliberately through four levels:
-
-1. **Measurement and documentation**
-
-   Report what was measured, how, and under what quality conditions.
-2. **Longitudinal monitoring**
-
-   Compare the result with a compatible personal baseline and quantify change.
-3. **Screening or decision support**
-
-   Apply a prospectively validated threshold to support a clinician's next
-   step.
-4. **Diagnosis, triage, or treatment action**
-
-   Make a condition or action claim with substantially higher evidence,
-   regulatory, safety, and human-factors requirements.
-
-The current prototype is at level 1 with an internal engineering foundation for
-level 2. Most initial protocol packs should target levels 1 and 2.
-
-FDA guidance similarly emphasizes that a remote digital health technology must
-be fit for its specific purpose and validated for the proposed characteristic
-and population
-([FDA guidance](https://www.fda.gov/media/155022/download)).
+PhenoMetric is a local browser prototype for deriving bounded, quality-aware
+face and voice engineering measurements during an ordinary conversation. It is
+designed around a simple rule: measure only technically qualified signal,
+report `Not measurable` otherwise, and dispose of the media before showing the
+report.
 
 ## Current implementation
 
-The working demonstration uses a laptop camera and microphone and implements:
-
-- a pre-consent selector between the existing Facial Foundation protocol and
-  a microphone-only Voice Foundation protocol;
-- explicit consent and a bounded system check;
-- a continuous 48 kHz voice path built on 20 ms `AudioWorklet` PCM blocks,
-  40 ms analysis windows, a 10 ms hop, a bounded worker ring buffer, and
-  reason-coded audio quality;
-- local MediaPipe facial geometry in a versioned browser-worker pipeline;
-- acquisition-time video scheduling, anatomical laterality, camera and model
-  provenance, and reason-coded visual quality;
-- a worker-rendered 478-point facial mesh that is visible during usable
-  capture but never enters application data;
-- completion-gated coaching that advances only after each exercise is
-  technically observed;
-- independent, quality-gated voice and facial measurement windows;
-- six bilateral facial measurements in Facial Foundation and eighteen named
-  measurement types across task-specific Voice Foundation windows;
-- an optional, loopback-only WavLM Large representation service that is
-  disabled by default and never turns embeddings into clinical measurements;
-- robust per-visit aggregation with algorithm-version checks;
-- reason-coded abstention and append-only workflow events;
-- a deterministic evidence layer with bounded server-side synthesis;
-- a clinician-facing quantitative profile and provenance drawer; and
-- explicit approval or dismissal.
-
-Facial Foundation produces left and right smile excursion, smile asymmetry,
-left and right eye-closure fraction, and eye-closure asymmetry. Its microphone
-signal is used only to gate behavior; it no longer produces the removed
-`prototype.speech.*` metrics.
-
-Voice Foundation runs two sustained `/a/` trials, standardized reading, rapid
-`/pa-ta-ka/`, and a spontaneous response. Depending on task support and
-quality, it can produce:
-
-- median F0 and F0 variability, CPPS, HNR, intensity variability, voiced
-  fraction, pause and speech-run timing, and estimated syllabic rate;
-- sustained-vowel jitter, shimmer, phonation-break fraction, and robust
-  F1/F2 medians;
-- estimated DDK rate and interval variability; and
-- spontaneous-response onset latency.
-
-Fine acoustic values abstain when browser audio processing remains enabled,
-sample rate is below 44.1 kHz, continuity fails, clipping is excessive, or SNR
-is insufficient. Timing measurements can remain available when technically
-defensible.
-
-They are engineering features, not validated biomarkers. Measurements
-explicitly carry technical uncertainty state and
-`clinicalValidation: "none"`.
-
-Both protocols are completion-gated. A quality break resets only the current
-evidence streak; elapsed time never advances an unfinished exercise. After
-twelve seconds the interface provides criterion-specific guidance, while the
-participant can keep retrying or end and discard the assessment. Only final
-qualifying intervals reach extraction.
-
-The optional Python 3.11 WavLM service accepts only 16 kHz mono Float32 PCM
-from the local browser worker, returns mean and standard-deviation summaries
-for layers 6, 12, 18, and 24, and retains neither audio nor embeddings. Those
-summaries are transient research primitives: only processor provenance may
-enter the encounter observation. Browser DSP and report creation do not
-depend on model availability.
-Personal Trajectory exists as a tested internal package but is not connected
-to persistent patient history. No authentication, clinical data store, FHIR
-integration, EHR write, or production deployment is implemented.
-
-## Privacy, safety, and trust
-
-The production direction is **ephemeral media, durable measurements**:
-
-- request explicit, purpose-specific consent before analysis;
-- process raw audio and video locally when technically feasible;
-- retain the minimum structured measurements needed for the intended use;
-- keep the live mesh presentation-only inside the visual worker, with no
-  landmark, connection, screenshot, or overlay-pixel serialization;
-- keep raw media and conversation content away from narrative generation;
-- keep PCM, FFT bins, pitch cycles, cepstra, MFCCs, formant tracks,
-  spectrograms, transcripts, and representation embeddings transient;
-- make device, context, quality, uncertainty, and algorithm version visible;
-- permit every modality and measurement to abstain;
-- separate measurement, interpretation, review, and action;
-- prohibit covert emotion, truthfulness, intent, capacity, or pain-validity
-  inference;
-- prohibit autonomous diagnosis, treatment, emergency action, or patient
-  communication without an independently approved and validated workflow; and
-- require human review before clinical documentation or action.
-
-Clinical development needs a separate, explicitly consented research
-environment. Analytical and clinical validation may require encrypted,
-access-controlled retention of source media for annotation and comparison with
-reference standards. That research path must remain isolated from the
-ephemeral production path and must never be silently enabled in the product.
-
-See [`docs/safety.md`](docs/safety.md) for the enforced prototype boundary and
-future deployment gates.
-
-## Development roadmap
-
-### Phase 0 — level the foundation
-
-- align repository language around the general telehealth platform;
-- preserve the three capability boundaries;
-- remove or label stale hackathon fixtures and documentation;
-- define a versioned protocol-pack contract; and
-- make current limitations and validation state machine-readable.
-
-### Phase 1 — strengthen the measurement engine
-
-- add clinically meaningful facial geometry, laterality, symmetry, eyelid,
-  gaze, lip, jaw, tremor, and fatigability measures;
-- add robust phonation, spectral, articulation, intelligibility, respiratory,
-  cough, and speaker-attribution features;
-- support ambient windows and configurable prompted microtasks;
-- improve device calibration and cross-device comparability;
-- replace placeholder confidence with repeatability-based uncertainty; and
-- connect Personal Trajectory to a privacy-preserving derived-measurement store.
-
-### Phase 2 — build the validation platform
-
-- create a separately governed research capture and annotation environment;
-- collect repeated measures across devices, environments, demographics, and
-  relevant disease severities;
-- quantify test-retest reliability, missingness, subgroup performance, and
-  failure modes;
-- compare candidate measures with clinician ratings and accepted reference
-  standards; and
-- establish model, protocol, and dataset version governance.
-
-### Phase 3 — validate one narrow protocol pack
-
-Recommended candidates are:
-
-1. facial palsy rehabilitation measurement;
-2. myasthenia gravis face-and-voice monitoring;
-3. laryngology voice-function follow-up; or
-4. acromegaly referral-enrichment research.
-
-Select one intended use, population, clinical workflow, and primary endpoint.
-Do not combine claims merely because they share a sensor.
-
-### Phase 4 — clinical workflow integration
-
-- add identity, authorization, consent records, audit, and retention policy;
-- implement clinician correction and adjudication;
-- support FHIR-compatible observation and document export;
-- integrate with telehealth and EHR workflows without autonomous writes;
-- add operational monitoring, rollback, incident response, and cybersecurity;
-  and
-- complete regulatory and institutional review appropriate to the intended
-  use.
-
-### Phase 5 — expand the protocol portfolio
-
-Reuse the verified capture, trajectory, evidence, and governance platform while
-validating each new specialty pack independently. Shared infrastructure should
-reduce engineering cost; it must not be used to transfer unsupported clinical
-claims from one condition or population to another.
-
-## Repository principles
-
-- Generalize the platform, not the clinical claim.
-- Prefer personal trajectories over population labels when clinically useful.
-- Treat `not measurable` as a valid and necessary output.
-- Keep algorithms and protocol versions attached to every durable measurement.
-- Preserve source provenance, context, device metadata, and uncertainty.
-- Keep raw media, transcripts, and generated text out of the measurement loop.
-- Require condition-specific evidence before naming a diagnostic or treatment
-  implication.
-- Measure broadly only with explicit consent and a clear clinical purpose.
-- Keep humans responsible for interpretation and consequential action.
-
-## How the agents work together
-
-| Agent | Responsibility | Observable output |
-| --- | --- | --- |
-| **Encounter Coordinator** | Coordinates consented capture, quality state, protocol tasks, and modality routing. | Versioned workflow events and an encounter observation. |
-| **Voice Analysis** | Selects usable voice windows and calculates bounded acoustic or speech measurements. | Voice measurements, uncertainty, quality context, and provenance. |
-| **Facial Analysis** | Selects usable face windows and calculates bounded geometric or dynamic measurements. | Facial measurements, uncertainty, quality context, and provenance. |
-| **Personal Trajectory** | Selects compatible personal history and computes transparent change statistics. | Included and excluded visits, personal reference, and provisional change. |
-| **Clinical Synthesis** | Organizes precomputed evidence without changing measurements or interpretation boundaries. | A concise, grounded draft. |
-| **Clinician Review** | Accepts, corrects, or dismisses the review artifact. | A human disposition and audit event. |
-
-The live interface must remain driven by real versioned events. It must never
-present invented internal monologue, reasoning, confidence, or progress.
-
-## Evidence traceability
-
-Every displayed result should preserve this chain:
+The implemented browser path is:
 
 ```text
-consent and intended use
-  → capture adapter and protocol version
-  → accepted measurement window
-  → versioned face or voice measurement
-  → quality, confound, and uncertainty context
-  → compatible personal trajectory, when available
-  → grounded report statement
-  → clinician disposition
+consent
+  → independent camera and microphone permission
+  → bounded technical calibration
+  → ambient observation (up to five minutes)
+  → deterministic local extraction
+  → ObservationV3
+  → session-only structured report
+  → disposal/reset
 ```
 
-“EHR-ready” currently means formatted for clinician-reviewed copy or export.
-The prototype does not connect to or write into an electronic health record.
+There are no exercises, scripted prompts, LLM calls, server APIs, retained
+recordings, transcripts, embeddings, persistence, export, or clinical
+interpretation in this path.
+
+### Ambient Capture
+
+`apps/capture-web` uses two independent local processing lanes:
+
+- Audio is captured in 20 ms worklet blocks and analyzed in a worker using 40
+  ms windows with a 10 ms hop. Only compact `VoiceSignalFrameV1` values cross
+  into application state. Those same derived frames drive an eight-second live
+  level and pitch display; the display is not a provisional report.
+- MediaPipe Face Landmarker runs in a worker. Native video frames, landmarks,
+  blendshapes, and transformation matrices remain inside that boundary. The
+  worker draws its complete 478-point mesh and contours directly onto a
+  transferred presentation canvas, while only compact
+  `FacialKinematicsFrameV1` geometry and quality values are emitted.
+
+Permission, calibration, measurement, and abstention are independent by
+modality. One lane can continue when the other is unavailable.
+
+### Active metric registry
+
+The immutable `ambient-local-observation@1.0.0` protocol pack contains exactly
+16 nonclinical metrics.
+
+Voice (7):
+
+- median fundamental frequency;
+- fundamental-frequency variability;
+- speech-activity fraction;
+- pause rate;
+- median pause duration;
+- median speech-run duration; and
+- acoustic nucleus rate estimate.
+
+Face (9):
+
+- left and right open-eye aperture;
+- open-eye aperture asymmetry;
+- mouth width;
+- median and P90 mouth aperture;
+- mouth-corner positional asymmetry;
+- P90 regional landmark speed; and
+- bilateral blink rate.
+
+Every metric carries its unit, context, algorithm version, evidence
+requirements, permitted withheld reasons, technical-verification status, and
+`clinicalValidation: "none"`.
+
+### Observation and report
+
+`buildAmbientObservation()` converts extractor outcomes into the strict
+`phenometric.encounter-observation.v3` schema. Each terminal metric outcome is
+either measured or withheld and resolves to exact evidence windows, processor
+and track provenance, and a deterministic aggregate identity.
+
+`buildPostEncounterReport()` validates that provenance against the active
+protocol pack and creates an eight-section structured report. The report is
+screen-only, exists only in session memory, and has no narrative, review,
+trajectory, persistence, or export shape.
+
+## Capability status
+
+PhenoMetric retains exactly three named product capabilities:
+
+1. **Ambient Capture:** implemented as the local v3 prototype described above.
+2. **Personal Trajectory:** a tested v2-only package retained for research, but
+   not connected to the live application or v3 observation.
+3. **Clinician Evidence Card:** represented today only by the deterministic
+   structured report. Narrative drafting, clinician approval, and durable
+   review state are not implemented.
+
+The restored `services/voice-inference` WavLM service is an optional,
+disabled-by-default research surface. The browser does not import or call it.
+
+## Privacy and safety boundary
+
+- Consent is required before device access.
+- Camera and microphone permissions are requested separately.
+- Raw media is not uploaded or written to storage.
+- PCM, spectral arrays, transcripts, embeddings, native landmarks, and native
+  video frames are excluded from ObservationV3 and report contracts.
+- Device tracks, workers, audio nodes, timers, derived frame buffers, and the
+  in-memory event journal are disposed on finish, discard, withdrawal,
+  visibility loss, or reset.
+- Identity is not verified and speaker attribution is explicitly unverified.
+- `Not measurable` is a valid terminal result; missing evidence is never
+  imputed as a measurement.
+
+## Deliberately not implemented
+
+- multi-visit persistence or comparison;
+- retained evidence snippets or clips;
+- narrative generation or human approval/dismissal;
+- authentication, PHI workflows, EHR/FHIR integration, or export;
+- diagnosis, progression classification, risk prediction, or treatment advice;
+- analytical or clinical validation against a reference standard.
 
 ## Run locally
 
-Requirements:
-
-- Node.js 22 or newer
-- pnpm 9.12.3
-- Chrome
-- a Mac with a camera and microphone
-- Python 3.11 and `uv` only for the optional local representation service
-- completion of the local operator configuration
+Requirements: Node.js 22+, pnpm 9.12.3, and current Chrome on macOS.
 
 ```bash
-pnpm install
+pnpm install --frozen-lockfile
 pnpm dev
 ```
 
-Open [http://127.0.0.1:4173](http://127.0.0.1:4173).
+Open `http://127.0.0.1:4173`. Camera and microphone access requires localhost
+or HTTPS. Consent, device start, session end/discard, and reset all happen in
+Chrome. `Ctrl-C` stops the Vite development server.
 
-Configuration and troubleshooting are documented in
-[`docs/operator-guide.md`](docs/operator-guide.md).
+The optional WavLM research service has separate instructions in
+`services/voice-inference/README.md`; starting it does not alter browser
+behavior.
 
 ## Validate
 
 ```bash
-pnpm check
-pnpm test:unit
-pnpm typecheck
-pnpm build
-pnpm test:browser
-pnpm test:python
-pnpm demo:smoke
+pnpm run check
 pnpm test
+pnpm test:browser
+pnpm demo:smoke
+uv sync --project services/voice-inference --extra dev --locked
+uv run --project services/voice-inference --extra dev pytest services/voice-inference/tests
 ```
 
-The browser demo does not require WavLM. Optional service setup and the
-generated-audio real-model smoke command are in
-[`services/voice-inference/README.md`](services/voice-inference/README.md).
+`pnpm test` runs structure and static-asset checks, all unit tests, TypeScript
+typechecking, and the production build. Browser smoke tests and the optional
+Python service remain separate CI jobs.
 
 ## Repository map
 
 ```text
-apps/capture-web/          Live capture, workflow interface, and summary service
-packages/contracts/        Observation, event, trajectory, and evidence contracts
-packages/ambient-core/     Signal windowing and prototype measurement extraction
-packages/trajectory-core/  Personal-history compatibility and comparison
-packages/evidence-core/    Fact selection, narrative boundaries, and grounding
-agents/                    Responsibilities and hard boundaries for each capability
-protocols/                 Legacy fixture and future protocol-pack registry
-docs/                      Vision, architecture, safety, validation, and operations
+apps/capture-web/          static ambient browser application
+apps/clinician-review/     documentation-only future surface
+packages/ambient-core/     deterministic face and voice extractors
+packages/contracts/        v3 runtime schemas plus temporary v2 compatibility
+packages/evidence-core/    provenance validation and report builder
+packages/event-log/        session-only workflow journal
+packages/trajectory-core/  disconnected legacy v2 trajectory package
+services/voice-inference/  optional disconnected WavLM research service
+agents/                    exactly three capability boundary documents
+protocols/ and examples/   archival guided/v2 demo artifacts
 ```
+
+See `docs/architecture.md`, `docs/safety.md`, and `docs/validation.md` before
+changing an active boundary.

@@ -6,7 +6,15 @@ import type { VisualTaskContext } from "@phenometric/contracts";
 import { FACE_LANDMARK_INDICES } from "./face-features.js";
 
 export const FACE_MESH_LANDMARK_COUNT = 478;
-export const MAX_FACE_MESH_RENDER_HZ = 12;
+export const MAX_FACE_MESH_RENDER_HZ = 24;
+
+export function faceMeshPresentationEligible(
+  faceCount: number,
+  captureEpoch: number,
+  overlayCaptureEpoch: number | null
+): boolean {
+  return faceCount === 1 && captureEpoch === overlayCaptureEpoch;
+}
 
 const LEFT_EYE_APERTURE_ANCHORS = [
   ...FACE_LANDMARK_INDICES.subjectLeftEye.canthi,
@@ -68,6 +76,7 @@ function taskAnchors(taskContext: VisualTaskContext): readonly number[] {
         ...RIGHT_EYE_APERTURE_ANCHORS
       ];
     case "neutral-face":
+    case "ambient-frontal":
       return [
         ...LEFT_EYE_APERTURE_ANCHORS,
         ...RIGHT_EYE_APERTURE_ANCHORS,
@@ -89,6 +98,7 @@ function activeSemanticRegions(
     case "eye-closure":
       return new Set(["eyes"]);
     case "neutral-face":
+    case "ambient-frontal":
       return new Set(["eyes", "brows", "lips", "oval"]);
     case "establishing":
     case "turn-away":

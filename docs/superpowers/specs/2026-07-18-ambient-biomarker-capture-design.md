@@ -6,6 +6,14 @@ and interface planned
 **Supersedes:** the scripted "Guided Capture" definition of Capability #1 in
 `docs/architecture.md` and `README.md`.
 
+> **Implementation status, 2026-07-21.** Live local ingestion, deterministic
+> extraction, ObservationV3, an in-memory workflow journal, and the structured
+> report are now implemented. This milestone is intentionally narrower than
+> the future-state design below: it has no durable measurement store, retained
+> evidence snippets, trajectory wiring, generated narrative, clinician review,
+> persistence, or export. Those passages remain design intent, not current
+> runtime behavior.
+
 > **Research prototype only.** Not a medical device. Not for diagnosis,
 > treatment, emergency detection, or use with protected health information.
 

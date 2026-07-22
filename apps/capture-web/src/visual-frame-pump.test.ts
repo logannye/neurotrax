@@ -30,7 +30,7 @@ function offered(frame: FakeFrame, acquisitionTimestampMs: number) {
 }
 
 describe("LatestFrameScheduler", () => {
-  it("keeps one request in flight and replaces only the pending frame", () => {
+  it("keeps one request in flight and closes every busy frame", () => {
     const submitted: ScheduledVisualFrame<FakeFrame>[] = [];
     const scheduler = new LatestFrameScheduler<FakeFrame>({
       captureEpoch: 7,
@@ -46,12 +46,12 @@ describe("LatestFrameScheduler", () => {
 
     expect(submitted).toHaveLength(1);
     expect(second.closed).toBe(true);
-    expect(latest.closed).toBe(false);
+    expect(latest.closed).toBe(true);
     expect(scheduler.diagnostics(166)).toMatchObject({
       presented: 3,
       submitted: 1,
       processed: 0,
-      skipped: 1
+      skipped: 2
     });
 
     expect(
@@ -61,15 +61,7 @@ describe("LatestFrameScheduler", () => {
         acquisitionTimestampMs: 100
       })
     ).toBe(true);
-    expect(submitted.map((item) => item.frame.id)).toEqual([
-      "first",
-      "latest"
-    ]);
-    expect(submitted[1]).toMatchObject({
-      captureEpoch: 7,
-      sequence: 2,
-      acquisitionTimestampMs: 166
-    });
+    expect(submitted.map((item) => item.frame.id)).toEqual(["first"]);
   });
 
   it("rejects non-monotonic frames and stale epoch or sequence responses", () => {
@@ -108,7 +100,8 @@ describe("LatestFrameScheduler", () => {
       onSubmit: (frame) => submitted.push(frame)
     });
     scheduler.offer(offered(new FakeFrame("active"), 200));
-    scheduler.offer(offered(new FakeFrame("pending"), 233));
+    const busy = new FakeFrame("busy");
+    scheduler.offer(offered(busy, 233));
 
     expect(
       scheduler.discard({
@@ -117,10 +110,11 @@ describe("LatestFrameScheduler", () => {
         acquisitionTimestampMs: 200
       })
     ).toBe(true);
-    expect(submitted.at(-1)?.sequence).toBe(2);
+    expect(busy.closed).toBe(true);
+    expect(submitted.at(-1)?.sequence).toBe(1);
     expect(scheduler.diagnostics(233)).toMatchObject({
       stale: 1,
-      submitted: 2
+      submitted: 1
     });
   });
 
@@ -146,7 +140,7 @@ describe("LatestFrameScheduler", () => {
       analyzedCadenceHz: 20,
       latestInterResultGapMs: 50,
       maximumInterResultGapMs: 50,
-      busyDropFraction: 1 / 6
+      busyDropFraction: 1 / 3
     });
   });
 
@@ -157,13 +151,13 @@ describe("LatestFrameScheduler", () => {
       onSubmit: (frame) => submitted.push(frame)
     });
     scheduler.offer(offered(new FakeFrame("active"), 100));
-    const pending = new FakeFrame("pending");
-    scheduler.offer(offered(pending, 110));
+    const busy = new FakeFrame("busy");
+    scheduler.offer(offered(busy, 110));
 
     scheduler.reset(2);
     scheduler.offer(offered(new FakeFrame("new"), 5));
 
-    expect(pending.closed).toBe(true);
+    expect(busy.closed).toBe(true);
     expect(submitted.at(-1)).toMatchObject({
       captureEpoch: 2,
       sequence: 1,
@@ -179,14 +173,14 @@ describe("LatestFrameScheduler", () => {
     });
   });
 
-  it("does not retain transferred frames and closes pending frames on stop", () => {
+  it("does not retain transferred frames and closes busy frames immediately", () => {
     const submitted: ScheduledVisualFrame<FakeFrame>[] = [];
     const scheduler = new LatestFrameScheduler<FakeFrame>({
       captureEpoch: 1,
       onSubmit: (frame) => submitted.push(frame)
     });
     const transferred = new FakeFrame("transferred");
-    const pending = new FakeFrame("pending");
+    const pending = new FakeFrame("busy");
     scheduler.offer(offered(transferred, 100));
     scheduler.offer(offered(pending, 110));
 
@@ -346,6 +340,11 @@ describe("VideoFramePump", () => {
     pump.start();
     callbacks.shift()!(100);
     await Promise.resolve();
+    scheduler.accept({
+      captureEpoch: 5,
+      sequence: 1,
+      acquisitionTimestampMs: 100
+    });
     callbacks.shift()!(116);
     await Promise.resolve();
     source.currentTime = 1.033;

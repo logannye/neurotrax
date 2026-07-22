@@ -4,6 +4,11 @@ This optional Python 3.11 service exposes transient WavLM Large layer summaries
 for research adapter development. It binds to loopback, is disabled by default,
 does not log request bodies, and retains neither audio nor embeddings.
 
+The shipping ambient browser pipeline does not import, start, or call this
+service. Restoring it preserves a research surface only; it is not part of the
+current ObservationV3 measurement path and must not be presented as an active
+browser capability.
+
 ```bash
 uv sync --extra dev
 uv run --extra dev pytest
@@ -29,12 +34,6 @@ The browser endpoint is
 service to a non-loopback interface. The service accepts no file paths or URLs,
 does not write audio, and returns only layer mean/std summaries plus processor
 provenance.
-
-Enable the otherwise-disabled browser adapter when launching the root demo:
-
-```bash
-VITE_VOICE_REPRESENTATION_ENDPOINT=http://127.0.0.1:8765/v1/voice/representations pnpm dev
-```
 
 The pinned model revision is
 `c1423ed94bb01d80a3f5ce5bc39f6026a0f4828c`; the reviewed

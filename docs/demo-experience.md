@@ -1,73 +1,66 @@
 # Live demonstration experience
 
-Choose a protocol before consent. Facial Foundation requests camera and
-microphone; Voice Foundation is microphone-only.
+The current demonstration is one ambient local session. It contains no guided
+exercise sequence or operator-only synthetic capture mode.
 
-## Facial Foundation presenter sequence
+## 1. Welcome and consent
 
-| Moment | Presenter action | Visible system behavior |
-| --- | --- | --- |
-| System check | Consent, remain quiet, then speak naturally. | PhenoMetric prepares speech and facial analysis, then enables the assessment. |
-| Signals established | Begin and keep speaking while centered. | Speech and facial windows open independently. |
-| Facial branch paused | Turn away while continuing to speak. | Facial Analysis turns amber; Speech Analysis remains active. |
-| Neutral baseline | Return to center, stop speaking, and hold a quiet neutral reference. | Facial Analysis reconnects and collects a task-specific reference without claiming to detect relaxation. |
-| Smile | Smile comfortably and hold. | Left and right mouth-corner excursion are measured only from usable frames. |
-| Eye closure | Gently close the eyes, hold briefly, then reopen. | The same-eye close-then-reopen sequence is confirmed before left and right closure fractions are measured independently. |
-| Summary | No additional action is required. | The Coordinator completes capture and routes measured metrics to Clinical Synthesis. |
-| Reveal | No additional presenter action is required. | The results workspace opens automatically with grounded metrics; the EHR-ready narrative fills in as soon as it is ready. |
-| Review | Inspect a trace, copy the report if desired, and approve or dismiss. | Human review closes the workflow; approval establishes Visit 1 with empty future-visit placeholders. |
+The opening page states that the application is a nonclinical prototype, uses
+local processing, saves no recording, and does not verify identity or provide
+clinical interpretation. The setup button remains disabled until consent and
+the local-participant assertion are checked.
 
-## Visual hierarchy
+## 2. Independent setup
 
-- The camera is the dominant surface during capture.
-- Five completion-gated phases make the demonstration sequence legible at a
-  glance; progress reflects the current signal criterion, not the session
-  clock.
-- A live 478-point mesh makes the visual sensing surface inspectable while
-  remaining explicitly labeled as display-only and not stored.
-- A live orchestration graph shows the coordinator, parallel measurement
-  agents, synthesis, and review.
-- Only the newest three concise agent decisions remain visible.
-- Capture transitions into a dedicated clinician summary workspace rather than
-  leaving the video interface partially visible.
-- An event-backed handoff shows Signals analyzed → Evidence grounding →
-  Clinician review.
-- A six-measurement facial profile sits beside and inside the clinician note.
-- Detailed provenance appears only when a primary statement or quantitative
-  profile item is selected.
+The browser requests microphone and camera separately. Each lane displays its
+own requesting, calibrating, ready, or not-measurable state. A camera failure
+does not invalidate a usable voice lane, and vice versa.
 
-## Voice Foundation presenter sequence
+Audio calibration asks for a brief quiet moment. Face calibration asks for one
+well-lit, frontal face. Setup is bounded to 15 seconds.
 
-| Moment | Presenter action | Visible system behavior |
-| --- | --- | --- |
-| System check | Remain quiet for two seconds, then speak naturally. | PhenoMetric calibrates room noise, confirms continuous voice quality, and keeps the camera off. |
-| Vowel 1 | Sustain a comfortable `/a/` for three seconds. | Progress reflects continuous voicing and reliable periodicity. |
-| Vowel 2 | Repeat the same task. | A second accepted trial supports between-trial uncertainty. |
-| Reading | Read the displayed nonclinical sentence. | Four seconds of usable voiced evidence are accepted without claiming reading accuracy. |
-| Rapid syllables | Repeat `/pa-ta-ka/`. | Progress requires four seconds plus six estimated envelope nuclei. |
-| Spontaneous response | Describe a familiar routine. | Eight seconds of usable evidence are collected while brief natural pauses remain allowed. |
-| Summary | Review the voice profile. | A single primary voice outcome is grounded; task-specific measurements and abstentions remain inspectable. |
+## 3. Ambient session
 
-Live engineering feedback shows microphone level, pitch coverage, SNR, quality,
-and criterion progress. It is display-only. The optional WavLM path is not
-required for completion and does not expose embeddings in the report.
+When at least one lane qualifies—or a capture-capable lane reaches the bounded
+setup timeout—the interface switches to **Ambient session**. The participant
+continues the ordinary conversation without prompts. The session ends manually
+or at five minutes.
 
-## Presentation behavior
+When one face is visible, the camera preview shows all 478 MediaPipe landmarks,
+the full tessellation, and the eye, iris, brow, lip, and face-oval contours.
+This mesh is drawn inside the face worker, follows the mirrored preview, and is
+never retained or returned as landmark coordinates.
 
-- Every guided exercise must be recognized before the next begins. There is no
-  timeout, automatic skip, or elapsed-time advancement.
-- Technical acquisition classifications remain in operator diagnostics.
-- A quality break resets only the current continuous evidence streak. Facial
-  mode also resets on a visual-result gap over 200 ms; voice mode resets on an
-  audio block gap over 40 ms. The
-  presenter retries by repeating the action, and criterion-specific guidance
-  appears after twelve seconds without completion.
-- **End assessment** remains available throughout capture. Confirming it
-  releases media immediately, discards the session, and creates no report.
-- Only the final qualifying interval for each task contributes to the report;
-  failed attempts cannot contaminate the neutral reference or task metrics.
-- Facial task outcomes are descriptive engineering measurements, not clinical
-  scores or interpretations.
-- Measured metrics remain available for clinician review while the narrative
-  refreshes.
-- Live runs never substitute development data for captured measurements.
+The panel beside the video shows an eight-second rolling energy and periodic
+pitch display plus current level, pitch, SNR, F0 confidence, estimator
+agreement, activity state, and signal-quality codes. These are presentation
+views of existing derived frames, not provisional report metrics. Nonperiodic
+speech or noise moves the energy trace while leaving a gap in the pitch trace.
+
+## 4. Local finalization
+
+The interface explicitly shows that devices and processors are being stopped.
+Only after disposal does it build the ObservationV3 and report.
+
+## 5. Report
+
+The report has eight sections and 16 metric outcomes. Each metric is a measured
+engineering value or `Not measurable`, with technical evidence and provenance
+details. It states that results are not identity-verified, clinically
+validated, longitudinally comparable, or intended for medical decisions.
+
+There is no narrative generation, approval/dismissal control, persistence,
+export, or baseline creation.
+
+## Honest failure demonstrations
+
+- Deny one device and show that the other lane continues.
+- Deny both devices and show that no report is created.
+- End a short session and show specific reason-coded abstentions.
+- Discard or withdraw consent and show that devices turn off without a report.
+- Reset after a report and show that session memory is cleared.
+- Make voiced sound, unvoiced sound, and background noise and show the live
+  voice state and traces changing without creating a recording.
+- Move within the camera frame and show the dense mesh tracking one face; add a
+  second face and show the presentation clearing rather than choosing an
+  identity.

@@ -1,148 +1,71 @@
 # Validation
 
-## Automated coverage
+PhenoMetric has technical verification only. Automated tests do not establish
+analytical validity, clinical validity, clinical utility, or regulatory
+fitness.
 
-The unit suite covers:
-
-- two-second quiet-room calibration and 1.5-second natural-speech preflight;
-- `AudioWorklet` buffer reuse, capture epochs, sequence/sample reset, and
-  continuous 20 ms blocks;
-- bounded PCM memory, exact 40 ms/10 ms overlapping windows, discontinuity
-  recovery, rolling block-loss quality, and monotonic acquisition time;
-- F0 from 50–700 Hz, estimator disagreement/octave handling, silence,
-  clipping, DC offset, and 44.1/48 kHz analysis;
-- CPPS, HNR, jitter, shimmer, formants, pauses, speech runs, syllabic nuclei,
-  DDK timing, onset latency, and metric-specific abstention;
-- every audio-quality boundary, including browser-processing behavior that
-  preserves timing while withholding fine acoustic values;
-- all five voice task gates, retries, assistance, natural pauses, final
-  accepted-interval clipping, repeated-vowel uncertainty, and discard;
-- WavLM request/response validation, provenance-only handling, cancellation,
-  stale-result rejection, and model-failure isolation;
-- duration- and coverage-based facial calibration;
-- face visibility, size, margins, pose, illumination, clipping, sharpness,
-  cadence, skipped-frame fraction, and frame-gap quality boundaries;
-- anatomical left-right mapping and geometry invariance under translation,
-  scale, in-plane rotation, and CSS preview mirroring;
-- bilateral smile excursion and eye-closure fraction, their asymmetries, and
-  task-specific abstention;
-- acquisition timestamp preservation, latest-frame-wins backpressure,
-  stale-result rejection, cadence calculation, and bounded worker restart;
-- completion-gated phase progression, every gate boundary, continuous-streak
-  reset, and criterion-specific assistance after twelve seconds;
-- proof that elapsed time, technical withholding, and unfinished tasks cannot
-  advance the workflow;
-- exact accepted-interval clipping, neutral dependency, smile hold, and
-  same-eye close-then-reopen recognition;
-- eight-frame strong voice calibration and limited calibration;
-- repeated failed attempts followed by successful completion, processor-change
-  rewind, and cancellation without an observation or report;
-- full-mesh drawing, 12 Hz throttling, finite-coordinate rejection,
-  task-region accents, and renderer clearing;
-- automatic capture finalization and synthesis prefetch;
-- measured and withheld modality outcome creation;
-- deterministic claim and boundary assembly;
-- schema, refusal, retry, timeout, grounding, and clinical-language rejection.
-
-The browser suite covers:
-
-- local facial analysis readiness;
-- protocol selection and microphone-only permission constraints;
-- proof that Voice Foundation neither requests a camera nor starts the visual
-  worker;
-- a blank-bitmap MediaPipe worker initialization smoke test;
-- presentation-copy cleanup;
-- system check and guided capture;
-- no advancement for an unfinished task and corrective guidance without skip;
-- speech continuity through facial withholding;
-- facial recovery followed by neutral, smile, and eye-closure task windows;
-- cancellation confirmation, immediate device release, and no report;
-- cancellation winning over pending auto-finalization, late media acquisition
-  being stopped after consent withdrawal, and replacement of a transferred
-  mesh canvas after discard;
-- mesh/video CSS alignment, worker-restart canvas reattachment, and mesh
-  hiding on intentional withholding, camera unavailability, and a hidden tab;
-- automatic results reveal while synthesis is still pending;
-- a six-measurement facial profile and task-specific voice profile;
-- one outcome for the modality participating in the selected protocol;
-- successful signal-gated completion of all Voice Foundation tasks;
-- no voice advancement from time alone, corrective guidance, retry, and
-  cancellation without a report;
-- optional representation availability and unavailable fallback;
-- primary-claim and quantitative-profile trace opening;
-- summary approval and dismissal;
-- synthesis failure with evidence-only review;
-- approval establishing Visit 1 with empty future placeholders.
-
-CI runs `pnpm test` and the Playwright browser suite as separate required jobs,
-keeping contract, unit, type, and build feedback independent from the slower
-Chrome path.
-
-## Commands
+## Required commands
 
 ```bash
-pnpm test:unit
-pnpm typecheck
-pnpm build
-pnpm test:browser
-pnpm test:python
-pnpm demo:smoke
+pnpm install --frozen-lockfile
+pnpm run check
 pnpm test
+pnpm test:browser
+pnpm demo:smoke
+uv sync --project services/voice-inference --extra dev --locked
+uv run --project services/voice-inference --extra dev pytest services/voice-inference/tests
+git diff --check
 ```
 
-## Manual acceptance
+`pnpm run check` validates the active ambient-v3 structure, exactly three
+capability directories, absence of tracked media, required JSON manifests, and
+the committed static-asset digests.
 
-Run five consecutive Facial Foundation Chrome rehearsals on the presentation
-MacBook. Each run must:
+`pnpm test` runs all workspace unit tests, TypeScript typechecks, and the
+production build. Browser and Python tests are separate because they have
+different runtimes and CI jobs.
 
-1. complete the system check;
-2. request 1280×720 at an ideal 30 fps;
-3. remain on every exercise until its signal criterion is satisfied, with no
-   timeout or skip;
-4. advance within 500 ms after each gate becomes satisfied;
-5. analyze at a median cadence of at least 24 Hz, with p95 result gaps no
-   greater than 100 ms and a busy-drop fraction no greater than 10%;
-6. preserve monotonic acquisition timestamps with no regressions;
-7. pass a manual subject-left and subject-right eye verification independent of
-   the mirrored preview;
-8. render all 478 mesh points aligned with the preview and accent the active
-   task regions at no more than 12 Hz;
-9. clear the mesh immediately during turn-away, hidden/muted/ended capture,
-   worker outage, epoch reset, consent withdrawal, and media release;
-10. recognize same-eye closure followed by reopening;
-11. produce one honest facial outcome and six facial measurements;
-12. visibly withhold only facial analysis during intentional turn-away;
-13. visibly restore facial analysis for the prompted tasks;
-14. make the grounded outcome available immediately and complete the
-    clinician-readable narrative within 20 seconds under the demo network
-    conditions;
-15. open the primary and quantitative traces;
-16. record a human review decision and establish Visit 1 after approval;
-17. release camera and microphone access;
-18. cancel a separate run without creating a report; and
-19. serialize no media, landmarks, mesh connections, overlay pixels,
-    blendshapes, transformation matrices, or camera identifiers.
+## Automated coverage
 
-Run five consecutive Voice Foundation Chrome rehearsals. Each must:
+- voice and face quality thresholds and abstention;
+- deterministic 7-voice/9-face metric registry ordering;
+- exact reason-code projection and source-window intervals;
+- strict ObservationV3, protocol, report, consent, evidence-ref, and workflow
+  event schemas;
+- canonical aggregate and measurement identities;
+- provenance and report grounding;
+- session journal ordering, causal boundaries, replay, and disposal;
+- capture lifecycle races, teardown order, and bounded setup/session timers;
+- asset-path and runtime digest verification;
+- browser consent, permission denial, independent calibration, report display,
+  no-upload/no-storage behavior, discard, withdrawal, and late-stream cleanup;
+  and
+- optional WavLM health, CORS, request validation, and transient summary output
+  using a deterministic fake adapter.
 
-1. request microphone-only mono audio at an ideal 48 kHz with browser
-   processing disabled and record an actual sample rate of at least 44.1 kHz;
-2. complete quiet calibration and natural-speech preflight;
-3. complete both vowel trials, reading, rapid syllables, and spontaneous
-   response only after their gates succeed;
-4. respond within 250 ms after each criterion becomes satisfied;
-5. preserve monotonic sample time with no unexplained gap, no more than 1%
-   lost blocks, and p95 feature latency no greater than 50 ms;
-6. keep worker memory bounded throughout a 60-second session;
-7. produce correct task-specific measurements and independent abstentions;
-8. complete within approximately 45 seconds of active task performance;
-9. preserve browser DSP reporting when WavLM is unavailable;
-10. when explicitly enabled, return finite correctly shaped WavLM layer
-    summaries without delaying browser measurements;
-11. discard a separate run without creating a report; and
-12. serialize no PCM, waveform, pitch-cycle, FFT/cepstral/MFCC, formant-track,
-    transcript, spectrogram, embedding, voiceprint, or microphone-identifier
-    data.
+## Manual hardware acceptance
 
-The required Python tests use the deterministic fake encoder. Real WavLM smoke
-is manual because the checkpoint is intentionally absent from CI.
+In current Chrome on the target MacBook:
+
+1. Complete one live camera-and-microphone session.
+2. Confirm each lane calibrates or abstains independently.
+3. Confirm the complete facial mesh tracks exactly one face and clears for zero
+   or multiple faces.
+4. Confirm quiet, unvoiced noise, and voiced speech produce the expected live
+   voice state, energy response, and periodic-only pitch trace.
+5. Confirm the end button is enabled only during ambient observation.
+6. Verify both live displays clear and camera/microphone indicators turn off
+   before the report appears.
+7. Confirm the report contains exactly 16 terminal outcomes and eight sections.
+8. Discard a second session and verify no report appears.
+9. Withdraw consent and verify tracks stop.
+10. Reset after a report and verify session-only state is cleared.
+
+No live media or resulting health-related artifact may be saved or committed.
+
+## Not validated
+
+No metric has reference-standard accuracy, repeatability, normative ranges,
+minimum detectable change, disease association, subgroup performance, or
+clinical workflow evidence. Every active metric therefore remains
+`clinicalValidation: "none"`.

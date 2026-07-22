@@ -8,11 +8,18 @@ describe("voice worker response guard", () => {
   it("accepts only the current capture epoch", () => {
     const response = {
       schemaVersion: VOICE_WORKER_MESSAGE_VERSION,
-      type: "representation-status",
+      type: "disposed",
       captureEpoch: 4,
-      requestRef: "representation-4-vowel",
-      windowRef: "voice:0-3000",
-      status: "available"
+      diagnostics: {
+        receivedBlockCount: 0,
+        processedFrameCount: 0,
+        lostBlockCount: 0,
+        lostBlockFraction: 0,
+        maximumBlockGapMs: 0,
+        p95FeatureLatencyMs: 0,
+        timestampRegressionCount: 0,
+        ringBufferCapacitySamples: 0
+      }
     };
     expect(isCurrentVoiceWorkerResponse(response, 4)).toBe(true);
     expect(isCurrentVoiceWorkerResponse(response, 5)).toBe(false);

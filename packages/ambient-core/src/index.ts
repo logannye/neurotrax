@@ -1,20 +1,86 @@
 export const AMBIENT_CORE_VERSION = "0.1.0";
+export {
+  AMBIENT_FACE_TASK_CONTEXT,
+  AMBIENT_MAX_CAPTURE_DURATION_MS,
+  AMBIENT_PROTOCOL_ID,
+  AMBIENT_VOICE_TASK_CONTEXT
+} from "./ambient-types.js";
+export type {
+  AmbientExtractionResult,
+  AmbientFaceCalibration,
+  AmbientFaceExtractionOptions,
+  AmbientFaceMetricCode,
+  AmbientFacialFrame,
+  AmbientIdentityInput,
+  AmbientMeasuredMetric,
+  AmbientMetricCode,
+  AmbientMetricDefinition,
+  AmbientMetricEvidence,
+  AmbientMetricGroup,
+  AmbientMetricIdentity,
+  AmbientMetricModality,
+  AmbientMetricOutcome,
+  AmbientSessionExtractionInput,
+  AmbientTaskContext,
+  AmbientVoiceExtractionOptions,
+  AmbientVoiceFrame,
+  AmbientVoiceMetricCode,
+  AmbientWithheldMetric,
+  AmbientWithheldReasonCode
+} from "./ambient-types.js";
+export {
+  AMBIENT_FACE_ALGORITHM_VERSION,
+  AMBIENT_METRIC_REGISTRY,
+  AMBIENT_VOICE_ALGORITHM_VERSION,
+  ambientMetricDefinition
+} from "./ambient-registry.js";
+export {
+  AMBIENT_VOICE_ACTIVE_MIN_MS,
+  AMBIENT_VOICE_ACTIVE_PER_SEGMENT_MIN_MS,
+  AMBIENT_VOICE_MAX_ABSOLUTE_DC_OFFSET,
+  AMBIENT_VOICE_MAX_CLIPPED_FRACTION,
+  AMBIENT_VOICE_MAX_GAP_MS,
+  AMBIENT_VOICE_MAX_LOST_BLOCK_FRACTION,
+  AMBIENT_VOICE_MAX_PAUSE_MS,
+  AMBIENT_VOICE_MIN_NUCLEUS_COUNT,
+  AMBIENT_VOICE_MIN_PAUSE_MS,
+  AMBIENT_VOICE_MIN_PITCH_COVERAGE,
+  AMBIENT_VOICE_MIN_SAMPLE_RATE_HZ,
+  AMBIENT_VOICE_MIN_SEGMENTS,
+  AMBIENT_VOICE_MIN_SPEECH_SNR_DB,
+  AMBIENT_VOICE_PITCH_MIN_MS,
+  AMBIENT_VOICE_SEGMENT_MAX_MS,
+  AMBIENT_VOICE_SEGMENT_MIN_MS,
+  AMBIENT_VOICE_TIMING_MIN_MS,
+  extractAmbientVoiceMetrics
+} from "./ambient-voice.js";
+export {
+  AMBIENT_BLINK_MAX_P95_GAP_MS,
+  AMBIENT_BLINK_MIN_CADENCE_HZ,
+  AMBIENT_BLINK_MIN_EXPOSURE_MS,
+  AMBIENT_FACE_BIN_MS,
+  AMBIENT_FACE_MAX_CALIBRATION_SIZE_DELTA,
+  AMBIENT_FACE_MAX_FRAME_GAP_MS,
+  AMBIENT_FACE_MAX_PITCH_DEGREES,
+  AMBIENT_FACE_MAX_ROLL_DEGREES,
+  AMBIENT_FACE_MAX_WITHIN_BIN_SIZE_RATIO,
+  AMBIENT_FACE_MAX_YAW_DEGREES,
+  AMBIENT_FACE_MIN_BINS,
+  AMBIENT_FACE_MIN_BIN_DATA_MS,
+  AMBIENT_FACE_MIN_BIN_SPAN_MS,
+  AMBIENT_FACE_MIN_SAMPLES_PER_BIN,
+  AMBIENT_FACE_MIN_SPAN_MS,
+  extractAmbientFaceMetrics
+} from "./ambient-face.js";
+export { finalizeAmbientMetrics } from "./ambient-metrics.js";
 export type {
   VoiceSignalFrameV1,
   NormalizedPoint,
   FacialBoundingBox,
   FacialPose,
   BilateralValue,
-  FacialKinematicsFrameV1,
-  FrameStream
+  FacialKinematicsFrameV1
 } from "./primitives.js";
-export {
-  extractVoiceMeasurements,
-  VOICE_ANALYSIS_PROCESSOR_REF,
-  VOICE_ANALYSIS_VERSION,
-  VOICE_MEASUREMENT_LABELS
-} from "./voice-analysis.js";
-export type { VoiceExtractionResult } from "./voice-analysis.js";
 export {
   browserAudioProcessingEnabled,
   evaluateVoiceQuality,
@@ -29,50 +95,8 @@ export {
 } from "./voice-quality.js";
 export type { VoiceQualityAssessment } from "./voice-quality.js";
 export {
-  createNeutralFacialBaseline,
-  evaluateEyeClosureAdherence,
-  evaluateSmileAdherence,
-  extractFacialTaskMeasurements,
-  FACIAL_KINEMATICS_VERSION,
-  SMILE_ADHERENCE_FLOOR,
-  EYE_CLOSURE_ADHERENCE_FLOOR
-} from "./facial-task.js";
-export type {
-  EyeClosureAdherenceEvaluation,
-  FacialExtractionResult,
-  FacialSide,
-  NeutralFacialBaseline,
-  SmileAdherenceEvaluation
-} from "./facial-task.js";
-export {
+  DEFAULT_CAPTURE_QUALITY_POLICY,
   evaluateVisualQuality
 } from "./visual-quality.js";
-export {
-  detectMeasurableWindows,
-  MAX_FACE_WINDOW_YAW_DEGREES,
-  MAX_SPEECH_PAUSE_MS,
-  MIN_WINDOW_MS
-} from "./windowing.js";
-export type { WindowDetectionOptions } from "./windowing.js";
-export { aggregateMeasurements } from "./aggregate.js";
 export { createEventFactory } from "./events.js";
 export type { EventFactory } from "./events.js";
-export {
-  createConductorSession,
-  DEFAULT_CAPTURE_QUALITY_POLICY,
-  MAX_FACE_YAW_DEGREES,
-  runConductor
-} from "./conductor.js";
-export type {
-  ConductorSession,
-  ConductorSessionOptions
-} from "./conductor.js";
-export {
-  SYNTHETIC_VISUAL_PIPELINE,
-  SYNTHETIC_VIDEO_SETTINGS,
-  syntheticVoiceFrame,
-  syntheticSpeechConfounds,
-  syntheticFacialFrame,
-  syntheticTaskFrames,
-  syntheticFrameStream
-} from "./test-helpers.js";

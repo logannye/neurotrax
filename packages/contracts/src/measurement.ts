@@ -1,6 +1,8 @@
 export type Modality = "speech" | "face";
 
 export type MeasurementContextKind =
+  | "ambient-speech-turn"
+  | "ambient-frontal"
   | "spontaneous-speech"
   | "sustained-vowel"
   | "reading-aloud"
