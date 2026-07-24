@@ -7,7 +7,13 @@ import {
   type FaceMeshRenderResult
 } from "./face-mesh-renderer.js";
 import { depthToColor, normalizeDepth } from "./mesh-depth.js";
-import { MESH_FRAG, MESH_VERT } from "./face-mesh-gl-shaders.js";
+import {
+  BLUR_FRAG,
+  COMPOSITE_FRAG,
+  MESH_FRAG,
+  MESH_VERT,
+  QUAD_VERT
+} from "./face-mesh-gl-shaders.js";
 
 function compile(gl: WebGL2RenderingContext, type: number, src: string): WebGLShader {
   const s = gl.createShader(type)!;
@@ -56,6 +62,17 @@ const TESS_INDICES: number[] = FaceLandmarker.FACE_LANDMARKS_TESSELATION.flatMap
   (c) => [c.start, c.end]
 );
 
+/** An offscreen color-texture render target: an FBO with a single RGBA8 color texture. */
+interface RenderTarget {
+  fbo: WebGLFramebuffer;
+  tex: WebGLTexture;
+}
+
+// Bloom composite strength eases from a punchier peak (early localize) to a
+// calmer resting glow once the mesh has settled (introProgress -> 1).
+const BLOOM_REST_STRENGTH = 0.7;
+const BLOOM_PEAK_STRENGTH = 1.5;
+
 export class FaceMeshGLRenderer implements FaceMeshRenderer {
   private canvas: OffscreenCanvas | null = null;
   private gl: WebGL2RenderingContext | null = null;
@@ -63,6 +80,15 @@ export class FaceMeshGLRenderer implements FaceMeshRenderer {
   private posBuf: WebGLBuffer | null = null;
   private depthBuf: WebGLBuffer | null = null;
   private lineIndexBuf: WebGLBuffer | null = null;
+  // Bloom pipeline: post-process programs, a no-op VAO for the fullscreen
+  // triangle, the full-res scene target and two half-res ping-pong blur targets.
+  private blurProgram: WebGLProgram | null = null;
+  private compositeProgram: WebGLProgram | null = null;
+  private quadVao: WebGLVertexArrayObject | null = null;
+  private sceneTarget: RenderTarget | null = null;
+  private blurTargets: RenderTarget[] = [];
+  private fboWidth = 0;
+  private fboHeight = 0;
   private latest: FaceMeshRenderInput | null = null;
   private positions = new Float32Array(FACE_MESH_LANDMARK_COUNT * 2);
   private depths = new Float32Array(FACE_MESH_LANDMARK_COUNT);
@@ -84,6 +110,15 @@ export class FaceMeshGLRenderer implements FaceMeshRenderer {
       this.lineIndexBuf = gl.createBuffer();
       gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.lineIndexBuf);
       gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(TESS_INDICES), gl.STATIC_DRAW);
+      // Bloom setup lives inside this same try so a shader/FBO failure degrades
+      // to attach()===false (the worker falls back to 2D) instead of throwing.
+      this.blurProgram = link(gl, QUAD_VERT, BLUR_FRAG);
+      this.compositeProgram = link(gl, QUAD_VERT, COMPOSITE_FRAG);
+      this.quadVao = gl.createVertexArray();
+      if (!this.quadVao) throw new Error("failed to create quad VAO");
+      // Allocate placeholder targets now (validates the FBO-completeness path);
+      // drawFrame reallocates them at the real canvas size on the first frame.
+      this.allocTargets(gl, 1, 1);
       gl.enable(gl.BLEND);
       gl.blendFunc(gl.ONE, gl.ONE); // additive (premultiplied)
     } catch {
@@ -94,12 +129,21 @@ export class FaceMeshGLRenderer implements FaceMeshRenderer {
       if (this.posBuf) gl.deleteBuffer(this.posBuf);
       if (this.depthBuf) gl.deleteBuffer(this.depthBuf);
       if (this.lineIndexBuf) gl.deleteBuffer(this.lineIndexBuf);
+      if (this.blurProgram) gl.deleteProgram(this.blurProgram);
+      if (this.compositeProgram) gl.deleteProgram(this.compositeProgram);
+      if (this.quadVao) gl.deleteVertexArray(this.quadVao);
+      this.freeTargets(gl);
       this.gl = null;
       this.canvas = null;
       this.program = null;
       this.posBuf = null;
       this.depthBuf = null;
       this.lineIndexBuf = null;
+      this.blurProgram = null;
+      this.compositeProgram = null;
+      this.quadVao = null;
+      this.fboWidth = 0;
+      this.fboHeight = 0;
       return false;
     }
     return true;
@@ -113,11 +157,90 @@ export class FaceMeshGLRenderer implements FaceMeshRenderer {
     this.latest = input;
   }
 
+  /** Create a LINEAR/CLAMP_TO_EDGE RGBA8 color texture wired to a fresh FBO. */
+  private createTarget(gl: WebGL2RenderingContext, w: number, h: number): RenderTarget {
+    const tex = gl.createTexture();
+    const fbo = gl.createFramebuffer();
+    if (!tex || !fbo) {
+      if (tex) gl.deleteTexture(tex);
+      if (fbo) gl.deleteFramebuffer(fbo);
+      throw new Error("failed to allocate bloom render target");
+    }
+    gl.bindTexture(gl.TEXTURE_2D, tex);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+    const status = gl.checkFramebufferStatus(gl.FRAMEBUFFER);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.bindTexture(gl.TEXTURE_2D, null);
+    if (status !== gl.FRAMEBUFFER_COMPLETE) {
+      gl.deleteTexture(tex);
+      gl.deleteFramebuffer(fbo);
+      throw new Error(`bloom render target incomplete: 0x${status.toString(16)}`);
+    }
+    return { fbo, tex };
+  }
+
+  private freeTarget(gl: WebGL2RenderingContext, t: RenderTarget): void {
+    gl.deleteTexture(t.tex);
+    gl.deleteFramebuffer(t.fbo);
+  }
+
+  private freeTargets(gl: WebGL2RenderingContext): void {
+    if (this.sceneTarget) this.freeTarget(gl, this.sceneTarget);
+    for (const t of this.blurTargets) this.freeTarget(gl, t);
+    this.sceneTarget = null;
+    this.blurTargets = [];
+  }
+
+  /**
+   * (Re)allocate the scene target (full res) and both blur targets (half res).
+   * New targets are built first; only on full success are the previous ones
+   * freed and swapped in, so a mid-allocation failure leaves the old, valid
+   * targets in place and never leaks the partial new ones.
+   */
+  private allocTargets(gl: WebGL2RenderingContext, width: number, height: number): void {
+    const halfW = Math.max(1, Math.floor(width / 2));
+    const halfH = Math.max(1, Math.floor(height / 2));
+    let scene: RenderTarget | null = null;
+    let b0: RenderTarget | null = null;
+    let b1: RenderTarget | null = null;
+    try {
+      scene = this.createTarget(gl, width, height);
+      b0 = this.createTarget(gl, halfW, halfH);
+      b1 = this.createTarget(gl, halfW, halfH);
+    } catch (err) {
+      if (scene) this.freeTarget(gl, scene);
+      if (b0) this.freeTarget(gl, b0);
+      if (b1) this.freeTarget(gl, b1);
+      throw err;
+    }
+    this.freeTargets(gl);
+    this.sceneTarget = scene;
+    this.blurTargets = [b0, b1];
+    this.fboWidth = width;
+    this.fboHeight = height;
+  }
+
   drawFrame(nowMs: number, introProgress = 1): FaceMeshRenderResult {
     const gl = this.gl;
     const canvas = this.canvas;
     const input = this.latest;
-    if (!gl || !canvas || !this.program || !input) return EMPTY_RESULT;
+    if (
+      !gl ||
+      !canvas ||
+      !this.program ||
+      !this.blurProgram ||
+      !this.compositeProgram ||
+      !this.quadVao ||
+      !input
+    ) {
+      return EMPTY_RESULT;
+    }
     if (
       !Number.isFinite(input.width) ||
       !Number.isFinite(input.height) ||
@@ -130,9 +253,22 @@ export class FaceMeshGLRenderer implements FaceMeshRenderer {
     if (width <= 0 || height <= 0) return EMPTY_RESULT;
     if (canvas.width !== width) canvas.width = width;
     if (canvas.height !== height) canvas.height = height;
-    gl.viewport(0, 0, width, height);
-    gl.clearColor(0, 0, 0, 0);
-    gl.clear(gl.COLOR_BUFFER_BIT);
+
+    // Recreate render targets when the canvas size changes.
+    if (this.fboWidth !== width || this.fboHeight !== height) {
+      try {
+        this.allocTargets(gl, width, height);
+      } catch {
+        // Keep the previous (valid) targets and skip this frame rather than
+        // throw; the next frame retries the reallocation.
+        return EMPTY_RESULT;
+      }
+    }
+    const sceneTarget = this.sceneTarget;
+    const blurTargets = this.blurTargets;
+    if (!sceneTarget || blurTargets.length < 2) return EMPTY_RESULT;
+    const halfW = Math.max(1, Math.floor(width / 2));
+    const halfH = Math.max(1, Math.floor(height / 2));
 
     const n = Math.min(FACE_MESH_LANDMARK_COUNT, input.landmarks.length);
     const depthNorm = normalizeDepth(
@@ -153,6 +289,15 @@ export class FaceMeshGLRenderer implements FaceMeshRenderer {
     const far = depthToColor(0, (nowMs * 0.02) % 360);
     const alpha = introProgress; // fade in during localize
 
+    // ---- Pass 1: draw the mesh into the full-res scene target (additive) ----
+    gl.bindFramebuffer(gl.FRAMEBUFFER, sceneTarget.fbo);
+    gl.viewport(0, 0, width, height);
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.ONE, gl.ONE); // additive (premultiplied)
+    gl.clearColor(0, 0, 0, 0);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+    gl.bindVertexArray(null); // mesh attributes live on the default VAO
+
     gl.useProgram(this.program);
     gl.bindBuffer(gl.ARRAY_BUFFER, this.posBuf);
     gl.bufferData(gl.ARRAY_BUFFER, this.positions.subarray(0, n * 2), gl.DYNAMIC_DRAW);
@@ -172,12 +317,61 @@ export class FaceMeshGLRenderer implements FaceMeshRenderer {
     gl.drawElements(gl.LINES, TESS_INDICES.length, gl.UNSIGNED_SHORT, 0);
     gl.drawArrays(gl.POINTS, 0, n);
 
+    // ---- Pass 2: separable Gaussian blur (half res, no blending) ----
+    // Each fullscreen pass fully overwrites its target, so disable blending
+    // rather than accumulate onto stale contents.
+    gl.bindVertexArray(this.quadVao);
+    gl.disable(gl.BLEND);
+    gl.viewport(0, 0, halfW, halfH);
+    gl.useProgram(this.blurProgram);
+    const uTexel = gl.getUniformLocation(this.blurProgram, "uTexel");
+    const uDir = gl.getUniformLocation(this.blurProgram, "uDir");
+    const uTex = gl.getUniformLocation(this.blurProgram, "uTex");
+    gl.uniform1i(uTex, 0);
+    gl.uniform2f(uTexel, 1 / halfW, 1 / halfH);
+    gl.activeTexture(gl.TEXTURE0);
+
+    // Horizontal: scene.tex -> blurTargets[0]
+    gl.bindFramebuffer(gl.FRAMEBUFFER, blurTargets[0].fbo);
+    gl.bindTexture(gl.TEXTURE_2D, sceneTarget.tex);
+    gl.uniform2f(uDir, 1, 0);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+
+    // Vertical: blurTargets[0].tex -> blurTargets[1]
+    gl.bindFramebuffer(gl.FRAMEBUFFER, blurTargets[1].fbo);
+    gl.bindTexture(gl.TEXTURE_2D, blurTargets[0].tex);
+    gl.uniform2f(uDir, 0, 1);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+
+    // ---- Pass 3: composite scene + bloom to the default framebuffer ----
+    const p = Math.min(1, Math.max(0, introProgress));
+    const bloomStrength =
+      BLOOM_REST_STRENGTH + (BLOOM_PEAK_STRENGTH - BLOOM_REST_STRENGTH) * (1 - p);
+
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.viewport(0, 0, width, height);
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA); // premultiplied over
+    gl.clearColor(0, 0, 0, 0);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+    gl.useProgram(this.compositeProgram);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, sceneTarget.tex);
+    gl.activeTexture(gl.TEXTURE1);
+    gl.bindTexture(gl.TEXTURE_2D, blurTargets[1].tex);
+    gl.uniform1i(gl.getUniformLocation(this.compositeProgram, "uScene"), 0);
+    gl.uniform1i(gl.getUniformLocation(this.compositeProgram, "uBloom"), 1);
+    gl.uniform1f(gl.getUniformLocation(this.compositeProgram, "uBloomStrength"), bloomStrength);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+    gl.activeTexture(gl.TEXTURE0); // leave unit 0 active for the next frame
+
     return { rendered: true, landmarkDots: dots, tessellationEdges: TESS_INDICES.length / 2, accentAnchors: 0 };
   }
 
   clear(): void {
     const { gl, canvas } = this;
     if (gl && canvas) {
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
       gl.clearColor(0, 0, 0, 0);
       gl.clear(gl.COLOR_BUFFER_BIT);
     }
@@ -190,6 +384,10 @@ export class FaceMeshGLRenderer implements FaceMeshRenderer {
       if (this.posBuf) gl.deleteBuffer(this.posBuf);
       if (this.depthBuf) gl.deleteBuffer(this.depthBuf);
       if (this.lineIndexBuf) gl.deleteBuffer(this.lineIndexBuf);
+      if (this.blurProgram) gl.deleteProgram(this.blurProgram);
+      if (this.compositeProgram) gl.deleteProgram(this.compositeProgram);
+      if (this.quadVao) gl.deleteVertexArray(this.quadVao);
+      this.freeTargets(gl);
     }
     this.gl = null;
     this.canvas = null;
@@ -197,6 +395,13 @@ export class FaceMeshGLRenderer implements FaceMeshRenderer {
     this.posBuf = null;
     this.depthBuf = null;
     this.lineIndexBuf = null;
+    this.blurProgram = null;
+    this.compositeProgram = null;
+    this.quadVao = null;
+    this.sceneTarget = null;
+    this.blurTargets = [];
+    this.fboWidth = 0;
+    this.fboHeight = 0;
     this.latest = null;
   }
 }
