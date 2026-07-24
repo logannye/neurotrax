@@ -17,10 +17,13 @@ import {
   deriveFaceFeature,
   type FaceFeatureState
 } from "./face-features.js";
+import { FaceMeshGLRenderer } from "./face-mesh-gl.js";
 import {
   FaceMeshOverlayRenderer,
   faceMeshPresentationEligible
 } from "./face-mesh-overlay.js";
+import type { FaceMeshRenderer } from "./face-mesh-renderer.js";
+import { LocalizeIntro } from "./localize-intro.js";
 import {
   VISUAL_WORKER_MESSAGE_VERSION,
   visualPipelineProvenance,
@@ -47,8 +50,16 @@ let analyzedAcquisitionTimes: number[] = [];
 let initializing: Promise<void> | null = null;
 let activeModelAsset = "";
 let activeModelSha256 = "";
-const meshOverlay = new FaceMeshOverlayRenderer();
+// Presentation-only mesh renderer chosen at attach-overlay (WebGL2 first, 2D
+// fallback). Landmarks are cached inside the renderer for the rAF redraw loop
+// and are NEVER posted to the main thread.
+let meshRenderer: FaceMeshRenderer | null = null;
 let meshOverlayCaptureEpoch: number | null = null;
+let overlayCanvas: OffscreenCanvas | null = null;
+let overlayMaxRenderHz = 24;
+let rafHandle: number | null = null;
+let hasLandmarks = false;
+const localizeIntro = new LocalizeIntro();
 const qualityCanvas = new OffscreenCanvas(
   QUALITY_ROI_SIZE,
   QUALITY_ROI_SIZE
@@ -61,9 +72,68 @@ function post(message: VisualWorkerResponse): void {
   self.postMessage(message);
 }
 
+// Try WebGL2 first, fall back to the 2D overlay. FaceMeshGLRenderer.attach()
+// never throws on GL-init failure (it returns false), so the boolean is
+// sufficient; the try/catch is defensive belt-and-suspenders.
+function selectRenderer(
+  canvas: OffscreenCanvas,
+  maxRenderHz: number
+): FaceMeshRenderer | null {
+  try {
+    const gl = new FaceMeshGLRenderer();
+    if (gl.attach(canvas, maxRenderHz)) {
+      return gl;
+    }
+  } catch {
+    // fall through to the 2D fallback
+  }
+  try {
+    const twoD = new FaceMeshOverlayRenderer();
+    if (twoD.attach(canvas, maxRenderHz)) {
+      return twoD;
+    }
+  } catch {
+    // no renderer available
+  }
+  return null;
+}
+
+// DedicatedWorkerGlobalScope implements AnimationFrameProvider, so
+// requestAnimationFrame/cancelAnimationFrame exist here (OffscreenCanvas
+// animation). The rAF clock shares performance.now(), so the intro's
+// start/progress times stay consistent with the draw timestamps.
+function startRenderLoop(): void {
+  if (rafHandle !== null) {
+    return;
+  }
+  const tick = (now: number): void => {
+    rafHandle = requestAnimationFrame(tick);
+    if (!meshRenderer || !hasLandmarks) {
+      return;
+    }
+    // Presentation only: a redraw failure must never propagate into the
+    // measurement path, so it is contained here.
+    try {
+      meshRenderer.drawFrame(now, localizeIntro.progress(now));
+    } catch {
+      // drop the frame; the next tick retries
+    }
+  };
+  rafHandle = requestAnimationFrame(tick);
+}
+
+function stopRenderLoop(): void {
+  if (rafHandle !== null) {
+    cancelAnimationFrame(rafHandle);
+    rafHandle = null;
+  }
+}
+
 function resetDerivedState(captureEpoch: number): void {
-  meshOverlay.clear();
-  if (meshOverlay.isAttached()) {
+  meshRenderer?.clear();
+  hasLandmarks = false;
+  localizeIntro.reset();
+  if (meshRenderer?.isAttached()) {
     meshOverlayCaptureEpoch = captureEpoch;
   }
   activeCaptureEpoch = captureEpoch;
@@ -323,7 +393,8 @@ function processFrame(message: VisualWorkerFrameMessage): void {
   }
   if (!landmarker || !provenance) {
     message.bitmap.close();
-    meshOverlay.clear();
+    meshRenderer?.clear();
+    hasLandmarks = false;
     post(
       errorMessage("Face Landmarker is not ready.", {
         code: "worker-not-ready",
@@ -405,15 +476,25 @@ function processFrame(message: VisualWorkerFrameMessage): void {
         meshOverlayCaptureEpoch
       )
     ) {
-      meshOverlay.render({
+      // Cache the latest landmarks in-worker for the rAF redraw loop; the
+      // synchronous draw is owned by the loop, not this frame turn.
+      meshRenderer?.updateLandmarks({
         landmarks: nativeLandmarks,
         taskContext: message.taskContext,
         width: message.width,
         height: message.height,
         acquiredAtMs: message.acquiredAtMs
       });
+      if (!hasLandmarks) {
+        hasLandmarks = true;
+        // Begin the come-into-focus intro on the first lock, driven by the
+        // worker's own performance.now() clock (shared with rAF timestamps).
+        localizeIntro.start(performance.now());
+      }
     } else {
-      meshOverlay.clear();
+      meshRenderer?.clear();
+      hasLandmarks = false;
+      localizeIntro.reset();
     }
     post({
       schemaVersion: VISUAL_WORKER_MESSAGE_VERSION,
@@ -427,7 +508,8 @@ function processFrame(message: VisualWorkerFrameMessage): void {
       stream: message.stream
     });
   } catch (error) {
-    meshOverlay.clear();
+    meshRenderer?.clear();
+    hasLandmarks = false;
     post(
       errorMessage(readableError(error, "Face inference failed."), {
         code: "inference-failed",
@@ -443,7 +525,12 @@ function processFrame(message: VisualWorkerFrameMessage): void {
 }
 
 function dispose(captureEpoch: number): void {
-  meshOverlay.detach();
+  stopRenderLoop();
+  meshRenderer?.detach();
+  meshRenderer = null;
+  overlayCanvas = null;
+  hasLandmarks = false;
+  localizeIntro.reset();
   meshOverlayCaptureEpoch = null;
   landmarker?.close();
   landmarker = null;
@@ -485,7 +572,7 @@ self.addEventListener("message", (event: MessageEvent<unknown>) => {
   const message = candidate as VisualWorkerRequest;
   if (message.type === "initialize") {
     void initialize(message).catch((error) => {
-      meshOverlay.clear();
+      meshRenderer?.clear();
       post(
         errorMessage(
           readableError(
@@ -516,11 +603,36 @@ self.addEventListener("message", (event: MessageEvent<unknown>) => {
       });
       return;
     }
-    const attached = meshOverlay.attach(
-      message.canvas,
-      message.maxRenderHz
-    );
+    // Re-attach: free any previously attached renderer + stop its loop before
+    // selecting a new one, so a second attach-overlay never leaks a GL context.
+    stopRenderLoop();
+    meshRenderer?.detach();
+    overlayCanvas = message.canvas;
+    overlayMaxRenderHz = message.maxRenderHz;
+    meshRenderer = selectRenderer(message.canvas, message.maxRenderHz);
+    const attached = meshRenderer !== null;
     meshOverlayCaptureEpoch = attached ? message.captureEpoch : null;
+    hasLandmarks = false;
+    localizeIntro.reset();
+    if (attached) {
+      startRenderLoop();
+    }
+    // WebGL context-loss handling (no-op on the 2D backend, which never emits
+    // these events). preventDefault keeps the context restorable; on restore we
+    // re-select the renderer and restart the loop.
+    message.canvas.addEventListener?.("webglcontextlost", (event) => {
+      event.preventDefault();
+      stopRenderLoop();
+    });
+    message.canvas.addEventListener?.("webglcontextrestored", () => {
+      if (!overlayCanvas) {
+        return;
+      }
+      meshRenderer = selectRenderer(overlayCanvas, overlayMaxRenderHz);
+      if (meshRenderer) {
+        startRenderLoop();
+      }
+    });
     post({
       schemaVersion: VISUAL_WORKER_MESSAGE_VERSION,
       type: "overlay-status",
@@ -531,7 +643,9 @@ self.addEventListener("message", (event: MessageEvent<unknown>) => {
   }
   if (message.type === "clear-overlay") {
     if (message.captureEpoch === meshOverlayCaptureEpoch) {
-      meshOverlay.clear();
+      meshRenderer?.clear();
+      hasLandmarks = false;
+      localizeIntro.reset();
     }
     return;
   }
