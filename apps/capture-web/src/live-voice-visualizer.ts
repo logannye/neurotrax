@@ -249,13 +249,17 @@ function drawGauge(
     ? Math.max(0, Math.min(1, fraction))
     : 0;
   const centerX = width / 2;
-  const centerY = height * 0.58;
-  const radius = Math.max(4, Math.min(width, height * 1.7) / 2 - 8);
+  // A 270° gauge (open at the bottom) spans ~2·r horizontally and ~1.71·r
+  // vertically; bound the radius by BOTH so the arc never clips its canvas.
+  const radius = Math.max(4, Math.min(width * 0.4, (height - 14) / 2.05));
+  const lineWidth = Math.max(3, radius * 0.2);
+  // Seat the arc's top just below the canvas top so its full sweep + the label fit.
+  const centerY = radius + lineWidth / 2 + 2;
   const startAngle = Math.PI * 0.75;
   const sweep = Math.PI * 1.5;
 
   context.lineCap = "round";
-  context.lineWidth = Math.max(4, radius * 0.22);
+  context.lineWidth = lineWidth;
 
   context.strokeStyle = "rgba(140, 128, 255, .22)";
   context.beginPath();
