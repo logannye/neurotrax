@@ -78,7 +78,7 @@ test("dual-lane capture shows the live face mesh and bounded voice dashboard", a
   });
 
   await expect(page.locator("#face-mesh-status")).toHaveText(
-    "Face mesh active"
+    "◆ TRACKING · 478 pts"
   );
   await expect(page.locator("#landmark-overlay")).toBeVisible();
   await expect(page.locator("#voice-live-state")).toHaveText(
@@ -99,6 +99,26 @@ test("dual-lane capture shows the live face mesh and bounded voice dashboard", a
     "800",
     { timeout: 2_000 }
   );
+
+  // Cinematic mesh overlay: the worker attaches control of #landmark-overlay
+  // (transferControlToOffscreen) and sizes its drawing buffer once the mesh
+  // renderer (WebGL2, or the 2D fallback if WebGL2 is unavailable in this
+  // headless Chrome) draws a frame. Poll rather than assert synchronously
+  // since sizing happens on the worker's rAF loop, not on message receipt.
+  const overlay = page.locator("#landmark-overlay");
+  await expect(overlay).toBeVisible();
+  await expect
+    .poll(async () => overlay.evaluate((c: HTMLCanvasElement) => c.width))
+    .toBeGreaterThan(0);
+
+  // Telemetry: the gauges + waveform canvases attach and a live readout
+  // populates (replacing the "—" placeholder) during dual-lane capture.
+  await expect(page.locator("#voice-level-gauge")).toBeAttached();
+  await expect(page.locator("#voice-energy-chart")).toBeAttached();
+  await expect(page.locator("#voice-clarity-chart")).toBeAttached();
+  await expect
+    .poll(async () => page.locator("#voice-level-value").textContent())
+    .not.toBe("—");
 
   await page.locator("#discard-button").click();
   await expect(page.locator("#message-title")).toHaveText("Session discarded");
