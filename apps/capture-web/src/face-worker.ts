@@ -154,7 +154,7 @@ function startRenderLoop(): void {
     }
     lastDrawNowMs = now;
     // Reduced motion collapses the intro to its resting state (no animation).
-    const introProgress = prefersReducedMotion ? 1 : localizeIntro.progress(now);
+    const introProgress = prefersReducedMotion ? 1 : localizeIntro.presence(now);
     // Presentation only: a redraw failure must never propagate into the
     // measurement path, so it is contained here.
     try {
