@@ -88,6 +88,10 @@ interface RenderTarget {
 const BLOOM_REST_STRENGTH = 0.7;
 const BLOOM_PEAK_STRENGTH = 1.5;
 
+// Scales the mesh's overall opacity/brightness (~25% down) so the camera feed
+// reads more clearly through it. The bloom follows, since it blurs the dimmer scene.
+const MESH_ALPHA_SCALE = 0.75;
+
 export class FaceMeshGLRenderer implements FaceMeshRenderer {
   private canvas: OffscreenCanvas | null = null;
   private gl: WebGL2RenderingContext | null = null;
@@ -331,7 +335,7 @@ export class FaceMeshGLRenderer implements FaceMeshRenderer {
     const hueShift = freezeHue ? 0 : (nowMs * 0.02) % 360;
     const near = depthToColor(1, hueShift);
     const far = depthToColor(0, hueShift);
-    const alpha = introProgressEff; // fade in during localize
+    const alpha = introProgressEff * MESH_ALPHA_SCALE; // fade in, scaled so the face reads through
 
     // Intro scale-in: clip positions ease from 0.965 -> 1.0 as introProgress->1.
     const introP = Math.min(1, Math.max(0, introProgressEff));
