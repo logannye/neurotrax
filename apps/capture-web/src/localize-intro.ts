@@ -7,8 +7,8 @@ export function smoothstep(t: number): number {
 
 // After the intro settles the mesh "breathes": every PERIOD it eases off (to 0)
 // then back on over DIP, replaying the come-into-focus ripple.
-export const MESH_PULSE_PERIOD_MS = 4_500;
-export const MESH_PULSE_DIP_MS = 2_200;
+export const MESH_PULSE_PERIOD_MS = 6_000;
+export const MESH_PULSE_DIP_MS = 3_600;
 
 /**
  * Recurring mesh presence (0..1) for the post-intro breathe. Fully on (1) for
