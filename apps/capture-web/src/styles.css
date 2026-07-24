@@ -88,7 +88,7 @@ h2 { margin: 0; font-size: 1.25rem; }
 .capture-heading p:not(.eyebrow) { font-size: .78rem; line-height: 1.35; margin-top: .1rem; max-width: 64ch; }
 .session-clock { font-variant-numeric: tabular-nums; font-size: 1.15rem; font-weight: 800; padding: .5rem .85rem; border-radius: 12px; background: var(--panel); border: 1px solid var(--line); }
 /* Content row bounded to the viewport height; both columns fill it (align-items:stretch). */
-.capture-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(320px, 380px); gap: 1rem; align-items: stretch; height: 62vh; }
+.capture-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(320px, 380px); gap: 1rem; align-items: stretch; height: 75vh; }
 /* Landscape preview fills its column and the bounded grid height — no empty gap beside it. */
 .preview-card { position: relative; height: 100%; min-height: 0; overflow: hidden; background: #04040c; border-radius: 20px; box-shadow: var(--shadow); }
 .preview-card::after {
@@ -96,7 +96,7 @@ h2 { margin: 0; font-size: 1.25rem; }
   background: radial-gradient(120% 90% at 50% 45%, rgba(0,0,0,0) 42%, rgba(2,2,10,0.6) 100%);
 }
 #camera-preview, #landmark-overlay { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
-#camera-preview { filter: brightness(0.73) saturate(0.85) contrast(1.05); }
+#camera-preview { filter: brightness(0.82) saturate(0.88) contrast(1.04); }
 #landmark-overlay { pointer-events: none; z-index: 1; }
 .camera-placeholder { position: absolute; inset: 0; display: grid; place-items: center; color: #c9d7d1; }
 .local-badge { position: absolute; left: 1rem; bottom: 1rem; padding: .5rem .7rem; border-radius: 999px; background: rgba(7, 22, 17, .78); color: #e6f3ee; font-size: .76rem; z-index: 2; }
@@ -174,7 +174,7 @@ footer { border-top: 1px solid var(--line); color: var(--muted); font-size: .75r
   .welcome-layout, .capture-grid { grid-template-columns: 1fr; }
   .welcome-layout { min-height: auto; }
   .capture-grid { height: auto; }
-  .preview-card { height: 52vh; }
+  .preview-card { height: 63vh; }
   .capture-heading, .report-header { flex-direction: column; }
   .metric-row { grid-template-columns: 1fr 1fr; }
   .metric-evidence { grid-column: 1 / -1; }
