@@ -4,8 +4,20 @@ import {
 } from "@mediapipe/tasks-vision";
 import type { VisualTaskContext } from "@phenometric/contracts";
 import { FACE_LANDMARK_INDICES } from "./face-features.js";
+import {
+  EMPTY_RESULT,
+  FACE_MESH_LANDMARK_COUNT,
+  type FaceMeshRenderer,
+  type FaceMeshRenderInput,
+  type FaceMeshRenderResult
+} from "./face-mesh-renderer.js";
 
-export const FACE_MESH_LANDMARK_COUNT = 478;
+export { FACE_MESH_LANDMARK_COUNT } from "./face-mesh-renderer.js";
+export type {
+  FaceMeshRenderInput,
+  FaceMeshRenderResult
+} from "./face-mesh-renderer.js";
+
 export const MAX_FACE_MESH_RENDER_HZ = 24;
 
 export function faceMeshPresentationEligible(
@@ -32,21 +44,6 @@ const MOUTH_CORNER_ANCHORS = [
 ] as const;
 
 type MeshConnection = { start: number; end: number };
-
-export interface FaceMeshRenderInput {
-  landmarks: readonly NormalizedLandmark[];
-  taskContext: VisualTaskContext;
-  width: number;
-  height: number;
-  acquiredAtMs: number;
-}
-
-export interface FaceMeshRenderResult {
-  rendered: boolean;
-  landmarkDots: number;
-  tessellationEdges: number;
-  accentAnchors: number;
-}
 
 interface AccentGroup {
   connections: readonly MeshConnection[];
@@ -110,11 +107,12 @@ function activeSemanticRegions(
  * Presentation-only worker renderer. It owns the transferred canvas but never
  * retains landmarks or reads pixels back from the overlay.
  */
-export class FaceMeshOverlayRenderer {
+export class FaceMeshOverlayRenderer implements FaceMeshRenderer {
   private canvas: OffscreenCanvas | null = null;
   private context: OffscreenCanvasRenderingContext2D | null = null;
   private maxRenderHz = MAX_FACE_MESH_RENDER_HZ;
   private lastRenderedAtMs: number | null = null;
+  private latest: FaceMeshRenderInput | null = null;
 
   attach(canvas: OffscreenCanvas, requestedMaxRenderHz: number): boolean {
     this.detach();
@@ -159,34 +157,41 @@ export class FaceMeshOverlayRenderer {
     this.context = null;
   }
 
+  updateLandmarks(input: FaceMeshRenderInput): void {
+    this.latest = input;
+  }
+
   render(input: FaceMeshRenderInput): FaceMeshRenderResult {
-    const empty: FaceMeshRenderResult = {
-      rendered: false,
-      landmarkDots: 0,
-      tessellationEdges: 0,
-      accentAnchors: 0
-    };
+    this.updateLandmarks(input);
+    return this.drawFrame(input.acquiredAtMs, 1);
+  }
+
+  drawFrame(
+    nowMs: number,
+    _introProgress = 1
+  ): FaceMeshRenderResult {
+    const input = this.latest;
     const canvas = this.canvas;
     const context = this.context;
     if (
+      !input ||
       !canvas ||
       !context ||
       !Number.isFinite(input.width) ||
       !Number.isFinite(input.height) ||
       input.width <= 0 ||
       input.height <= 0 ||
-      !Number.isFinite(input.acquiredAtMs)
+      !Number.isFinite(nowMs)
     ) {
-      return empty;
+      return EMPTY_RESULT;
     }
 
     const minimumIntervalMs = 1_000 / this.maxRenderHz;
     if (
       this.lastRenderedAtMs !== null &&
-      input.acquiredAtMs - this.lastRenderedAtMs <
-        minimumIntervalMs
+      nowMs - this.lastRenderedAtMs < minimumIntervalMs
     ) {
-      return empty;
+      return EMPTY_RESULT;
     }
 
     const width = Math.round(input.width);
@@ -336,7 +341,7 @@ export class FaceMeshOverlayRenderer {
     }
     context.fill();
 
-    this.lastRenderedAtMs = input.acquiredAtMs;
+    this.lastRenderedAtMs = nowMs;
     return {
       rendered: true,
       landmarkDots,
