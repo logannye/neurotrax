@@ -131,7 +131,12 @@
                 </dl>
                 <p id="voice-quality-state" class="voice-quality-state">No live signal yet.</p>
               </section>
-              <h2 class="readiness-heading">Signal readiness</h2>
+            </aside>
+          </div>
+
+          <section class="session-controls" aria-label="Signal readiness and session controls">
+            <h2 class="readiness-heading">Signal readiness</h2>
+            <div class="readiness-lanes">
               <article class="lane-card">
                 <div><span>Microphone</span><strong id="audio-lane-state">Requesting</strong></div>
                 <p id="audio-lane-detail">Waiting for permission.</p>
@@ -140,17 +145,19 @@
                 <div><span>Camera</span><strong id="face-lane-state">Requesting</strong></div>
                 <p id="face-lane-detail">Waiting for permission.</p>
               </article>
-              <div class="capture-notice" role="status" aria-live="polite" id="capture-status">
-                Devices are only active during this session.
-              </div>
+            </div>
+            <div class="capture-notice" role="status" aria-live="polite" id="capture-status">
+              Devices are only active during this session.
+            </div>
+            <div class="session-actions">
               <button id="finish-button" class="secondary-button" type="button" disabled>
                 End session and view report
               </button>
               <button id="discard-button" class="text-button" type="button">
                 Discard session
               </button>
-            </aside>
-          </div>
+            </div>
+          </section>
         </section>
 
         <section id="message-view" class="message-card" aria-live="assertive" hidden>
