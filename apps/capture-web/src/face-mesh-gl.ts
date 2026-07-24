@@ -14,24 +14,40 @@ function compile(gl: WebGL2RenderingContext, type: number, src: string): WebGLSh
   gl.shaderSource(s, src);
   gl.compileShader(s);
   if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) {
-    throw new Error(gl.getShaderInfoLog(s) ?? "shader compile failed");
+    const log = gl.getShaderInfoLog(s) ?? "shader compile failed";
+    // Don't leak the failed shader object — it never reaches a program, so
+    // no later cleanup path can free it for us.
+    gl.deleteShader(s);
+    throw new Error(log);
   }
   return s;
 }
 function link(gl: WebGL2RenderingContext, vs: string, fs: string): WebGLProgram {
   const p = gl.createProgram()!;
-  const vShader = compile(gl, gl.VERTEX_SHADER, vs);
-  const fShader = compile(gl, gl.FRAGMENT_SHADER, fs);
-  gl.attachShader(p, vShader);
-  gl.attachShader(p, fShader);
-  gl.linkProgram(p);
-  if (!gl.getProgramParameter(p, gl.LINK_STATUS)) {
-    throw new Error(gl.getProgramInfoLog(p) ?? "program link failed");
+  let vShader: WebGLShader | null = null;
+  let fShader: WebGLShader | null = null;
+  try {
+    vShader = compile(gl, gl.VERTEX_SHADER, vs);
+    fShader = compile(gl, gl.FRAGMENT_SHADER, fs);
+    gl.attachShader(p, vShader);
+    gl.attachShader(p, fShader);
+    gl.linkProgram(p);
+    if (!gl.getProgramParameter(p, gl.LINK_STATUS)) {
+      throw new Error(gl.getProgramInfoLog(p) ?? "program link failed");
+    }
+  } catch (err) {
+    // Free whatever partial GL objects this attempt created before letting
+    // the error propagate — a compile failure leaves the other shader (or
+    // none) created, and a link failure leaves both shaders attached.
+    if (vShader) gl.deleteShader(vShader);
+    if (fShader) gl.deleteShader(fShader);
+    gl.deleteProgram(p);
+    throw err;
   }
   // Shaders marked for deletion stay alive while attached to the program,
   // then free automatically when the program itself is deleted.
-  gl.deleteShader(vShader);
-  gl.deleteShader(fShader);
+  gl.deleteShader(vShader!);
+  gl.deleteShader(fShader!);
   return p;
 }
 
