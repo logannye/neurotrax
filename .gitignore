@@ -19,6 +19,7 @@ __pycache__/
 *.log
 *.tsbuildinfo
 .local/
+.superpowers/
 
 # Never commit captured audiovisual or health data.
 captures/
