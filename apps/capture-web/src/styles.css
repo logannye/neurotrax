@@ -53,7 +53,7 @@ button:focus-visible, input:focus-visible, summary:focus-visible, a:focus-visibl
 .privacy-pill { padding: .45rem .7rem; border-radius: 999px; background: #eef1ee; color: #4d5a55; }
 .privacy-pill.is-live { background: var(--green-soft); color: var(--green-dark); }
 
-main { width: min(1380px, calc(100% - 2rem)); margin: 0 auto; padding: clamp(2rem, 6vw, 5.5rem) 0; flex: 1; }
+main { width: min(1380px, calc(100% - 2rem)); margin: 0 auto; padding: clamp(1.25rem, 3vw, 2.75rem) 0; flex: 1; }
 
 .welcome-layout { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(340px, .85fr); gap: clamp(2rem, 6vw, 6rem); align-items: center; min-height: 64vh; }
 .eyebrow { margin: 0 0 .75rem; text-transform: uppercase; letter-spacing: .13em; color: var(--green); font-size: .72rem; font-weight: 800; }
@@ -80,9 +80,14 @@ h2 { margin: 0; font-size: 1.25rem; }
 .capture-heading, .report-header { display: flex; justify-content: space-between; gap: 2rem; align-items: flex-start; margin-bottom: 2rem; }
 .capture-heading h1, .report-header h1 { font-size: clamp(2rem, 5vw, 3.8rem); }
 .capture-heading p:not(.eyebrow) { color: var(--muted); max-width: 55ch; line-height: 1.5; }
+/* Capture stage: keep the heading compact so it doesn't push the preview down. */
+.capture-heading { margin-bottom: 1rem; align-items: center; }
+.capture-heading h1 { font-size: clamp(1.3rem, 2.6vw, 1.9rem); line-height: 1.1; }
+.capture-heading p:not(.eyebrow) { font-size: .88rem; margin-top: .2rem; }
 .session-clock { font-variant-numeric: tabular-nums; font-size: 1.5rem; font-weight: 800; padding: .75rem 1rem; border-radius: 12px; background: var(--panel); border: 1px solid var(--line); }
-.capture-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(360px, 400px); gap: 1.25rem; }
-.preview-card { position: relative; min-height: 500px; overflow: hidden; background: #04040c; border-radius: 20px; box-shadow: var(--shadow); }
+.capture-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(360px, 400px); gap: 1.25rem; align-items: start; }
+/* Landscape preview, scaled to fit the viewport height (no more portrait-tall card). */
+.preview-card { position: relative; aspect-ratio: 16 / 9; min-height: 0; max-height: 62vh; overflow: hidden; background: #04040c; border-radius: 20px; box-shadow: var(--shadow); }
 .preview-card::after {
   content: ""; position: absolute; inset: 0; pointer-events: none;
   background: radial-gradient(120% 90% at 50% 45%, rgba(0,0,0,0) 42%, rgba(2,2,10,0.6) 100%);
@@ -162,7 +167,7 @@ footer { border-top: 1px solid var(--line); color: var(--muted); font-size: .75r
 @media (max-width: 960px) {
   .welcome-layout, .capture-grid { grid-template-columns: 1fr; }
   .welcome-layout { min-height: auto; }
-  .preview-card { min-height: min(68vh, 520px); }
+  .preview-card { max-height: 48vh; }
   .capture-heading, .report-header { flex-direction: column; }
   .metric-row { grid-template-columns: 1fr 1fr; }
   .metric-evidence { grid-column: 1 / -1; }
@@ -175,7 +180,7 @@ footer { border-top: 1px solid var(--line); color: var(--muted); font-size: .75r
   .brand small, footer span:first-child { display: none; }
   h1 { font-size: 2.55rem; }
   .consent-card { border-radius: 16px; padding: 1.1rem; }
-  .preview-card { min-height: 380px; border-radius: 14px; }
+  .preview-card { border-radius: 14px; }
   .metric-row { grid-template-columns: 1fr; }
   .metric-evidence { grid-column: auto; }
 }
