@@ -55,17 +55,18 @@ button:focus-visible, input:focus-visible, summary:focus-visible, a:focus-visibl
 
 main { width: min(1380px, calc(100% - 2rem)); margin: 0 auto; padding: clamp(.75rem, 1.8vw, 1.4rem) 0; flex: 1; }
 
-.welcome-layout { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(340px, .85fr); gap: clamp(2rem, 6vw, 6rem); align-items: center; min-height: 64vh; }
-.eyebrow { margin: 0 0 .75rem; text-transform: uppercase; letter-spacing: .13em; color: var(--green); font-size: .72rem; font-weight: 800; }
-h1 { margin: 0; font-size: clamp(2.35rem, 6vw, 5.2rem); line-height: .98; letter-spacing: -.055em; max-width: 13ch; }
+.welcome-layout { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(340px, .9fr); gap: clamp(1.5rem, 4vw, 3.5rem); align-items: center; min-height: 56vh; }
+.eyebrow { margin: 0 0 .6rem; text-transform: uppercase; letter-spacing: .13em; color: var(--green); font-size: .7rem; font-weight: 800; }
+h1 { margin: 0; font-size: clamp(1.9rem, 3.6vw, 3rem); line-height: 1.05; letter-spacing: -.03em; max-width: 16ch; }
 h2 { margin: 0; font-size: 1.25rem; }
-.lede { max-width: 58ch; margin: 1.5rem 0; color: var(--muted); font-size: clamp(1rem, 2vw, 1.25rem); line-height: 1.65; }
-.boundary-card { max-width: 38rem; padding: 1.1rem 1.2rem; border-left: 3px solid var(--green); background: var(--green-soft); border-radius: 0 12px 12px 0; }
+.lede { max-width: 52ch; margin: 1rem 0 1.15rem; color: var(--muted); font-size: clamp(.95rem, 1.5vw, 1.1rem); line-height: 1.55; }
+.boundary-card { max-width: 38rem; padding: .8rem 1rem; border-left: 3px solid var(--green); background: var(--green-soft); border-radius: 0 12px 12px 0; }
 .boundary-card p { margin: .35rem 0 0; color: #40504a; line-height: 1.5; }
 
-.consent-card, .message-card { background: var(--panel); border: 1px solid var(--line); border-radius: 22px; padding: clamp(1.4rem, 4vw, 2.4rem); box-shadow: var(--shadow); }
-.consent-card ul { margin: 1.25rem 0; padding-left: 1.2rem; color: var(--muted); line-height: 1.55; }
-.consent-control { display: grid; grid-template-columns: auto 1fr; gap: .8rem; align-items: start; padding: 1rem; background: #f7f8f6; border: 1px solid var(--line); border-radius: 12px; line-height: 1.45; }
+.consent-card, .message-card { background: var(--panel); border: 1px solid var(--line); border-radius: 20px; padding: clamp(1.2rem, 3vw, 1.85rem); box-shadow: var(--shadow); }
+.consent-card ul { margin: .9rem 0; padding-left: 1.15rem; color: var(--muted); line-height: 1.5; font-size: .92rem; }
+.consent-card ul li { margin-bottom: .25rem; }
+.consent-control { display: grid; grid-template-columns: auto 1fr; gap: .75rem; align-items: start; padding: .85rem; background: #f7f8f6; border: 1px solid var(--line); border-radius: 12px; line-height: 1.45; font-size: .9rem; }
 .consent-control input { width: 1.2rem; height: 1.2rem; margin-top: .12rem; accent-color: var(--green); }
 
 .primary-button, .secondary-button, .text-button { border-radius: 11px; font-weight: 750; min-height: 48px; padding: .8rem 1rem; }
