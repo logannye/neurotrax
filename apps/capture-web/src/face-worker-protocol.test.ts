@@ -68,7 +68,8 @@ describe("visual worker protocol", () => {
     const attach = createVisualWorkerAttachOverlayMessage(
       7,
       canvas,
-      12
+      12,
+      true
     );
     const clear = createVisualWorkerClearOverlayMessage(7);
 
@@ -77,7 +78,8 @@ describe("visual worker protocol", () => {
       type: "attach-overlay",
       captureEpoch: 7,
       canvas,
-      maxRenderHz: 12
+      maxRenderHz: 12,
+      reducedMotion: true
     });
     expect(clear).toEqual({
       schemaVersion: "phenometric.visual-worker-message.v2",

@@ -61,13 +61,12 @@ let rafHandle: number | null = null;
 let hasLandmarks = false;
 const localizeIntro = new LocalizeIntro();
 
-// Detected once: honor the OS "reduce motion" setting where the worker can see
-// it. matchMedia is absent in some worker environments, so it is guarded; when
-// unavailable we default to full motion. Reduced motion forces the mesh into a
-// static frame (no hue drift, motes, twinkle, or intro animation).
-const prefersReducedMotion =
-  typeof self.matchMedia === "function" &&
-  self.matchMedia("(prefers-reduced-motion: reduce)").matches;
+// Honor the OS "reduce motion" setting. matchMedia does NOT exist in a
+// DedicatedWorkerGlobalScope, so the main thread detects the preference and
+// passes it in via the attach-overlay message; this flag is (re)set from that
+// message on every attach. Reduced motion forces the mesh into a static frame
+// (no hue drift, motes, twinkle, or intro animation). Defaults to full motion.
+let prefersReducedMotion = false;
 
 // Adaptive performance governor: an EMA of the rAF inter-frame time drives an
 // effectLevel (0..1) that the renderer uses to shed effects (motes -> bloom ->
@@ -657,6 +656,9 @@ self.addEventListener("message", (event: MessageEvent<unknown>) => {
     meshRenderer?.detach();
     overlayCanvas = message.canvas;
     overlayMaxRenderHz = message.maxRenderHz;
+    // Presentation preference detected on the main thread (worker has no
+    // matchMedia); re-set on every attach so the mesh honors the OS setting.
+    prefersReducedMotion = message.reducedMotion;
     meshRenderer = selectRenderer(message.canvas, message.maxRenderHz);
     const attached = meshRenderer !== null;
     meshOverlayCaptureEpoch = attached ? message.captureEpoch : null;

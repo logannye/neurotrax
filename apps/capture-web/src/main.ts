@@ -64,6 +64,13 @@ function element<T extends HTMLElement>(id: string): T {
   return value as T;
 }
 
+// Detected once on the main thread, where matchMedia exists. The face-worker
+// runs in a DedicatedWorkerGlobalScope with no matchMedia, so this presentation
+// preference is threaded into the worker via the attach-overlay message.
+const prefersReducedMotion =
+  typeof window.matchMedia === "function" &&
+  window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
 const welcomeView = element<HTMLElement>("welcome-view");
 const captureView = element<HTMLElement>("capture-view");
 const messageView = element<HTMLElement>("message-view");
@@ -747,7 +754,7 @@ async function startFaceLane(generation: number): Promise<void> {
     });
     const initializedWorker = faceWorker;
     if (!initializedWorker) throw new Error("face-worker-unavailable");
-    faceOverlay.attach(initializedWorker, generation);
+    faceOverlay.attach(initializedWorker, generation, prefersReducedMotion);
     initializedWorker.postMessage(
       createVisualWorkerInitializeMessage(generation, captureSettings, {
         mediaPipeRootUrl: assets.mediaPipeRootUrl,

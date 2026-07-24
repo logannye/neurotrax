@@ -47,13 +47,14 @@ describe("FaceOverlayController", () => {
   it("transfers the canvas once and waits for worker acknowledgement", () => {
     const item = fixture();
 
-    expect(item.controller.attach(item.worker, 7)).toBe(true);
+    expect(item.controller.attach(item.worker, 7, true)).toBe(true);
     expect(item.worker.postMessage).toHaveBeenCalledWith(
       expect.objectContaining({
         type: "attach-overlay",
         captureEpoch: 7,
         canvas: item.offscreen,
-        maxRenderHz: LIVE_FACE_MESH_RENDER_HZ
+        maxRenderHz: LIVE_FACE_MESH_RENDER_HZ,
+        reducedMotion: true
       }),
       [item.offscreen]
     );

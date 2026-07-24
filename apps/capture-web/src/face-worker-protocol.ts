@@ -64,6 +64,10 @@ export interface VisualWorkerAttachOverlayMessage {
   captureEpoch: number;
   canvas: OffscreenCanvas;
   maxRenderHz: number;
+  // Presentation-only UI preference flowing INTO the worker (main -> worker).
+  // matchMedia is unavailable in a DedicatedWorkerGlobalScope, so reduced-motion
+  // must be detected on the main thread and passed in here. No native data.
+  reducedMotion: boolean;
 }
 
 export interface VisualWorkerClearOverlayMessage {
@@ -222,14 +226,16 @@ export function createVisualWorkerResetMessage(
 export function createVisualWorkerAttachOverlayMessage(
   captureEpoch: number,
   canvas: OffscreenCanvas,
-  maxRenderHz = 24
+  maxRenderHz = 24,
+  reducedMotion = false
 ): VisualWorkerAttachOverlayMessage {
   return {
     schemaVersion: VISUAL_WORKER_MESSAGE_VERSION,
     type: "attach-overlay",
     captureEpoch,
     canvas,
-    maxRenderHz
+    maxRenderHz,
+    reducedMotion
   };
 }
 

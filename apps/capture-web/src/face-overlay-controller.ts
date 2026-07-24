@@ -37,7 +37,11 @@ export class FaceOverlayController {
     return this.canvas;
   }
 
-  attach(worker: OverlayWorker, captureEpoch: number): boolean {
+  attach(
+    worker: OverlayWorker,
+    captureEpoch: number,
+    reducedMotion = false
+  ): boolean {
     this.worker = worker;
     this.captureEpoch = captureEpoch;
     this.attached = false;
@@ -59,7 +63,8 @@ export class FaceOverlayController {
         createVisualWorkerAttachOverlayMessage(
           captureEpoch,
           offscreen,
-          LIVE_FACE_MESH_RENDER_HZ
+          LIVE_FACE_MESH_RENDER_HZ,
+          reducedMotion
         ),
         [offscreen]
       );
