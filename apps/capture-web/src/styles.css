@@ -39,13 +39,13 @@ button:focus-visible, input:focus-visible, summary:focus-visible, a:focus-visibl
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
-  padding: 1.1rem clamp(1rem, 4vw, 4rem);
+  padding: .55rem clamp(1rem, 4vw, 4rem);
 }
 
 .app-header { border-bottom: 1px solid var(--line); background: rgba(255,255,255,.82); backdrop-filter: blur(16px); }
 
-.brand { display: inline-flex; align-items: center; gap: .75rem; color: inherit; text-decoration: none; }
-.brand-mark { display: grid; place-items: center; width: 2.25rem; aspect-ratio: 1; border-radius: 12px; background: var(--green); color: white; font-weight: 800; }
+.brand { display: inline-flex; align-items: center; gap: .7rem; color: inherit; text-decoration: none; }
+.brand-mark { display: grid; place-items: center; width: 1.8rem; aspect-ratio: 1; border-radius: 10px; background: var(--green); color: white; font-weight: 800; font-size: .9rem; }
 .brand strong, .brand small { display: block; }
 .brand small { color: var(--muted); font-size: .72rem; margin-top: .08rem; }
 
@@ -53,7 +53,7 @@ button:focus-visible, input:focus-visible, summary:focus-visible, a:focus-visibl
 .privacy-pill { padding: .45rem .7rem; border-radius: 999px; background: #eef1ee; color: #4d5a55; }
 .privacy-pill.is-live { background: var(--green-soft); color: var(--green-dark); }
 
-main { width: min(1380px, calc(100% - 2rem)); margin: 0 auto; padding: clamp(1.25rem, 3vw, 2.75rem) 0; flex: 1; }
+main { width: min(1380px, calc(100% - 2rem)); margin: 0 auto; padding: clamp(.75rem, 1.8vw, 1.4rem) 0; flex: 1; }
 
 .welcome-layout { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(340px, .85fr); gap: clamp(2rem, 6vw, 6rem); align-items: center; min-height: 64vh; }
 .eyebrow { margin: 0 0 .75rem; text-transform: uppercase; letter-spacing: .13em; color: var(--green); font-size: .72rem; font-weight: 800; }
@@ -81,10 +81,10 @@ h2 { margin: 0; font-size: 1.25rem; }
 .capture-heading h1, .report-header h1 { font-size: clamp(2rem, 5vw, 3.8rem); }
 .capture-heading p:not(.eyebrow) { color: var(--muted); max-width: 55ch; line-height: 1.5; }
 /* Capture stage: keep the heading compact so it doesn't push the preview down. */
-.capture-heading { margin-bottom: .8rem; align-items: center; gap: 1.5rem; }
-.capture-heading .eyebrow { margin-bottom: .2rem; }
-.capture-heading h1 { font-size: clamp(1.15rem, 1.8vw, 1.5rem); line-height: 1.15; max-width: none; }
-.capture-heading p:not(.eyebrow) { font-size: .82rem; line-height: 1.4; margin-top: .15rem; max-width: 64ch; }
+.capture-heading { margin-bottom: .5rem; align-items: center; gap: 1.5rem; }
+.capture-heading .eyebrow { margin-bottom: .05rem; font-size: .62rem; }
+.capture-heading h1 { font-size: clamp(1rem, 1.4vw, 1.25rem); line-height: 1.1; max-width: none; }
+.capture-heading p:not(.eyebrow) { font-size: .78rem; line-height: 1.35; margin-top: .1rem; max-width: 64ch; }
 .session-clock { font-variant-numeric: tabular-nums; font-size: 1.15rem; font-weight: 800; padding: .5rem .85rem; border-radius: 12px; background: var(--panel); border: 1px solid var(--line); }
 /* Content row bounded to the viewport height; both columns fill it (align-items:stretch). */
 .capture-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(320px, 380px); gap: 1rem; align-items: stretch; height: 62vh; }
