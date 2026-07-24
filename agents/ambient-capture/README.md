@@ -2,38 +2,26 @@
 
 ## Goal
 
-Create one consented, versioned audiovisual observation from technically
-measurable moments in a routine encounter. A protocol may use natural
-conversation, brief prompted microtasks, or both.
+Create one consented, versioned ObservationV3 from technically measurable
+moments in an ordinary local conversation.
 
-## Agentic behavior
+## Implemented behavior
 
-- ingest derived audio and versioned facial-kinematics primitives
-  incrementally;
-- apply a versioned protocol and capture context without interpreting disease;
-- open and close independent modality windows;
-- route eligible windows to versioned deterministic extractors;
-- publish quality transitions and reason-coded abstentions;
-- reconcile results into one `EncounterObservation`; and
-- release raw device access at encounter end.
+- request and calibrate voice and face independently;
+- accept compact, media-free derived frames from worker boundaries;
+- screen evidence into qualified voice segments and five-second face bins;
+- run the frozen 16-metric deterministic registry;
+- emit one measured or specifically withheld outcome per metric;
+- preserve exact window, processor, track, algorithm, protocol, and consent
+  provenance; and
+- dispose media and transient state before report display.
 
-The hero behavior is modality and task independence: the face lane withholds
-during a turn-away while the speech lane continues, then facial quality
-recovers for neutral-face, smile, and eye-closure tasks. Failure of one task
-resets that task's live evidence streak; a guided assessment advances only when
-the task criterion is satisfied. Final extraction receives only the last
-qualifying interval, preventing failed attempts from contaminating the neutral
-reference or facial measurements.
-
-Prompted tasks remain inside Ambient Capture. They do not bypass quality gates,
-make a modality mandatory at the platform level, or create clinical meaning.
+There are no prompted microtasks in the current application. Failure of one
+modality does not force the other modality to fail.
 
 ## Hard boundary
 
-Ambient Capture does not interpret conversation content, diagnose, compare
-history, generate narrative conclusions, or recommend action.
-
-Native MediaPipe landmarks, blendshapes, transformation matrices, and video
-frames do not cross the browser-worker boundary. The live full-face mesh is
-drawn on a worker-owned canvas and is presentation-only. Only compact derived
-geometry, quality, timing, and processor provenance may enter the coordinator.
+Ambient Capture does not interpret conversation content, compare history,
+diagnose, generate narrative conclusions, recommend action, persist data, or
+retain evidence clips. Native media and high-dimensional processing
+intermediates cannot enter its observation contract.

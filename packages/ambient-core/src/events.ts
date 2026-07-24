@@ -27,6 +27,7 @@ export function createEventFactory(input: {
   const actorVersions: Record<AmbientActorId, string> = {
     "capture-web": "0.2.0",
     "capture-conductor": "0.2.0",
+    "voice-analysis": "voice-analysis-1.0",
     "speech-acoustic": "speech-acoustic-0.4",
     "facial-expressivity": "facial-task-kinematics-1.0",
     "personal-trajectory": "ambient-context-and-confounds.v0.1",

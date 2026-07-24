@@ -1,18 +1,48 @@
 export type Modality = "speech" | "face";
 
 export type MeasurementContextKind =
+  | "ambient-speech-turn"
+  | "ambient-frontal"
   | "spontaneous-speech"
   | "sustained-vowel"
   | "reading-aloud"
+  | "rapid-syllables"
   | "listening-expressive"
   | "neutral-face"
   | "smile"
   | "eye-closure";
 
+export type AudioQualityReasonCode =
+  | "microphone-unavailable"
+  | "audio-worklet-unavailable"
+  | "audio-frame-gap"
+  | "sample-rate-below-minimum"
+  | "audio-processing-enabled"
+  | "snr-below-minimum"
+  | "signal-too-quiet"
+  | "audio-clipping"
+  | "dc-offset"
+  | "task-not-observed"
+  | "voice-worker-unavailable";
+
+export interface BrowserAudioProcessingState {
+  echoCancellation: boolean;
+  noiseSuppression: boolean;
+  autoGainControl: boolean;
+}
+
 export interface SpeechConfoundEnvelope {
   kind: "speech";
+  sampleRateHz: number;
+  sampleRateClass: "44.1khz" | "48khz-or-higher" | "below-44.1khz";
+  browserProcessing: BrowserAudioProcessingState;
   snrDb: number;
   clippingFraction: number;
+  dcOffset: number;
+  lostBlockFraction: number;
+  maximumBlockGapMs: number;
+  usableCoverage: number;
+  periodicityCoverage: number;
 }
 
 export interface VisualConfoundEnvelope {

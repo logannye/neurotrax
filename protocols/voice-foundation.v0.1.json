@@ -1,0 +1,126 @@
+{
+  "id": "voice-foundation.v1",
+  "status": "non-clinical-prototype",
+  "captureAdapter": "macbook-browser-audio-worklet",
+  "description": "A microphone-only completion-gated voice foundation protocol for quality-aware acoustic measurement.",
+  "supportedTarget": "Chrome desktop on the reference MacBook",
+  "consentRequired": true,
+  "cameraRequested": false,
+  "processing": {
+    "location": "browser-audio-worklet-and-voice-worker",
+    "rawMediaRetained": false,
+    "rawAudioRetained": false,
+    "nativeAudioObservationsRetained": false,
+    "transcriptRetained": false,
+    "voiceEmbeddingsRetained": false,
+    "analysisWindowMs": 40,
+    "analysisHopMs": 10,
+    "pcmBlockMs": 20,
+    "ringBufferSeconds": 30,
+    "requestedAudio": {
+      "channelCount": 1,
+      "sampleRate": 48000,
+      "echoCancellation": false,
+      "noiseSuppression": false,
+      "autoGainControl": false
+    },
+    "optionalRepresentationProcessor": {
+      "enabledByDefault": false,
+      "serviceBinding": "127.0.0.1",
+      "processorType": "speech-representation",
+      "modelId": "microsoft/wavlm-large",
+      "revision": "c1423ed94bb01d80a3f5ce5bc39f6026a0f4828c",
+      "weightSha256": "fdee460e529396ddb2f8c8e8ce0ad74cfb747b726bc6f612e666c7c1e1963c9d",
+      "layers": [6, 12, 18, 24],
+      "stored": false
+    }
+  },
+  "qualityPolicy": {
+    "minimumFineAcousticSampleRateHz": 44100,
+    "maximumAudioBlockGapMs": 40,
+    "maximumLostBlockFractionOverTwoSeconds": 0.05,
+    "minimumGeneralSnrDb": 15,
+    "minimumPerturbationSnrDb": 20,
+    "maximumClippedSampleFraction": 0.01,
+    "maximumAbsoluteDcOffset": 0.02,
+    "minimumQuietCalibrationMs": 2000,
+    "minimumQuietCalibrationUsableFraction": 0.8
+  },
+  "systemCheck": [
+    {
+      "phase": "quiet-calibration",
+      "evidenceDurationMs": 2000,
+      "minimumUsableCoverage": 0.8
+    },
+    {
+      "phase": "natural-speech-check",
+      "evidenceDurationMs": 1500,
+      "successCondition": "continuous-usable-voiced-unclipped-speech"
+    }
+  ],
+  "sequence": [
+    {
+      "phase": "sustained-vowel-1",
+      "evidenceDurationMs": 3000,
+      "requiredPeriodicityCoverage": 0.8,
+      "assistanceAfterMs": 12000,
+      "instruction": "Sustain a comfortable /a/ vowel."
+    },
+    {
+      "phase": "sustained-vowel-2",
+      "evidenceDurationMs": 3000,
+      "requiredPeriodicityCoverage": 0.8,
+      "assistanceAfterMs": 12000,
+      "instruction": "Repeat the comfortable /a/ vowel."
+    },
+    {
+      "phase": "standardized-reading",
+      "evidenceDurationMs": 4000,
+      "assistanceAfterMs": 12000,
+      "instruction": "Read the displayed nonclinical sentence."
+    },
+    {
+      "phase": "rapid-syllables",
+      "evidenceDurationMs": 4000,
+      "requiredSyllabicNuclei": 6,
+      "assistanceAfterMs": 12000,
+      "instruction": "Repeat /pa-ta-ka/ clearly and continuously."
+    },
+    {
+      "phase": "spontaneous-response",
+      "evidenceDurationMs": 8000,
+      "permitsNaturalPauses": true,
+      "assistanceAfterMs": 12000,
+      "instruction": "Describe a familiar daily routine."
+    }
+  ],
+  "advancement": {
+    "mode": "signal-gated",
+    "maximumContinuousSignalGapMs": 40,
+    "timeoutBehavior": "never-auto-advance",
+    "skipAvailable": false,
+    "failedAttemptRetention": "transient-only",
+    "acceptedEvidence": "final-qualifying-interval-only"
+  },
+  "voiceMeasurements": [
+    "prototype.voice.f0.median",
+    "prototype.voice.f0.variability",
+    "prototype.voice.cpps",
+    "prototype.voice.hnr",
+    "prototype.voice.intensity.variability",
+    "prototype.voice.voiced_fraction",
+    "prototype.voice.pause_rate",
+    "prototype.voice.pause_duration.median",
+    "prototype.voice.speech_run_duration.median",
+    "prototype.voice.syllabic_rate_estimate",
+    "prototype.voice.jitter.local",
+    "prototype.voice.shimmer.local",
+    "prototype.voice.phonation_break_fraction",
+    "prototype.voice.formant.f1_median",
+    "prototype.voice.formant.f2_median",
+    "prototype.voice.ddk.rate",
+    "prototype.voice.ddk.interval_variability",
+    "prototype.voice.onset_latency"
+  ],
+  "clinicalClaims": []
+}

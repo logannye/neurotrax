@@ -194,7 +194,7 @@ describe("guided face calibration", () => {
           }
         })
       )
-    ).toBe("Adjust lighting");
+    ).toBe("Please turn on a light");
   });
 
   it("applies the calibration-relative sharpness floor and accepts recovery", () => {
@@ -231,7 +231,7 @@ describe("guided face calibration", () => {
       classifyFaceCalibration([])
     );
     expect(capture).toMatchObject({
-      schemaVersion: "phenometric.capture-calibration.v1",
+      schemaVersion: "phenometric.capture-calibration.v2",
       profileId: "visual-foundation-v1",
       audioQuality: "strong",
       faceQuality: "unavailable",

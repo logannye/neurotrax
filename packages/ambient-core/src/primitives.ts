@@ -1,21 +1,39 @@
 import type {
-  CaptureAdapter,
-  CaptureCalibration,
-  CaptureMode,
-  VideoCaptureSettings,
-  VisualPipelineProvenance,
+  AudioQualityReasonCode,
+  BrowserAudioProcessingState,
+  VoiceTaskContext,
   VisualQualityReasonCode,
   VisualTaskContext
 } from "@phenometric/contracts";
 
-export interface AudioFeatureFrame {
+export interface VoiceSignalFrameV1 {
+  schemaVersion: "phenometric.voice-signal-frame.v1";
   tMs: number;
-  voiced: boolean;
+  acquiredAtMs: number;
+  captureEpoch: number;
+  sequence: number;
+  absoluteSampleIndex: number;
+  taskContext: VoiceTaskContext;
+  /** Ambient speech activity; distinct from periodic phonation. */
+  speechActive: boolean;
+  /** Whether the frame contains reliable periodic phonation. */
+  periodic: boolean;
+  /** Changes whenever acquisition continuity or the local input track changes. */
+  trackSegmentId: string;
   rms: number;
-  pitchHz: number | null;
-  pitchConfidence?: number;
-  clipped: boolean;
+  f0Hz: number | null;
+  f0Confidence: number;
+  estimatorAgreement: number;
+  syllabicNucleus: boolean;
+  clippedSampleFraction: number;
+  dcOffset: number;
   snrDb: number;
+  sampleRateHz: number;
+  blockGapMs: number;
+  lostBlockFraction: number;
+  browserProcessing: BrowserAudioProcessingState;
+  qualityReasons: AudioQualityReasonCode[];
+  processorRef: string;
 }
 
 export interface NormalizedPoint {
@@ -51,6 +69,10 @@ export interface FacialKinematicsFrameV1 {
   sequence: number;
   captureEpoch: number;
   taskContext: VisualTaskContext;
+  /** Detector count capped at two; ambient extraction requires exactly one. */
+  faceCount?: number;
+  /** Changes after loss, reacquisition, or processor continuity breaks. */
+  trackSegmentId?: string;
   faceVisible: boolean;
   boundingBox: FacialBoundingBox | null;
   anatomicalLaterality: "subject-anatomical";
@@ -74,19 +96,4 @@ export interface FacialKinematicsFrameV1 {
   processingLatencyMs: number;
   qualityReasons: VisualQualityReasonCode[];
   processorRef: string;
-}
-
-export interface FrameStream {
-  schemaVersion: "phenometric.frame-stream.v1";
-  containsPHI: false;
-  visitId: string;
-  participantId: string;
-  captureMode: CaptureMode;
-  occurredAt?: string;
-  captureAdapter?: CaptureAdapter;
-  calibration?: CaptureCalibration;
-  visualPipeline: VisualPipelineProvenance | null;
-  videoCaptureSettings: VideoCaptureSettings | null;
-  audio: AudioFeatureFrame[];
-  face: FacialKinematicsFrameV1[];
 }

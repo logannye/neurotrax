@@ -1,0 +1,194 @@
+import type {
+  FacialKinematicsFrameV1,
+  VoiceSignalFrameV1
+} from "./primitives.js";
+
+export const AMBIENT_PROTOCOL_ID = "ambient-local-observation" as const;
+export const AMBIENT_VOICE_TASK_CONTEXT = "ambient-speech-turn" as const;
+export const AMBIENT_FACE_TASK_CONTEXT = "ambient-frontal" as const;
+export const AMBIENT_MAX_CAPTURE_DURATION_MS = 300_000;
+
+export type AmbientTaskContext =
+  | typeof AMBIENT_VOICE_TASK_CONTEXT
+  | typeof AMBIENT_FACE_TASK_CONTEXT;
+
+export type AmbientMetricModality = "voice" | "face";
+
+export type AmbientMetricGroup =
+  | "pitch"
+  | "speech-timing"
+  | "eye-geometry"
+  | "mouth-geometry"
+  | "symmetry"
+  | "movement"
+  | "blink-behavior";
+
+export type AmbientVoiceMetricCode =
+  | "ambient.voice.f0.median"
+  | "ambient.voice.f0.variability"
+  | "ambient.voice.speech_activity_fraction"
+  | "ambient.voice.pause_rate"
+  | "ambient.voice.pause_duration.median"
+  | "ambient.voice.speech_run_duration.median"
+  | "ambient.voice.acoustic_nucleus_rate";
+
+export type AmbientFaceMetricCode =
+  | "ambient.face.eye_aperture.left"
+  | "ambient.face.eye_aperture.right"
+  | "ambient.face.eye_aperture.asymmetry"
+  | "ambient.face.mouth_width"
+  | "ambient.face.mouth_aperture.median"
+  | "ambient.face.mouth_aperture.p90"
+  | "ambient.face.mouth_corner_position.asymmetry"
+  | "ambient.face.landmark_speed.p90"
+  | "ambient.face.blink_rate.bilateral";
+
+export type AmbientMetricCode =
+  | AmbientVoiceMetricCode
+  | AmbientFaceMetricCode;
+
+export type AmbientWithheldReasonCode =
+  | "processor-unavailable"
+  | "quality-threshold-failed"
+  | "no-usable-signal"
+  | "insufficient-segments"
+  | "insufficient-duration"
+  | "insufficient-active-speech"
+  | "insufficient-pitched-speech"
+  | "insufficient-pitch-bins"
+  | "insufficient-events"
+  | "insufficient-nuclei"
+  | "insufficient-bins"
+  | "insufficient-exposure"
+  | "insufficient-frame-cadence"
+  | "multiple-faces";
+
+export interface AmbientMetricDefinition {
+  code: AmbientMetricCode;
+  label: string;
+  unit: string;
+  modality: AmbientMetricModality;
+  group: AmbientMetricGroup;
+  context: AmbientTaskContext;
+  algorithmVersion: string;
+  qualityInputs: readonly string[];
+  minimumEvidence: Readonly<Record<string, number>>;
+  validationStatus: "not-clinically-validated";
+  technicalVerification: "automated-test";
+  clinicalValidation: "none";
+}
+
+/** Ambient voice frames require explicit activity, periodicity, and track attribution. */
+export type AmbientVoiceFrame = VoiceSignalFrameV1;
+
+/**
+ * Ambient facial attribution is fail-closed: acquisition must report a face
+ * count and a track segment rather than allowing the extractor to infer them.
+ */
+export type AmbientFacialFrame = FacialKinematicsFrameV1 & {
+  faceCount?: number;
+  trackSegmentId?: string;
+};
+
+export interface AmbientIdentityInput {
+  sessionId: string;
+  protocolId?: typeof AMBIENT_PROTOCOL_ID;
+  protocolVersion: string;
+  protocolContentSha256: string;
+  sessionStartedAtMs: number;
+}
+
+export interface AmbientFaceCalibration {
+  durationMs: number;
+  baselineBoxWidthPixels: number;
+  baselineBoxHeightPixels: number;
+}
+
+export interface AmbientVoiceExtractionOptions extends AmbientIdentityInput {
+  noiseCalibrationDurationMs: number;
+}
+
+export interface AmbientFaceExtractionOptions extends AmbientIdentityInput {
+  calibration: AmbientFaceCalibration | null;
+}
+
+export interface AmbientMetricEvidence {
+  observedStartMs: number | null;
+  observedEndMs: number | null;
+  eligibleDurationMs: number;
+  sampleCount: number;
+  segmentCount: number;
+  qualifyingBinCount: number;
+  activeSpeechDurationMs?: number;
+  pitchedDurationMs?: number;
+  pitchCoverage?: number;
+  pauseCount?: number;
+  speechRunCount?: number;
+  nucleusCount?: number;
+  frontalExposureMs?: number;
+  blinkCount?: number;
+  processorRefs: readonly string[];
+  trackSegmentIds: readonly string[];
+  sourceWindowRefs: readonly string[];
+}
+
+export interface AmbientMetricIdentity {
+  outcomeId: string;
+  identityKey: string;
+  sessionId: string;
+  protocolId: typeof AMBIENT_PROTOCOL_ID;
+  protocolVersion: string;
+  protocolContentSha256: string;
+  context: AmbientTaskContext;
+  algorithmVersion: string;
+  processorRefs: readonly string[];
+  trackSegmentIds: readonly string[];
+}
+
+interface AmbientMetricOutcomeBase {
+  code: AmbientMetricCode;
+  label: string;
+  unit: string;
+  modality: AmbientMetricModality;
+  group: AmbientMetricGroup;
+  evidence: AmbientMetricEvidence;
+  identity: AmbientMetricIdentity;
+}
+
+export interface AmbientMeasuredMetric extends AmbientMetricOutcomeBase {
+  status: "measured";
+  value: number;
+  technicalQualityScore: number;
+  technicalDispersion: number | null;
+}
+
+export interface AmbientWithheldMetric extends AmbientMetricOutcomeBase {
+  status: "withheld";
+  reasonCode: AmbientWithheldReasonCode;
+  detail: string;
+  technicalQualityScore: null;
+  technicalDispersion: null;
+}
+
+export type AmbientMetricOutcome =
+  | AmbientMeasuredMetric
+  | AmbientWithheldMetric;
+
+export interface AmbientExtractionResult<
+  Outcome extends AmbientMetricOutcome = AmbientMetricOutcome
+> {
+  outcomes: Outcome[];
+  ignoredFrameCount: number;
+}
+
+export interface AmbientSessionExtractionInput {
+  identity: AmbientIdentityInput;
+  voice: {
+    frames: readonly AmbientVoiceFrame[];
+    noiseCalibrationDurationMs: number;
+  };
+  face: {
+    frames: readonly AmbientFacialFrame[];
+    calibration: AmbientFaceCalibration | null;
+  };
+}

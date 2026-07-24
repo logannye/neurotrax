@@ -18,7 +18,6 @@
       "id": "macbook-browser",
       "version": "0.2.0"
     },
-    "requiredSpeechAlgorithmVersion": "speech-acoustic-0.4",
     "requiredVisualAlgorithmVersion": "facial-task-kinematics-1.0",
     "requiredVisualProcessorRef": "mediapipe-face-landmarker:0.10.35:64184e229b26:bilateral-geometry-v1:gpu"
   },
@@ -37,31 +36,6 @@
       },
       "reviewStatus": "accepted",
       "aggregates": [
-        {
-          "code": "prototype.speech.pitch_variability",
-          "label": "Pitch variability",
-          "unit": "semitone-stddev",
-          "contextKind": "spontaneous-speech",
-          "value": 1.8,
-          "spread": 0,
-          "confidence": 0.9,
-          "windowCount": 1,
-          "algorithmVersion": "speech-acoustic-0.4",
-          "processorRef": "speech-acoustic-0.4",
-          "sourceWindowRefs": [
-            "history-2026-04-speech"
-          ],
-          "confounds": {
-            "kind": "speech",
-            "snrDb": 20.2,
-            "clippingFraction": 0
-          },
-          "uncertainty": {
-            "kind": "not-estimated",
-            "reason": "Speech uncertainty is not estimated by this prototype extractor."
-          },
-          "clinicalValidation": "none"
-        },
         {
           "code": "prototype.face.smile_excursion.asymmetry",
           "label": "Smile-excursion asymmetry",
@@ -161,31 +135,6 @@
       "reviewStatus": "accepted",
       "aggregates": [
         {
-          "code": "prototype.speech.pitch_variability",
-          "label": "Pitch variability",
-          "unit": "semitone-stddev",
-          "contextKind": "spontaneous-speech",
-          "value": 1.95,
-          "spread": 0,
-          "confidence": 0.91,
-          "windowCount": 1,
-          "algorithmVersion": "speech-acoustic-0.4",
-          "processorRef": "speech-acoustic-0.4",
-          "sourceWindowRefs": [
-            "history-2026-05-speech"
-          ],
-          "confounds": {
-            "kind": "speech",
-            "snrDb": 21,
-            "clippingFraction": 0
-          },
-          "uncertainty": {
-            "kind": "not-estimated",
-            "reason": "Speech uncertainty is not estimated by this prototype extractor."
-          },
-          "clinicalValidation": "none"
-        },
-        {
           "code": "prototype.face.smile_excursion.asymmetry",
           "label": "Smile-excursion asymmetry",
           "unit": "inter-eye-normalized-distance",
@@ -283,31 +232,6 @@
       },
       "reviewStatus": "accepted",
       "aggregates": [
-        {
-          "code": "prototype.speech.pitch_variability",
-          "label": "Pitch variability",
-          "unit": "semitone-stddev",
-          "contextKind": "spontaneous-speech",
-          "value": 1.82,
-          "spread": 0,
-          "confidence": 0.9,
-          "windowCount": 1,
-          "algorithmVersion": "speech-acoustic-0.4",
-          "processorRef": "speech-acoustic-0.4",
-          "sourceWindowRefs": [
-            "history-2026-06-speech"
-          ],
-          "confounds": {
-            "kind": "speech",
-            "snrDb": 20.8,
-            "clippingFraction": 0
-          },
-          "uncertainty": {
-            "kind": "not-estimated",
-            "reason": "Speech uncertainty is not estimated by this prototype extractor."
-          },
-          "clinicalValidation": "none"
-        },
         {
           "code": "prototype.face.smile_excursion.asymmetry",
           "label": "Smile-excursion asymmetry",
@@ -455,5 +379,9 @@
         ]
       }
     }
-  ]
+  ],
+  "rawAudioRetained": false,
+  "nativeAudioObservationsRetained": false,
+  "transcriptRetained": false,
+  "voiceEmbeddingsRetained": false
 }

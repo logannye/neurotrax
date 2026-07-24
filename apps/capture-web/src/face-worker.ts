@@ -5,13 +5,26 @@ import {
   FilesetResolver
 } from "@mediapipe/tasks-vision";
 import {
+  AMBIENT_FACE_MAX_CALIBRATION_SIZE_DELTA,
+  AMBIENT_FACE_MAX_FRAME_GAP_MS,
+  AMBIENT_FACE_MAX_PITCH_DEGREES,
+  AMBIENT_FACE_MAX_ROLL_DEGREES,
+  AMBIENT_FACE_MAX_YAW_DEGREES,
+  type FacialKinematicsFrameV1
+} from "@phenometric/ambient-core";
+import {
   boundingBoxForLandmarks,
   deriveFaceFeature,
   type FaceFeatureState
 } from "./face-features.js";
-import { FaceMeshOverlayRenderer } from "./face-mesh-overlay.js";
+import { FaceMeshGLRenderer } from "./face-mesh-gl.js";
 import {
-  FACE_LANDMARKER_MODEL_PATH,
+  FaceMeshOverlayRenderer,
+  faceMeshPresentationEligible
+} from "./face-mesh-overlay.js";
+import type { FaceMeshRenderer } from "./face-mesh-renderer.js";
+import { LocalizeIntro } from "./localize-intro.js";
+import {
   VISUAL_WORKER_MESSAGE_VERSION,
   visualPipelineProvenance,
   type VisualWorkerErrorMessage,
@@ -21,7 +34,6 @@ import {
 } from "./face-worker-protocol.js";
 import { computeFaceImageQuality } from "./visual-image-quality.js";
 
-const WASM_ROOT = "/mediapipe-runtime";
 const QUALITY_ROI_SIZE = 64;
 const CADENCE_WINDOW_MS = 2_000;
 
@@ -36,8 +48,37 @@ let featureState: FaceFeatureState = {
 };
 let analyzedAcquisitionTimes: number[] = [];
 let initializing: Promise<void> | null = null;
-const meshOverlay = new FaceMeshOverlayRenderer();
+let activeModelAsset = "";
+let activeModelSha256 = "";
+// Presentation-only mesh renderer chosen at attach-overlay (WebGL2 first, 2D
+// fallback). Landmarks are cached inside the renderer for the rAF redraw loop
+// and are NEVER posted to the main thread.
+let meshRenderer: FaceMeshRenderer | null = null;
 let meshOverlayCaptureEpoch: number | null = null;
+let overlayCanvas: OffscreenCanvas | null = null;
+let overlayMaxRenderHz = 24;
+let rafHandle: number | null = null;
+let hasLandmarks = false;
+const localizeIntro = new LocalizeIntro();
+
+// Honor the OS "reduce motion" setting. matchMedia does NOT exist in a
+// DedicatedWorkerGlobalScope, so the main thread detects the preference and
+// passes it in via the attach-overlay message; this flag is (re)set from that
+// message on every attach. Reduced motion forces the mesh into a static frame
+// (no hue drift, twinkle, or intro animation). Defaults to full motion.
+let prefersReducedMotion = false;
+
+// Adaptive performance governor: an EMA of the rAF inter-frame time drives an
+// effectLevel (0..1) that the renderer uses to shed effects (bloom -> hue
+// drift) under load and recover them when frame time is comfortable again.
+const GOVERNOR_EMA_ALPHA = 0.1;
+const GOVERNOR_SHED_THRESHOLD_MS = 20;
+const GOVERNOR_RECOVER_THRESHOLD_MS = 14;
+const GOVERNOR_SHED_STEP = 0.05;
+const GOVERNOR_RECOVER_STEP = 0.02;
+let governorEmaDtMs = 16;
+let governorEffectLevel = 1;
+let lastDrawNowMs: number | null = null;
 const qualityCanvas = new OffscreenCanvas(
   QUALITY_ROI_SIZE,
   QUALITY_ROI_SIZE
@@ -50,9 +91,96 @@ function post(message: VisualWorkerResponse): void {
   self.postMessage(message);
 }
 
+// Try WebGL2 first, fall back to the 2D overlay. FaceMeshGLRenderer.attach()
+// never throws on GL-init failure (it returns false), so the boolean is
+// sufficient; the try/catch is defensive belt-and-suspenders.
+function selectRenderer(
+  canvas: OffscreenCanvas,
+  maxRenderHz: number
+): FaceMeshRenderer | null {
+  try {
+    const gl = new FaceMeshGLRenderer();
+    if (gl.attach(canvas, maxRenderHz)) {
+      return gl;
+    }
+  } catch {
+    // fall through to the 2D fallback
+  }
+  try {
+    const twoD = new FaceMeshOverlayRenderer();
+    if (twoD.attach(canvas, maxRenderHz)) {
+      return twoD;
+    }
+  } catch {
+    // no renderer available
+  }
+  return null;
+}
+
+// DedicatedWorkerGlobalScope implements AnimationFrameProvider, so
+// requestAnimationFrame/cancelAnimationFrame exist here (OffscreenCanvas
+// animation). The rAF clock shares performance.now(), so the intro's
+// start/progress times stay consistent with the draw timestamps.
+function startRenderLoop(): void {
+  if (rafHandle !== null) {
+    return;
+  }
+  // Fresh governor pacing for each loop (re)start (e.g. after context restore).
+  lastDrawNowMs = null;
+  governorEmaDtMs = 16;
+  governorEffectLevel = 1;
+  const tick = (now: number): void => {
+    rafHandle = requestAnimationFrame(tick);
+    if (!meshRenderer || !hasLandmarks) {
+      // Pause frame-time pacing while nothing is drawn so an idle gap does not
+      // corrupt the EMA when drawing resumes.
+      lastDrawNowMs = null;
+      return;
+    }
+    // Update the frame-time EMA from the interval since the last drawn frame and
+    // adjust the shed level: over budget -> shed toward 0; comfortable -> recover
+    // toward 1; the hysteresis band in between holds the current level steady.
+    if (lastDrawNowMs !== null) {
+      const dtMs = now - lastDrawNowMs;
+      if (Number.isFinite(dtMs) && dtMs > 0 && dtMs < 1_000) {
+        governorEmaDtMs =
+          governorEmaDtMs * (1 - GOVERNOR_EMA_ALPHA) + dtMs * GOVERNOR_EMA_ALPHA;
+        if (governorEmaDtMs > GOVERNOR_SHED_THRESHOLD_MS) {
+          governorEffectLevel = Math.max(0, governorEffectLevel - GOVERNOR_SHED_STEP);
+        } else if (governorEmaDtMs < GOVERNOR_RECOVER_THRESHOLD_MS) {
+          governorEffectLevel = Math.min(1, governorEffectLevel + GOVERNOR_RECOVER_STEP);
+        }
+      }
+    }
+    lastDrawNowMs = now;
+    // Reduced motion collapses the intro to its resting state (no animation).
+    const introProgress = prefersReducedMotion ? 1 : localizeIntro.progress(now);
+    // Presentation only: a redraw failure must never propagate into the
+    // measurement path, so it is contained here.
+    try {
+      meshRenderer.drawFrame(now, introProgress, {
+        reducedMotion: prefersReducedMotion,
+        effectLevel: governorEffectLevel
+      });
+    } catch {
+      // drop the frame; the next tick retries
+    }
+  };
+  rafHandle = requestAnimationFrame(tick);
+}
+
+function stopRenderLoop(): void {
+  if (rafHandle !== null) {
+    cancelAnimationFrame(rafHandle);
+    rafHandle = null;
+  }
+}
+
 function resetDerivedState(captureEpoch: number): void {
-  meshOverlay.clear();
-  if (meshOverlay.isAttached()) {
+  meshRenderer?.clear();
+  hasLandmarks = false;
+  localizeIntro.reset();
+  if (meshRenderer?.isAttached()) {
     meshOverlayCaptureEpoch = captureEpoch;
   }
   activeCaptureEpoch = captureEpoch;
@@ -91,6 +219,35 @@ function readableError(error: unknown, fallback: string): string {
   return error instanceof Error ? error.message : fallback;
 }
 
+function continuityEligible(
+  frame: FacialKinematicsFrameV1,
+  calibration: VisualWorkerFrameMessage["calibration"]
+): boolean {
+  if (
+    frame.qualityReasons.length > 0 ||
+    frame.pose === null ||
+    frame.boundingBox === null ||
+    Math.abs(frame.pose.yawDegrees) > AMBIENT_FACE_MAX_YAW_DEGREES ||
+    Math.abs(frame.pose.pitchDegrees) > AMBIENT_FACE_MAX_PITCH_DEGREES ||
+    Math.abs(frame.pose.rollDegrees) > AMBIENT_FACE_MAX_ROLL_DEGREES ||
+    (frame.interResultGapMs !== null &&
+      frame.interResultGapMs > AMBIENT_FACE_MAX_FRAME_GAP_MS)
+  ) {
+    return false;
+  }
+  if (!calibration) return true;
+  const widthRatio =
+    frame.boundingBox.widthPixels / calibration.baselineBoxWidthPixels;
+  const heightRatio =
+    frame.boundingBox.heightPixels / calibration.baselineBoxHeightPixels;
+  return (
+    Number.isFinite(widthRatio) &&
+    Number.isFinite(heightRatio) &&
+    Math.abs(widthRatio - 1) <= AMBIENT_FACE_MAX_CALIBRATION_SIZE_DELTA &&
+    Math.abs(heightRatio - 1) <= AMBIENT_FACE_MAX_CALIBRATION_SIZE_DELTA
+  );
+}
+
 async function initialize(
   message: Extract<VisualWorkerRequest, { type: "initialize" }>
 ): Promise<void> {
@@ -120,10 +277,13 @@ async function initialize(
   }
 
   initializing = (async () => {
-    const vision = await FilesetResolver.forVisionTasks(WASM_ROOT, true);
+    const vision = await FilesetResolver.forVisionTasks(
+      message.assets.mediaPipeRootUrl,
+      true
+    );
     const options = {
       runningMode: "VIDEO",
-      numFaces: 1,
+      numFaces: 2,
       minFaceDetectionConfidence: 0.5,
       minFacePresenceConfidence: 0.5,
       minTrackingConfidence: 0.5,
@@ -134,20 +294,32 @@ async function initialize(
       landmarker = await FaceLandmarker.createFromOptions(vision, {
         ...options,
         baseOptions: {
-          modelAssetPath: FACE_LANDMARKER_MODEL_PATH,
+          modelAssetPath: message.assets.modelUrl,
           delegate: "GPU"
         }
       });
-      provenance = visualPipelineProvenance("GPU");
+      activeModelAsset = message.assets.modelUrl;
+      activeModelSha256 = message.assets.modelSha256;
+      provenance = visualPipelineProvenance(
+        "GPU",
+        activeModelAsset,
+        activeModelSha256
+      );
     } catch {
       landmarker = await FaceLandmarker.createFromOptions(vision, {
         ...options,
         baseOptions: {
-          modelAssetPath: FACE_LANDMARKER_MODEL_PATH,
+          modelAssetPath: message.assets.modelUrl,
           delegate: "CPU"
         }
       });
-      provenance = visualPipelineProvenance("CPU");
+      activeModelAsset = message.assets.modelUrl;
+      activeModelSha256 = message.assets.modelSha256;
+      provenance = visualPipelineProvenance(
+        "CPU",
+        activeModelAsset,
+        activeModelSha256
+      );
     }
   })();
 
@@ -268,7 +440,8 @@ function processFrame(message: VisualWorkerFrameMessage): void {
   }
   if (!landmarker || !provenance) {
     message.bitmap.close();
-    meshOverlay.clear();
+    meshRenderer?.clear();
+    hasLandmarks = false;
     post(
       errorMessage("Face Landmarker is not ready.", {
         code: "worker-not-ready",
@@ -289,7 +462,16 @@ function processFrame(message: VisualWorkerFrameMessage): void {
       message.bitmap,
       message.acquiredAtMs
     );
-    const nativeLandmarks = nativeResult.faceLandmarks[0];
+    const faceCount = nativeResult.faceLandmarks.length;
+    const nativeLandmarks = faceCount === 1
+      ? nativeResult.faceLandmarks[0]
+      : undefined;
+    if (faceCount !== 1) {
+      featureState = {
+        normalizedMotionPoints: null,
+        acquiredAtMs: null
+      };
+    }
     const box = nativeLandmarks
       ? boundingBoxForLandmarks(
           nativeLandmarks,
@@ -299,7 +481,15 @@ function processFrame(message: VisualWorkerFrameMessage): void {
       : null;
     const imageQuality = imageQualityFor(message.bitmap, box);
     const cadence = cadenceFor(message.acquiredAtMs);
-    const derived = deriveFaceFeature(nativeResult, {
+    const singleFaceResult = faceCount === 1
+      ? nativeResult
+      : {
+          ...nativeResult,
+          faceLandmarks: [],
+          faceBlendshapes: [],
+          facialTransformationMatrixes: []
+        };
+    const derived = deriveFaceFeature(singleFaceResult, {
       tMs: message.tMs,
       acquiredAtMs: message.acquiredAtMs,
       sequence: message.sequence,
@@ -317,24 +507,41 @@ function processFrame(message: VisualWorkerFrameMessage): void {
       calibration: message.calibration,
       state: featureState
     });
-    featureState = derived.nextState;
+    featureState = continuityEligible(derived.frame, message.calibration)
+      ? derived.nextState
+      : {
+          normalizedMotionPoints: null,
+          acquiredAtMs: null
+        };
     lastSequence = message.sequence;
     lastAcquiredAtMs = message.acquiredAtMs;
     if (
       nativeLandmarks &&
-      derived.frame.faceVisible &&
-      derived.frame.qualityReasons.length === 0 &&
-      meshOverlayCaptureEpoch === message.captureEpoch
+      faceMeshPresentationEligible(
+        faceCount,
+        message.captureEpoch,
+        meshOverlayCaptureEpoch
+      )
     ) {
-      meshOverlay.render({
+      // Cache the latest landmarks in-worker for the rAF redraw loop; the
+      // synchronous draw is owned by the loop, not this frame turn.
+      meshRenderer?.updateLandmarks({
         landmarks: nativeLandmarks,
         taskContext: message.taskContext,
         width: message.width,
         height: message.height,
         acquiredAtMs: message.acquiredAtMs
       });
+      if (!hasLandmarks) {
+        hasLandmarks = true;
+        // Begin the come-into-focus intro on the first lock, driven by the
+        // worker's own performance.now() clock (shared with rAF timestamps).
+        localizeIntro.start(performance.now());
+      }
     } else {
-      meshOverlay.clear();
+      meshRenderer?.clear();
+      hasLandmarks = false;
+      localizeIntro.reset();
     }
     post({
       schemaVersion: VISUAL_WORKER_MESSAGE_VERSION,
@@ -342,12 +549,14 @@ function processFrame(message: VisualWorkerFrameMessage): void {
       captureEpoch: message.captureEpoch,
       sequence: message.sequence,
       acquiredAtMs: message.acquiredAtMs,
+      faceCount,
       frame: derived.frame,
       boundingBox: derived.boundingBox,
       stream: message.stream
     });
   } catch (error) {
-    meshOverlay.clear();
+    meshRenderer?.clear();
+    hasLandmarks = false;
     post(
       errorMessage(readableError(error, "Face inference failed."), {
         code: "inference-failed",
@@ -363,11 +572,18 @@ function processFrame(message: VisualWorkerFrameMessage): void {
 }
 
 function dispose(captureEpoch: number): void {
-  meshOverlay.detach();
+  stopRenderLoop();
+  meshRenderer?.detach();
+  meshRenderer = null;
+  overlayCanvas = null;
+  hasLandmarks = false;
+  localizeIntro.reset();
   meshOverlayCaptureEpoch = null;
   landmarker?.close();
   landmarker = null;
   provenance = null;
+  activeModelAsset = "";
+  activeModelSha256 = "";
   resetDerivedState(captureEpoch);
   post({
     schemaVersion: VISUAL_WORKER_MESSAGE_VERSION,
@@ -403,7 +619,7 @@ self.addEventListener("message", (event: MessageEvent<unknown>) => {
   const message = candidate as VisualWorkerRequest;
   if (message.type === "initialize") {
     void initialize(message).catch((error) => {
-      meshOverlay.clear();
+      meshRenderer?.clear();
       post(
         errorMessage(
           readableError(
@@ -434,11 +650,39 @@ self.addEventListener("message", (event: MessageEvent<unknown>) => {
       });
       return;
     }
-    const attached = meshOverlay.attach(
-      message.canvas,
-      message.maxRenderHz
-    );
+    // Re-attach: free any previously attached renderer + stop its loop before
+    // selecting a new one, so a second attach-overlay never leaks a GL context.
+    stopRenderLoop();
+    meshRenderer?.detach();
+    overlayCanvas = message.canvas;
+    overlayMaxRenderHz = message.maxRenderHz;
+    // Presentation preference detected on the main thread (worker has no
+    // matchMedia); re-set on every attach so the mesh honors the OS setting.
+    prefersReducedMotion = message.reducedMotion;
+    meshRenderer = selectRenderer(message.canvas, message.maxRenderHz);
+    const attached = meshRenderer !== null;
     meshOverlayCaptureEpoch = attached ? message.captureEpoch : null;
+    hasLandmarks = false;
+    localizeIntro.reset();
+    if (attached) {
+      startRenderLoop();
+    }
+    // WebGL context-loss handling (no-op on the 2D backend, which never emits
+    // these events). preventDefault keeps the context restorable; on restore we
+    // re-select the renderer and restart the loop.
+    message.canvas.addEventListener?.("webglcontextlost", (event) => {
+      event.preventDefault();
+      stopRenderLoop();
+    });
+    message.canvas.addEventListener?.("webglcontextrestored", () => {
+      if (!overlayCanvas) {
+        return;
+      }
+      meshRenderer = selectRenderer(overlayCanvas, overlayMaxRenderHz);
+      if (meshRenderer) {
+        startRenderLoop();
+      }
+    });
     post({
       schemaVersion: VISUAL_WORKER_MESSAGE_VERSION,
       type: "overlay-status",
@@ -449,7 +693,9 @@ self.addEventListener("message", (event: MessageEvent<unknown>) => {
   }
   if (message.type === "clear-overlay") {
     if (message.captureEpoch === meshOverlayCaptureEpoch) {
-      meshOverlay.clear();
+      meshRenderer?.clear();
+      hasLandmarks = false;
+      localizeIntro.reset();
     }
     return;
   }

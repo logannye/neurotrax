@@ -7,25 +7,13 @@
     "participantId": "developer-self-demo",
     "occurredAt": "2026-01-15T16:00:00.000Z",
     "captureMode": "fixture-playback",
-    "captureAdapter": { "id": "macbook-browser", "version": "0.3.0" },
+    "captureAdapter": {
+      "id": "macbook-browser",
+      "version": "0.3.0"
+    },
+    "selectedProtocolId": "facial-foundation.v1",
     "reviewStatus": "accepted",
     "aggregates": [
-      {
-        "code": "prototype.speech.pitch_variability",
-        "label": "Pitch variability",
-        "unit": "semitone-stddev",
-        "contextKind": "spontaneous-speech",
-        "value": 0.52,
-        "spread": 0,
-        "confidence": 0.85,
-        "windowCount": 1,
-        "algorithmVersion": "speech-acoustic-0.4",
-        "processorRef": "speech-acoustic-0.4",
-        "sourceWindowRefs": ["synthetic-history-2026-01:speech-0"],
-        "confounds": { "kind": "speech", "snrDb": 17, "clippingFraction": 0 },
-        "uncertainty": { "kind": "not-estimated", "reason": "Synthetic historical speech uncertainty is not estimated." },
-        "clinicalValidation": "none"
-      },
       {
         "code": "prototype.face.smile_excursion.asymmetry",
         "label": "Smile-excursion asymmetry",
@@ -37,7 +25,10 @@
         "windowCount": 1,
         "algorithmVersion": "facial-task-kinematics-1.0",
         "processorRef": "mediapipe-face-landmarker@0.10.35+synthetic-model",
-        "sourceWindowRefs": ["synthetic-history-2026-01:neutral", "synthetic-history-2026-01:smile"],
+        "sourceWindowRefs": [
+          "synthetic-history-2026-01:neutral",
+          "synthetic-history-2026-01:smile"
+        ],
         "confounds": {
           "kind": "visual",
           "faceBoxWidthPixels": 382,
@@ -56,7 +47,12 @@
           "pitchDegrees": 1,
           "rollDegrees": 1
         },
-        "uncertainty": { "kind": "estimated", "method": "median-absolute-deviation", "value": 0.002, "unit": "inter-eye-normalized-distance" },
+        "uncertainty": {
+          "kind": "estimated",
+          "method": "median-absolute-deviation",
+          "value": 0.002,
+          "unit": "inter-eye-normalized-distance"
+        },
         "clinicalValidation": "none"
       }
     ]
@@ -69,25 +65,13 @@
     "participantId": "developer-self-demo",
     "occurredAt": "2026-03-15T16:00:00.000Z",
     "captureMode": "fixture-playback",
-    "captureAdapter": { "id": "macbook-browser", "version": "0.3.0" },
+    "captureAdapter": {
+      "id": "macbook-browser",
+      "version": "0.3.0"
+    },
+    "selectedProtocolId": "facial-foundation.v1",
     "reviewStatus": "accepted",
     "aggregates": [
-      {
-        "code": "prototype.speech.pitch_variability",
-        "label": "Pitch variability",
-        "unit": "semitone-stddev",
-        "contextKind": "spontaneous-speech",
-        "value": 0.49,
-        "spread": 0,
-        "confidence": 0.84,
-        "windowCount": 1,
-        "algorithmVersion": "speech-acoustic-0.4",
-        "processorRef": "speech-acoustic-0.4",
-        "sourceWindowRefs": ["synthetic-history-2026-03:speech-0"],
-        "confounds": { "kind": "speech", "snrDb": 16, "clippingFraction": 0 },
-        "uncertainty": { "kind": "not-estimated", "reason": "Synthetic historical speech uncertainty is not estimated." },
-        "clinicalValidation": "none"
-      },
       {
         "code": "prototype.face.smile_excursion.asymmetry",
         "label": "Smile-excursion asymmetry",
@@ -99,7 +83,10 @@
         "windowCount": 1,
         "algorithmVersion": "facial-task-kinematics-1.0",
         "processorRef": "mediapipe-face-landmarker@0.10.35+synthetic-model",
-        "sourceWindowRefs": ["synthetic-history-2026-03:neutral", "synthetic-history-2026-03:smile"],
+        "sourceWindowRefs": [
+          "synthetic-history-2026-03:neutral",
+          "synthetic-history-2026-03:smile"
+        ],
         "confounds": {
           "kind": "visual",
           "faceBoxWidthPixels": 386,
@@ -118,7 +105,12 @@
           "pitchDegrees": 1,
           "rollDegrees": 1
         },
-        "uncertainty": { "kind": "estimated", "method": "median-absolute-deviation", "value": 0.002, "unit": "inter-eye-normalized-distance" },
+        "uncertainty": {
+          "kind": "estimated",
+          "method": "median-absolute-deviation",
+          "value": 0.002,
+          "unit": "inter-eye-normalized-distance"
+        },
         "clinicalValidation": "none"
       }
     ]
@@ -131,25 +123,13 @@
     "participantId": "developer-self-demo",
     "occurredAt": "2026-05-15T16:00:00.000Z",
     "captureMode": "fixture-playback",
-    "captureAdapter": { "id": "macbook-browser", "version": "0.3.0" },
+    "captureAdapter": {
+      "id": "macbook-browser",
+      "version": "0.3.0"
+    },
+    "selectedProtocolId": "facial-foundation.v1",
     "reviewStatus": "accepted",
     "aggregates": [
-      {
-        "code": "prototype.speech.pitch_variability",
-        "label": "Pitch variability",
-        "unit": "semitone-stddev",
-        "contextKind": "spontaneous-speech",
-        "value": 0.5,
-        "spread": 0,
-        "confidence": 0.86,
-        "windowCount": 1,
-        "algorithmVersion": "speech-acoustic-0.4",
-        "processorRef": "speech-acoustic-0.4",
-        "sourceWindowRefs": ["synthetic-history-2026-05:speech-0"],
-        "confounds": { "kind": "speech", "snrDb": 18, "clippingFraction": 0 },
-        "uncertainty": { "kind": "not-estimated", "reason": "Synthetic historical speech uncertainty is not estimated." },
-        "clinicalValidation": "none"
-      },
       {
         "code": "prototype.face.smile_excursion.asymmetry",
         "label": "Smile-excursion asymmetry",
@@ -161,7 +141,10 @@
         "windowCount": 1,
         "algorithmVersion": "facial-task-kinematics-1.0",
         "processorRef": "mediapipe-face-landmarker@0.10.35+synthetic-model",
-        "sourceWindowRefs": ["synthetic-history-2026-05:neutral", "synthetic-history-2026-05:smile"],
+        "sourceWindowRefs": [
+          "synthetic-history-2026-05:neutral",
+          "synthetic-history-2026-05:smile"
+        ],
         "confounds": {
           "kind": "visual",
           "faceBoxWidthPixels": 384,
@@ -180,7 +163,12 @@
           "pitchDegrees": 1,
           "rollDegrees": 1
         },
-        "uncertainty": { "kind": "estimated", "method": "median-absolute-deviation", "value": 0.002, "unit": "inter-eye-normalized-distance" },
+        "uncertainty": {
+          "kind": "estimated",
+          "method": "median-absolute-deviation",
+          "value": 0.002,
+          "unit": "inter-eye-normalized-distance"
+        },
         "clinicalValidation": "none"
       }
     ]
@@ -193,25 +181,13 @@
     "participantId": "developer-self-demo",
     "occurredAt": "2026-03-20T16:00:00.000Z",
     "captureMode": "fixture-playback",
-    "captureAdapter": { "id": "macbook-browser", "version": "0.2.0" },
+    "captureAdapter": {
+      "id": "macbook-browser",
+      "version": "0.2.0"
+    },
+    "selectedProtocolId": "facial-foundation.v1",
     "reviewStatus": "accepted",
     "aggregates": [
-      {
-        "code": "prototype.speech.pitch_variability",
-        "label": "Pitch variability",
-        "unit": "semitone-stddev",
-        "contextKind": "spontaneous-speech",
-        "value": 0.48,
-        "spread": 0,
-        "confidence": 0.8,
-        "windowCount": 1,
-        "algorithmVersion": "speech-acoustic-legacy",
-        "processorRef": "speech-acoustic-legacy",
-        "sourceWindowRefs": ["synthetic-history-2026-03-incompatible:speech-0"],
-        "confounds": { "kind": "speech", "snrDb": 17, "clippingFraction": 0 },
-        "uncertainty": { "kind": "not-estimated", "reason": "Legacy synthetic fixture." },
-        "clinicalValidation": "none"
-      },
       {
         "code": "prototype.face.smile_excursion.asymmetry",
         "label": "Smile-excursion asymmetry",
@@ -223,7 +199,10 @@
         "windowCount": 1,
         "algorithmVersion": "facial-task-kinematics-legacy",
         "processorRef": "mediapipe-face-landmarker@0.10.35+synthetic-model",
-        "sourceWindowRefs": ["synthetic-history-2026-03-incompatible:neutral", "synthetic-history-2026-03-incompatible:smile"],
+        "sourceWindowRefs": [
+          "synthetic-history-2026-03-incompatible:neutral",
+          "synthetic-history-2026-03-incompatible:smile"
+        ],
         "confounds": {
           "kind": "visual",
           "faceBoxWidthPixels": 384,
@@ -242,7 +221,12 @@
           "pitchDegrees": 1,
           "rollDegrees": 1
         },
-        "uncertainty": { "kind": "estimated", "method": "median-absolute-deviation", "value": 0.002, "unit": "inter-eye-normalized-distance" },
+        "uncertainty": {
+          "kind": "estimated",
+          "method": "median-absolute-deviation",
+          "value": 0.002,
+          "unit": "inter-eye-normalized-distance"
+        },
         "clinicalValidation": "none"
       }
     ]

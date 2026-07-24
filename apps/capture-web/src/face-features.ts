@@ -341,7 +341,7 @@ function movementSpeed(
     previous.normalizedMotionPoints.length !== current.length ||
     previous.acquiredAtMs === null
   ) {
-    return current ? 0 : null;
+    return null;
   }
   const elapsedSeconds =
     (acquiredAtMs - previous.acquiredAtMs) / 1_000;
@@ -578,7 +578,12 @@ export function deriveFaceFeature(
   };
   return {
     frame,
-    nextState,
+    nextState: quality.usable
+      ? nextState
+      : {
+          normalizedMotionPoints: null,
+          acquiredAtMs: null
+        },
     boundingBox: box
   };
 }

@@ -46,49 +46,6 @@
   ],
   "biomarkers": [
     {
-      "code": "prototype.speech.pitch_variability",
-      "label": "Pitch variability",
-      "unit": "semitone-stddev",
-      "contextKind": "spontaneous-speech",
-      "algorithmVersion": "speech-acoustic-0.4",
-      "processorRef": "speech-acoustic-0.4",
-      "currentValue": 1.9,
-      "priorValues": [
-        {
-          "encounterId": "demo-history-2026-04",
-          "occurredAt": "2026-04-18T16:00:00.000Z",
-          "value": 1.8,
-          "synthetic": true
-        },
-        {
-          "encounterId": "demo-history-2026-05",
-          "occurredAt": "2026-05-18T16:00:00.000Z",
-          "value": 1.95,
-          "synthetic": true
-        },
-        {
-          "encounterId": "demo-history-2026-06",
-          "occurredAt": "2026-06-18T16:00:00.000Z",
-          "value": 1.82,
-          "synthetic": true
-        }
-      ],
-      "priorMedian": 1.82,
-      "priorMinimum": 1.8,
-      "priorMaximum": 1.95,
-      "priorMad": 0.02,
-      "deltaFromMedian": 0.08,
-      "direction": "within-reference",
-      "currentEvidenceRefs": [
-        "speech-0"
-      ],
-      "referenceMeasurementRefs": [
-        "demo-history-2026-04:prototype.speech.pitch_variability",
-        "demo-history-2026-05:prototype.speech.pitch_variability",
-        "demo-history-2026-06:prototype.speech.pitch_variability"
-      ]
-    },
-    {
       "code": "prototype.face.smile_excursion.asymmetry",
       "label": "Smile-excursion asymmetry",
       "unit": "inter-eye-normalized-distance",
@@ -178,5 +135,9 @@
     }
   ],
   "status": "provisional",
-  "claimBoundary": "No disease progression, diagnosis, cause, or treatment inference was made."
+  "claimBoundary": "No disease progression, diagnosis, cause, or treatment inference was made.",
+  "rawAudioRetained": false,
+  "nativeAudioObservationsRetained": false,
+  "transcriptRetained": false,
+  "voiceEmbeddingsRetained": false
 }

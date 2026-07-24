@@ -1,13 +1,17 @@
 {
-  "id": "macbook-check-in.v0.1",
+  "id": "facial-foundation.v1",
   "status": "non-clinical-prototype",
   "captureAdapter": "macbook-browser",
-  "description": "A one-screen, completion-gated PhenoMetric face-and-voice demonstration for quality-aware telehealth measurement.",
+  "description": "A one-screen, completion-gated PhenoMetric facial foundation demonstration with voice used only for behavioral task gating.",
   "supportedTarget": "Chrome desktop on the reference MacBook",
   "consentRequired": true,
   "processing": {
     "location": "browser-worker",
     "rawMediaRetained": false,
+    "rawAudioRetained": false,
+    "nativeAudioObservationsRetained": false,
+    "transcriptRetained": false,
+    "voiceEmbeddingsRetained": false,
     "nativeVisualObservationsRetained": false,
     "visualRuntime": "mediapipe-tasks-vision",
     "mediaPipeVersion": "0.10.35",
@@ -119,13 +123,7 @@
     "acceptedEvidence": "final-qualifying-interval-only"
   },
   "minimumUsableEvidencePerFacialTaskMs": 1500,
-  "speechMeasurements": [
-    "prototype.speech.onset_latency",
-    "prototype.speech.voiced_time_fraction",
-    "prototype.speech.pause_rate",
-    "prototype.speech.pitch_center",
-    "prototype.speech.pitch_variability"
-  ],
+  "voiceMeasurements": [],
   "facialMeasurements": [
     "prototype.face.smile_excursion.left",
     "prototype.face.smile_excursion.right",

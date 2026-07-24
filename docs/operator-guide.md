@@ -1,113 +1,82 @@
 # PhenoMetric operator guide
 
-This document contains implementation and credential details that are
-intentionally absent from the presentation interface and public product
-overview.
-
 ## Environment
 
-PhenoMetric uses a server-side OpenAI Responses API call for Clinical Synthesis.
-The presentation application never receives the credential.
+- macOS with current Chrome;
+- Node.js 22 or newer;
+- pnpm 9.12.3; and
+- localhost or HTTPS for camera and microphone access.
 
-Create `/Users/logannye/Projects/phenometric/.env.local`:
+The browser application has no runtime environment variables and no server
+credential. Do not add an API key or PHI to `.env` files.
 
-```bash
-cd /Users/logannye/Projects/phenometric
-read -s "OPENAI_API_KEY?OpenAI API key: "
-printf '\n'
-umask 077
-printf 'OPENAI_API_KEY=%s\n' "$OPENAI_API_KEY" > .env.local
-unset OPENAI_API_KEY
-```
-
-Never use a `VITE_` prefix for this value.
-
-## Start and smoke test
+## Install and run
 
 ```bash
-cd /Users/logannye/Projects/phenometric
-pnpm install
-pnpm demo:smoke
+pnpm install --frozen-lockfile
 pnpm dev
 ```
 
-The smoke command makes one real request to the configured low-latency
-`gpt-5.6-luna` synthesis service and validates the structured-output and
-grounding contracts. Application readiness also performs one cached warm-up
-request when the page first loads, moving connection and service initialization
-before the encounter begins.
+Open `http://127.0.0.1:4173` in Chrome.
 
-Automated browser tests set `PHENOMETRIC_SKIP_SYNTHESIS_WARMUP=1` because their
-synthesis endpoint is intercepted with a deterministic response. Do not set
-that variable for a live presentation.
+## Rehearsal
 
-## Presentation rehearsal
+1. Confirm the welcome page says **Nonclinical prototype** and **No recording
+   or upload**.
+2. Read the consent statement and check the box.
+3. Allow the microphone and camera. Stay quiet briefly, face the camera, and
+   wait for independent lane states.
+4. Confirm the dense facial mesh follows one face. Speak, make an unvoiced
+   sound, and pause; confirm energy responds continuously while pitch appears
+   only for periodic sound.
+5. Continue a normal conversation; do not perform scripted exercises. Treat
+   the live voice panel as a signal preview, not report output.
+6. End the session and verify that the mesh and voice history clear and local
+   finalization precedes report display.
+7. Inspect a measured and a not-measurable metric, including its exact reason
+   and evidence references.
+8. Clear and start again, then verify the report and prior session state are
+   gone.
 
-1. Use Chrome on `http://127.0.0.1:4173`.
-2. Close other camera or microphone applications.
-3. Sit approximately an arm’s length from the MacBook.
-4. Use soft, even front lighting.
-5. Run the bounded system check.
-6. Remain centered and speak naturally until the first criterion completes.
-7. Turn away while continuing to speak until the coordinator advances.
-8. Return to center, stop speaking, and hold a quiet neutral reference.
-9. Smile comfortably and hold until the smile criterion completes.
-10. Gently close the eyes, hold briefly, then reopen them fully.
-11. If corrective guidance appears, adjust or repeat the current action.
-    Elapsed time never advances or skips an unfinished exercise.
-12. Confirm that the 478-point mesh aligns with the mirrored preview while the
-    face is usable and disappears during turn-away or other withholding.
-13. Confirm that capture closes automatically only after all five criteria and
-    that camera and microphone access is released.
-14. Confirm that the results workspace opens automatically. Grounded evidence
-   appears immediately while the short narrative is prepared in place.
-15. Confirm that both summary statements open a complete grounding trace and
-    approval establishes Visit 1.
-16. In a separate run, choose **End assessment**, dismiss the confirmation once,
-    then accept it and confirm that devices release without creating a report.
+Also rehearse camera denial, microphone denial, both-device denial, and
+discard, which is also the in-session consent-withdrawal path.
 
-Clinical Synthesis uses priority processing, no reasoning pass, and a bounded
-response size. Request timing is written only to the browser operator console
-and the `Server-Timing` response header.
+## Automated smoke
 
-## Operator-only test capture
-
-Automated browser tests use a development-only derived-frame adapter:
-
-```text
-http://127.0.0.1:4173/?testCapture=1&fast=1
+```bash
+pnpm demo:smoke
 ```
 
-It is not linked from the presentation interface and is not used as a fallback
-for a live assessment.
+The Playwright fixture replaces browser APIs only inside the test page. The
+production bundle has no synthetic-capture query mode.
 
-Append `&operator=1` to expose raw workflow events, internal thresholds,
-calibration details, service timing, and version identifiers. Never use
-operator mode in the presentation recording.
+## Optional WavLM research service
+
+The sidecar is not required for the demo and the browser does not call it. To
+test it independently:
+
+```bash
+uv sync --project services/voice-inference --extra dev --locked
+uv run --project services/voice-inference --extra dev pytest services/voice-inference/tests
+```
+
+Follow `services/voice-inference/README.md` only for isolated research use. It
+must remain disabled by default and bound to loopback.
 
 ## Common failures
 
-- **System check cannot begin:** confirm consent and verify that Chrome has
-  camera and microphone permission.
-- **Facial analysis unavailable:** verify that the local MediaPipe assets load
-  and refresh Chrome.
-- **Move closer persists:** position the face at least 180×220 pixels in the
-  analyzed frame while leaving a visible margin around it.
-- **Speech quality is limited:** reduce background noise if convenient; the
-   assessment will still start when the five-second check ends.
-- **Turn-away does not complete:** keep speaking and turn farther until the face
-  is not visible or pose leaves the measurement range. Camera, worker, tab,
-  blur, lighting, cadence, and frame-gap failures do not count as the exercise.
-- **Neutral does not complete:** face the camera and remain quiet; this captures
-  a quiet reference and does not claim to detect a relaxed expression.
-- **Smile does not complete:** remain quiet, smile comfortably, and hold.
-- **Eye closure does not complete:** remain quiet, close either eye or both
-  eyes, hold briefly, and reopen fully. Closure and recovery must occur on the
-  same eye.
-- **A quality interruption occurs:** correct the visible issue and repeat the
-  current action. Only the current continuous streak resets.
-
-Operator diagnostics report requested and actual camera settings, analyzed
-cadence, result gaps, processing latency, skipped frames, MediaPipe version,
-delegate, and model digest. They never include camera identifiers, device
-labels, native landmarks, transformation matrices, blendshapes, or media.
+- **Asset integrity failure:** run `pnpm --filter @phenometric/capture-web
+  verify:assets`; rebuild the manifest only after intentionally reviewing an
+  asset change.
+- **Permission denied:** reset the site permission in Chrome and start a new
+  session.
+- **Lane remains not measurable:** use quieter audio, even front lighting, one
+  face, and keep the tab visible. Never force a measurement.
+- **Mesh display unavailable:** use current Chrome with hardware acceleration
+  enabled. Face extraction may continue even when the presentation canvas is
+  unavailable.
+- **Energy moves but pitch is blank:** pitch intentionally appears only for a
+  sufficiently periodic signal; noise and unvoiced sound create pitch gaps.
+- **No report:** both devices were unavailable, the session was discarded, or
+  final provenance validation failed. Inspect the browser console without
+  weakening the gate.

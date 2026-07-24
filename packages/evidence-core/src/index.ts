@@ -1,7 +1,8 @@
 export {
-  assembleEvidenceCardDraft,
-  createEncounterClaimFacts,
-  createModalityOutcomes,
-  EVIDENCE_BOUNDARY,
-  validateEvidenceCardDraft
-} from "./evidence.js";
+  buildPostEncounterReport,
+  validateObservationProvenance
+} from "./report.js";
+export type {
+  BuildPostEncounterReportOptions,
+  ProvenanceValidationResult
+} from "./report.js";

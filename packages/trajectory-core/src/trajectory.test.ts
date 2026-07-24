@@ -1,9 +1,10 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { runConductor, type FrameStream } from "@phenometric/ambient-core";
 import type {
+  BiomarkerAggregate,
   EncounterObservation,
+  SpeechConfoundEnvelope,
   TrajectoryHistoryRecord,
   VisualConfoundEnvelope
 } from "@phenometric/contracts";
@@ -11,6 +12,11 @@ import {
   compareTrajectory,
   DEFAULT_TRAJECTORY_POLICY
 } from "./trajectory.js";
+
+const SINGLE_PRIOR_POLICY = {
+  ...DEFAULT_TRAJECTORY_POLICY,
+  minimumPriorObservations: 1
+};
 
 function history(): TrajectoryHistoryRecord[] {
   const path = fileURLToPath(
@@ -20,24 +26,58 @@ function history(): TrajectoryHistoryRecord[] {
 }
 
 function currentObservation(): EncounterObservation {
-  const path = fileURLToPath(
-    new URL(
-      "../../ambient-core/fixtures/synthetic-visit.frames.json",
-      import.meta.url
-    )
-  );
-  const stream = JSON.parse(readFileSync(path, "utf8")) as FrameStream;
-  return runConductor(
-    {
-      ...stream,
-      visitId: "live-current",
-      participantId: "developer-self-demo",
-      captureMode: "live",
-      occurredAt: "2026-07-18T16:00:00.000Z",
-      captureAdapter: { id: "macbook-browser", version: "0.3.0" }
-    },
-    { baseTimeMs: Date.parse("2026-07-18T16:00:00.000Z") }
-  ).observation;
+  const source = history()[2];
+  const aggregate = {
+    ...source.aggregates[0],
+    value: 0.022,
+    sourceWindowRefs: ["live-current:neutral", "live-current:smile"]
+  };
+  return {
+    schemaVersion: "phenometric.encounter-observation.v2",
+    containsPHI: false,
+    rawMediaRetained: false,
+    rawAudioRetained: false,
+    nativeAudioObservationsRetained: false,
+    transcriptRetained: false,
+    voiceEmbeddingsRetained: false,
+    nativeVisualObservationsRetained: false,
+    selectedProtocolId: source.selectedProtocolId,
+    captureMode: "live",
+    visitId: "live-current",
+    participantId: "developer-self-demo",
+    occurredAt: "2026-07-18T16:00:00.000Z",
+    captureAdapter: { id: "macbook-browser", version: "0.3.0" },
+    audioPipeline: null,
+    audioCaptureSettings: null,
+    voiceModel: null,
+    audioStreamDiagnostics: null,
+    visualPipeline: null,
+    videoCaptureSettings: null,
+    windows: [],
+    measurements: [],
+    aggregates: [aggregate],
+    abstentions: [],
+    measurementCount: 0,
+    qualitySummary: {
+      speechWindowCount: 0,
+      faceWindowCount: 0,
+      abstentionCount: 0,
+      qualityTransitionCount: 0,
+      audioFrameCount: 0,
+      speechActiveFrameCount: 0,
+      pitchedFrameCount: 0,
+      pitchCoverage: 0,
+      audioLostBlockFraction: 0,
+      maximumAudioBlockGapMs: 0,
+      medianAudioSnrDb: 0,
+      faceFrameCount: 0,
+      usableFaceFrameCount: 0,
+      usableFaceFraction: 0,
+      faceWithholdingDurationMs: 0,
+      faceRecoveryObserved: false,
+      postRecoveryFaceWindowCount: 0
+    }
+  };
 }
 
 function faceOnly(current = currentObservation()): EncounterObservation {
@@ -47,6 +87,66 @@ function faceOnly(current = currentObservation()): EncounterObservation {
       (aggregate) =>
         aggregate.code === "prototype.face.smile_excursion.asymmetry"
     )
+  };
+}
+
+function voiceConfounds(
+  overrides: Partial<SpeechConfoundEnvelope> = {}
+): SpeechConfoundEnvelope {
+  return {
+    kind: "speech",
+    sampleRateHz: 48_000,
+    sampleRateClass: "48khz-or-higher",
+    browserProcessing: {
+      echoCancellation: false,
+      noiseSuppression: false,
+      autoGainControl: false
+    },
+    snrDb: 26,
+    clippingFraction: 0,
+    dcOffset: 0,
+    lostBlockFraction: 0,
+    maximumBlockGapMs: 20,
+    usableCoverage: 1,
+    periodicityCoverage: 0.9,
+    ...overrides
+  };
+}
+
+function voiceAggregate(
+  overrides: Partial<BiomarkerAggregate> = {}
+): BiomarkerAggregate {
+  return {
+    code: "prototype.voice.cpps",
+    label: "Smoothed cepstral peak prominence",
+    unit: "dB",
+    contextKind: "sustained-vowel",
+    value: 14,
+    spread: 0.4,
+    confidence: 0.92,
+    windowCount: 2,
+    algorithmVersion: "voice-analysis-1.0",
+    processorRef: "browser-voice-dsp@1.0",
+    sourceWindowRefs: ["speech-vowel-1", "speech-vowel-2"],
+    confounds: voiceConfounds(),
+    uncertainty: {
+      kind: "estimated",
+      method: "median-absolute-deviation",
+      value: 0.3,
+      unit: "dB"
+    },
+    clinicalValidation: "none",
+    ...overrides
+  };
+}
+
+function voiceObservation(): EncounterObservation {
+  return {
+    ...currentObservation(),
+    selectedProtocolId: "voice-foundation.v1",
+    visualPipeline: null,
+    videoCaptureSettings: null,
+    aggregates: [voiceAggregate()]
   };
 }
 
@@ -68,10 +168,7 @@ describe("compareTrajectory", () => {
     ]);
     expect(
       result.comparison.biomarkers.map((biomarker) => biomarker.code)
-    ).toEqual([
-      "prototype.face.smile_excursion.asymmetry",
-      "prototype.speech.pitch_variability"
-    ]);
+    ).toEqual(["prototype.face.smile_excursion.asymmetry"]);
     expect(
       result.comparison.biomarkers.find((biomarker) =>
         biomarker.code.startsWith("prototype.face.")
@@ -83,33 +180,66 @@ describe("compareTrajectory", () => {
     ]);
   });
 
-  it("excludes speech values outside the SNR tolerance", () => {
-    const current = currentObservation();
-    const degraded: EncounterObservation = {
-      ...current,
-      aggregates: current.aggregates.map((aggregate) =>
-        aggregate.confounds.kind === "speech"
-          ? {
-              ...aggregate,
-              confounds: { ...aggregate.confounds, snrDb: 2 }
-            }
-          : aggregate
-      )
+  it.each([
+    {
+      name: "processor",
+      reason: "voice-processor-mismatch",
+      current: voiceAggregate({ processorRef: "browser-voice-dsp@2.0" })
+    },
+    {
+      name: "sample-rate class",
+      reason: "voice-sample-rate-class-mismatch",
+      current: voiceAggregate({
+        confounds: voiceConfounds({
+          sampleRateHz: 44_100,
+          sampleRateClass: "44.1khz"
+        })
+      })
+    },
+    {
+      name: "browser processing",
+      reason: "voice-browser-processing-mismatch",
+      current: voiceAggregate({
+        confounds: voiceConfounds({
+          browserProcessing: {
+            echoCancellation: true,
+            noiseSuppression: false,
+            autoGainControl: false
+          }
+        })
+      })
+    },
+    {
+      name: "SNR",
+      reason: "speech-snr-out-of-tolerance",
+      current: voiceAggregate({
+        confounds: voiceConfounds({ snrDb: 2 })
+      })
+    }
+  ])("requires exact compatible voice $name", ({ current, reason }) => {
+    const prior: TrajectoryHistoryRecord = {
+      ...history()[0],
+      selectedProtocolId: "voice-foundation.v1",
+      aggregates: [voiceAggregate()]
     };
-
-    const comparison = compareTrajectory(degraded, history()).comparison;
-    expect(
-      comparison.biomarkers.some(
-        (biomarker) =>
-          biomarker.code === "prototype.speech.pitch_variability"
-      )
-    ).toBe(false);
+    const observation = {
+      ...voiceObservation(),
+      aggregates: [current]
+    };
+    const comparison = compareTrajectory(
+      observation,
+      [prior],
+      DEFAULT_TRAJECTORY_POLICY
+    ).comparison;
+    expect(comparison.biomarkers).toEqual([]);
+    expect(comparison.excludedEncounters[0].reasonCodes).toContain(reason);
   });
 
   it("uses an explicit nonclinical direction vocabulary", () => {
     const comparison = compareTrajectory(
       currentObservation(),
-      history()
+      history(),
+      DEFAULT_TRAJECTORY_POLICY
     ).comparison;
     expect(
       comparison.biomarkers.every((biomarker) =>
@@ -121,6 +251,52 @@ describe("compareTrajectory", () => {
         ].includes(biomarker.direction)
       )
     ).toBe(true);
+  });
+
+  it("never mixes the same voice measurement across task contexts", () => {
+    const sustained = voiceAggregate({
+      contextKind: "sustained-vowel",
+      value: 14
+    });
+    const reading = voiceAggregate({
+      contextKind: "reading-aloud",
+      value: 9,
+      sourceWindowRefs: ["speech-reading"]
+    });
+    const observation = {
+      ...voiceObservation(),
+      aggregates: [sustained, reading]
+    };
+    const prior: TrajectoryHistoryRecord = {
+      ...history()[0],
+      selectedProtocolId: "voice-foundation.v1",
+      aggregates: [
+        { ...sustained, value: 13 },
+        { ...reading, value: 8 }
+      ]
+    };
+
+    const comparison = compareTrajectory(
+      observation,
+      [prior],
+      SINGLE_PRIOR_POLICY
+    ).comparison;
+    expect(comparison.biomarkers).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          contextKind: "sustained-vowel",
+          priorValues: [
+            expect.objectContaining({ value: 13 })
+          ]
+        }),
+        expect.objectContaining({
+          contextKind: "reading-aloud",
+          priorValues: [
+            expect.objectContaining({ value: 8 })
+          ]
+        })
+      ])
+    );
   });
 
   it.each([
@@ -167,8 +343,11 @@ describe("compareTrajectory", () => {
     }
   ])("excludes a prior encounter that fails $name", ({ reason, mutate }) => {
     const prior = mutate(history()[0]);
-    const comparison = compareTrajectory(currentObservation(), [prior])
-      .comparison;
+    const comparison = compareTrajectory(
+      currentObservation(),
+      [prior],
+      DEFAULT_TRAJECTORY_POLICY
+    ).comparison;
     expect(comparison.excludedEncounters).toEqual([
       {
         encounterId: prior.visitId,
@@ -188,10 +367,31 @@ describe("compareTrajectory", () => {
         }))
     };
 
-    const comparison = compareTrajectory(faceOnly(), [prior]).comparison;
+    const comparison = compareTrajectory(
+      faceOnly(),
+      [prior],
+      DEFAULT_TRAJECTORY_POLICY
+    ).comparison;
     expect(comparison.biomarkers).toEqual([]);
     expect(comparison.excludedEncounters[0].reasonCodes).toContain(
       "visual-processor-mismatch"
+    );
+  });
+
+  it("starts a fresh baseline when the unified protocol replaces a legacy protocol", () => {
+    const unified = {
+      ...faceOnly(),
+      selectedProtocolId: "unified-foundation.v1" as const
+    };
+    const comparison = compareTrajectory(
+      unified,
+      history().slice(0, 1),
+      DEFAULT_TRAJECTORY_POLICY
+    ).comparison;
+
+    expect(comparison.biomarkers).toEqual([]);
+    expect(comparison.excludedEncounters[0].reasonCodes).toContain(
+      "protocol-id-mismatch"
     );
   });
 
@@ -225,7 +425,11 @@ describe("compareTrajectory", () => {
         }))
     };
 
-    const comparison = compareTrajectory(faceOnly(), [prior]).comparison;
+    const comparison = compareTrajectory(
+      faceOnly(),
+      [prior],
+      DEFAULT_TRAJECTORY_POLICY
+    ).comparison;
     expect(comparison.excludedEncounters[0].reasonCodes).toContain(reason);
     expect(comparison.biomarkers).toEqual([]);
   });
@@ -233,8 +437,105 @@ describe("compareTrajectory", () => {
   it("uses both neutral and active windows as current evidence references", () => {
     const comparison = compareTrajectory(
       faceOnly(),
-      history().slice(0, 1)
+      history().slice(0, 1),
+      SINGLE_PRIOR_POLICY
     ).comparison;
     expect(comparison.biomarkers[0].currentEvidenceRefs).toHaveLength(2);
+  });
+
+  it("fails closed for self, future, and duplicate history", () => {
+    const current = currentObservation();
+    const compatible = history()[0];
+    const self = {
+      ...compatible,
+      visitId: current.visitId,
+      occurredAt: "2026-06-01T16:00:00.000Z"
+    };
+    const future = {
+      ...compatible,
+      visitId: "future-visit",
+      occurredAt: "2026-08-01T16:00:00.000Z"
+    };
+    const duplicate = {
+      ...compatible,
+      visitId: "duplicate-visit"
+    };
+
+    const comparison = compareTrajectory(
+      current,
+      [self, future, duplicate, structuredClone(duplicate)],
+      DEFAULT_TRAJECTORY_POLICY
+    ).comparison;
+
+    expect(comparison.biomarkers).toEqual([]);
+    expect(comparison.status).toBe("not-comparable");
+    expect(
+      comparison.excludedEncounters.find(
+        (encounter) => encounter.encounterId === current.visitId
+      )?.reasonCodes
+    ).toContain("same-as-current-encounter");
+    expect(
+      comparison.excludedEncounters.find(
+        (encounter) => encounter.encounterId === "future-visit"
+      )?.reasonCodes
+    ).toContain("not-prior-to-current");
+    expect(
+      comparison.excludedEncounters.filter(
+        (encounter) => encounter.encounterId === "duplicate-visit"
+      )
+    ).toHaveLength(2);
+    expect(
+      comparison.excludedEncounters.find(
+        (encounter) => encounter.encounterId === "duplicate-visit"
+      )?.reasonCodes
+    ).toContain("duplicate-encounter-id");
+  });
+
+  it("requires exact units and the policy minimum prior count", () => {
+    const prior = history()[0];
+    const unitMismatch: TrajectoryHistoryRecord = {
+      ...prior,
+      aggregates: prior.aggregates.map((aggregate) => ({
+        ...aggregate,
+        unit: "different-unit"
+      }))
+    };
+    const incompatible = compareTrajectory(
+      currentObservation(),
+      [unitMismatch],
+      SINGLE_PRIOR_POLICY
+    ).comparison;
+    expect(incompatible.excludedEncounters[0].reasonCodes).toContain(
+      "unit-mismatch"
+    );
+
+    const insufficient = compareTrajectory(
+      currentObservation(),
+      [prior],
+      DEFAULT_TRAJECTORY_POLICY
+    ).comparison;
+    expect(insufficient.status).toBe("not-comparable");
+    expect(insufficient.reasonCodes).toContain(
+      "insufficient-prior-observations"
+    );
+  });
+
+  it("rejects nonfinite current values and excludes nonfinite history", () => {
+    const current = currentObservation();
+    current.aggregates[0].value = Number.NaN;
+    expect(() =>
+      compareTrajectory(current, history(), DEFAULT_TRAJECTORY_POLICY)
+    ).toThrow(/invalid aggregates/);
+
+    const invalidPrior = history()[0];
+    invalidPrior.aggregates[0].value = Number.POSITIVE_INFINITY;
+    const comparison = compareTrajectory(
+      currentObservation(),
+      [invalidPrior],
+      SINGLE_PRIOR_POLICY
+    ).comparison;
+    expect(comparison.excludedEncounters[0].reasonCodes).toContain(
+      "nonfinite-aggregate"
+    );
   });
 });

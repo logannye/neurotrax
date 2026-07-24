@@ -17,7 +17,8 @@ from the same person.
 
 The checked-in fixture contains three compatible accepted visits and one
 algorithm-version exclusion. Every seeded point remains visibly `SYNTHETIC`.
-The live application does not yet persist or compare real multi-visit history.
+This package consumes the retained v2 observation contracts. The live v3
+application does not import it, persist visits, or compare multi-visit history.
 
 ## Hard boundary
 

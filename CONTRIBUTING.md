@@ -37,7 +37,11 @@ review gate and may not execute the decision automatically.
 
 ```bash
 pnpm test
+pnpm test:browser
+uv run --project services/voice-inference --extra dev pytest services/voice-inference/tests
 ```
 
-This runs the structure validator, unit and replay tests, and TypeScript
-typechecking.
+`pnpm test` runs the structure and asset validator, unit tests, TypeScript
+typechecking, and the production build. Browser tests verify the ambient
+lifecycle separately. Run the Python command when the optional research
+sidecar is affected.

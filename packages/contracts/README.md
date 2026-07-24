@@ -1,69 +1,55 @@
 # PhenoMetric shared contracts
 
-`@phenometric/contracts` defines the boundaries among the three implemented
-capabilities. These are research-prototype contracts, not clinical schemas.
+`@phenometric/contracts` is the runtime and TypeScript source of truth for the
+standalone ambient prototype. These are engineering-prototype contracts, not
+clinical schemas.
 
-The generalized platform will add a versioned `ClinicalProtocolPack` and
-measurement registry before any condition-specific interpretation is connected
-to these contracts. Planned fields and validation responsibilities are defined
-in
-[`../../docs/telehealth-platform-vision.md`](../../docs/telehealth-platform-vision.md).
+## Canonical v1/v3 contracts
 
-## Ambient Capture
+- `AMBIENT_LOCAL_PROTOCOL_PACK` is the immutable
+  `phenometric.protocol-pack.v1` registry. It defines the 16 supported metrics,
+  one quality policy, report ordering, consent document digest, source policy,
+  supported runtime, and the five-minute limit.
+- `ObservationV3Schema` requires session-local anonymous subject and consent
+  references, explicit source attribution, bounded retention assertions,
+  processor provenance, typed evidence, and one measured or withheld terminal
+  outcome per emitted metric.
+- `EvidenceRefSchema` distinguishes window, measurement, aggregate, and event
+  references. Each reference carries its session, observation, and exact
+  protocol identity.
+- `PostEncounterReportV1Schema` is a deterministic, structured, screen-only
+  report. It has no narrative, clinical interpretation, review state,
+  trajectory, persistence, or export shape.
+- `WorkflowEventV1Schema` is a discriminated union with typed payloads for the
+  local capture lifecycle. It uses a session-local anonymous subject reference
+  rather than a participant identity claim.
+- `createMeasurementId` and `createAggregateId` derive stable referential IDs
+  from protocol, session, metric, context, unit, algorithm, processor, and track
+  segment identity. They are not security hashes.
 
-- `MeasurableWindow` carries modality, time range, detected context, and
-  a discriminated speech or visual quality/confound envelope.
-- `Measurement` carries a `prototype.*` code, value, unit, confidence,
-  algorithm version, structured uncertainty, `processorRef`, and all
-  `sourceWindowRefs`. A facial task measurement can therefore cite both its
-  neutral reference and active-task window.
-- `Abstention` preserves a reason-coded no-value interval.
-- `EncounterObservation` adds its schema version, occurrence time,
-  capture-adapter and visual-pipeline provenance, privacy-safe camera settings,
-  aggregate confounds, quality summary, windows, measurements, and abstentions.
-- `neutral-face`, `smile`, and `eye-closure` are explicit measurement
-  contexts. Anatomical subject-left and subject-right do not depend on preview
-  mirroring.
-- Observation privacy assertions require `containsPHI: false`,
-  `rawMediaRetained: false`, and
-  `nativeVisualObservationsRetained: false`. Camera identifiers, device labels,
-  media, landmarks, blendshapes, and transformation matrices are not contract
-  fields.
+All public v1/v3 schemas are strict Zod schemas and all corresponding
+TypeScript types are inferred from those schemas. Legacy or extra fields fail
+runtime parsing.
 
-Visual measurements use `estimated` uncertainty derived from within-task
-median absolute deviation. Existing speech measurements use `not-estimated`
-with an explicit reason; neither form implies clinical validation.
+The canonical measurement contexts are exactly:
 
-## Personal Trajectory
+- voice: `ambient-speech-turn`
+- face: `ambient-frontal`
 
-- `TrajectoryPolicy` contains explicit SNR, framing, frame-rate, and
-  illumination tolerances.
-- `CompatibilityDecision` makes inclusion and exclusion inspectable.
-- `TrajectoryComparison` preserves robust personal-reference statistics,
-  nonclinical direction, evidence references, and the provisional claim
-  boundary.
-- Compatible measurements must exactly match both algorithm version and visual
-  processor reference. A new visual processor begins a new baseline.
+The canonical modalities are `voice` and `face`. Audio attribution is
+`user-asserted-local-participant` with
+`speakerAttribution: unverified-local-input`; facial attribution is
+`single-visible-face` and never identity verification.
 
-## Evidence and review
+## Legacy compile compatibility
 
-- `EvidenceClaimFact` is a pre-grounded fact the application attaches to the
-  final summary.
-- `EvidenceNarrativeDraft` permits only a headline and short summary from the
-  synthesis service.
-- `EvidenceCardDraft` attaches exactly two pre-grounded claim references and
-  the review boundary in application code.
-- `EvidenceSynthesisTiming` records total, service, and validation latency for
-  operator diagnostics.
-- `GroundingResult` records deterministic pass/fail and errors.
-- `ReviewDecision` records human approval or dismissal for the current session.
+The v2 observation, guided calibration, and v0.2 event interfaces remain
+exported temporarily because legacy ambient-core and trajectory-core modules
+still compile against them. They are not accepted by the v3 runtime schemas
+and must not be used for new report, provenance, or event-journal code. The
+legacy evidence-card, generated-narrative, review-decision, and grounding
+contracts have been removed.
 
-## Workflow events
-
-`EventEnvelope` is the append-only
-`phenometric.workflow-event.v0.2` contract shared by `ambient-capture`,
-`personal-trajectory`, `evidence-card`, and `human-review`. Visible UI activity
-must resolve to one of these real events.
-
-No contract represents diagnosis, disease progression, clinical normality,
-treatment, emergency action, or retained raw media.
+Personal Trajectory remains internal and disconnected. Its legacy contract now
+requires an explicit policy and protocol identity and can return
+`not-comparable` when compatible prior evidence is insufficient.

@@ -9,24 +9,24 @@ describe("createEventFactory", () => {
       baseTimeMs: Date.parse("2026-07-18T16:00:00.000Z")
     });
     const first = factory.next(
-      "capture-conductor",
-      "capture.window.detected",
-      "ambient-capture",
-      "Detected a window.",
+      "personal-trajectory",
+      "trajectory.compatibility.assessed",
+      "personal-trajectory",
+      "Assessed compatibility.",
       0
     );
     const second = factory.next(
-      "speech-acoustic",
-      "measurement.recorded",
-      "ambient-capture",
-      "Recorded a measurement.",
+      "personal-trajectory",
+      "trajectory.comparison.completed",
+      "personal-trajectory",
+      "Completed comparison.",
       -500
     );
 
     expect(first.sequence).toBe(1);
-    expect(first.eventId).toBe("1-capture.window.detected");
-    expect(first.actor.lane).toBe("capture-conductor");
-    expect(first.stage).toBe("ambient-capture");
+    expect(first.eventId).toBe("1-trajectory.compatibility.assessed");
+    expect(first.actor.lane).toBe("personal-trajectory");
+    expect(first.stage).toBe("personal-trajectory");
     expect(second.sequence).toBe(2);
     expect(Date.parse(second.occurredAt)).toBeGreaterThanOrEqual(Date.parse(first.occurredAt));
   });

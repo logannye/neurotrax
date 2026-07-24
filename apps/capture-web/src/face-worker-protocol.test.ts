@@ -17,7 +17,7 @@ describe("visual worker protocol", () => {
     expect(provenance).toMatchObject({
       runtime: "mediapipe-tasks-vision",
       mediaPipeVersion: MEDIAPIPE_TASKS_VISION_VERSION,
-      modelAsset: "/models/face_landmarker.task",
+      modelAsset: "models/face_landmarker.task",
       modelSha256: FACE_LANDMARKER_MODEL_SHA256,
       delegate: "GPU",
       geometryVersion: "bilateral-geometry-v1"
@@ -32,12 +32,18 @@ describe("visual worker protocol", () => {
       frameRate: 29.97,
       facingMode: "user"
     });
-    const message = createVisualWorkerInitializeMessage(3, settings);
+    const assets = {
+      mediaPipeRootUrl: "https://example.test/app/mediapipe",
+      modelUrl: "https://example.test/app/models/face_landmarker.task",
+      modelSha256: FACE_LANDMARKER_MODEL_SHA256
+    };
+    const message = createVisualWorkerInitializeMessage(3, settings, assets);
 
     expect(message).toEqual({
       schemaVersion: VISUAL_WORKER_MESSAGE_VERSION,
       type: "initialize",
       captureEpoch: 3,
+      assets,
       videoCaptureSettings: {
         requested: { width: 1280, height: 720, frameRate: 30 },
         actual: { width: 960, height: 540, frameRate: 29.97 },
@@ -62,7 +68,8 @@ describe("visual worker protocol", () => {
     const attach = createVisualWorkerAttachOverlayMessage(
       7,
       canvas,
-      12
+      12,
+      true
     );
     const clear = createVisualWorkerClearOverlayMessage(7);
 
@@ -71,7 +78,8 @@ describe("visual worker protocol", () => {
       type: "attach-overlay",
       captureEpoch: 7,
       canvas,
-      maxRenderHz: 12
+      maxRenderHz: 12,
+      reducedMotion: true
     });
     expect(clear).toEqual({
       schemaVersion: "phenometric.visual-worker-message.v2",
