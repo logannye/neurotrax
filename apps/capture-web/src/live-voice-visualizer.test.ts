@@ -57,11 +57,19 @@ function elementsFixture(): {
     beginPath: vi.fn(),
     moveTo: vi.fn(),
     lineTo: vi.fn(),
+    closePath: vi.fn(),
     stroke,
+    fill: vi.fn(),
+    arc: vi.fn(),
+    fillText: vi.fn(),
     strokeStyle: "",
+    fillStyle: "",
     lineWidth: 1,
     lineJoin: "miter",
-    lineCap: "butt"
+    lineCap: "butt",
+    font: "",
+    textAlign: "center",
+    textBaseline: "alphabetic"
   } as unknown as CanvasRenderingContext2D;
   const canvas = () => ({
     width: 320,
@@ -78,8 +86,11 @@ function elementsFixture(): {
   return {
     stroke,
     elements: {
+      levelGauge: canvas(),
+      pitchGauge: canvas(),
       energyCanvas: canvas(),
       pitchCanvas: canvas(),
+      clarityCanvas: canvas(),
       state: text(),
       level: text(),
       pitch: text(),

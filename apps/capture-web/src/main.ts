@@ -101,8 +101,11 @@ const faceOverlay = new FaceOverlayController(
   faceMeshStatus
 );
 const liveVoiceVisualizer = new LiveVoiceVisualizer({
+  levelGauge: element<HTMLCanvasElement>("voice-level-gauge"),
+  pitchGauge: element<HTMLCanvasElement>("voice-pitch-gauge"),
   energyCanvas: element<HTMLCanvasElement>("voice-energy-chart"),
   pitchCanvas: element<HTMLCanvasElement>("voice-pitch-chart"),
+  clarityCanvas: element<HTMLCanvasElement>("voice-clarity-chart"),
   state: element<HTMLElement>("voice-live-state"),
   level: element<HTMLElement>("voice-level-value"),
   pitch: element<HTMLElement>("voice-pitch-value"),

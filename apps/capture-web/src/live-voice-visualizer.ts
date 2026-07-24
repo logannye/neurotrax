@@ -20,8 +20,11 @@ export interface LiveVoiceSample {
 }
 
 export interface LiveVoiceElements {
+  levelGauge: HTMLCanvasElement;
+  pitchGauge: HTMLCanvasElement;
   energyCanvas: HTMLCanvasElement;
   pitchCanvas: HTMLCanvasElement;
+  clarityCanvas: HTMLCanvasElement;
   state: HTMLElement;
   level: HTMLElement;
   pitch: HTMLElement;
@@ -168,7 +171,7 @@ function drawGrid(
 function drawTrace(
   canvas: HTMLCanvasElement,
   samples: readonly LiveVoiceSample[],
-  kind: "energy" | "pitch"
+  kind: "energy" | "pitch" | "clarity"
 ): void {
   const prepared = prepareCanvas(canvas);
   if (!prepared) return;
@@ -184,12 +187,34 @@ function drawTrace(
     if (kind === "energy") {
       return ((0 - sample.levelDbfs) / 60) * height;
     }
+    if (kind === "clarity") {
+      return (1 - sample.confidence) * height;
+    }
     return (
       ((MAX_LIVE_PITCH_HZ - (sample.pitchHz ?? MIN_LIVE_PITCH_HZ)) /
         (MAX_LIVE_PITCH_HZ - MIN_LIVE_PITCH_HZ)) *
       height
     );
   };
+
+  if (kind === "clarity") {
+    const first = samples[0];
+    const last = samples.at(-1);
+    if (!first || !last) return;
+    context.fillStyle = "rgba(127, 240, 207, .28)";
+    context.beginPath();
+    context.moveTo(xFor(first.tMs), height);
+    for (const sample of samples) {
+      const x = xFor(sample.tMs);
+      const y = yFor(sample);
+      if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+      context.lineTo(x, y);
+    }
+    context.lineTo(xFor(last.tMs), height);
+    context.closePath();
+    context.fill();
+    return;
+  }
 
   context.strokeStyle = kind === "energy" ? "#0b8d6b" : "#6b55c5";
   context.lineWidth = 2;
@@ -210,6 +235,47 @@ function drawTrace(
     drawing = true;
   }
   context.stroke();
+}
+
+function drawGauge(
+  canvas: HTMLCanvasElement,
+  fraction: number,
+  label: string
+): void {
+  const prepared = prepareCanvas(canvas);
+  if (!prepared) return;
+  const { context, width, height } = prepared;
+  const clamped = Number.isFinite(fraction)
+    ? Math.max(0, Math.min(1, fraction))
+    : 0;
+  const centerX = width / 2;
+  const centerY = height * 0.58;
+  const radius = Math.max(4, Math.min(width, height * 1.7) / 2 - 8);
+  const startAngle = Math.PI * 0.75;
+  const sweep = Math.PI * 1.5;
+
+  context.lineCap = "round";
+  context.lineWidth = Math.max(4, radius * 0.22);
+
+  context.strokeStyle = "rgba(140, 128, 255, .22)";
+  context.beginPath();
+  context.arc(centerX, centerY, radius, startAngle, startAngle + sweep);
+  context.stroke();
+
+  context.strokeStyle = "#7ff0cf";
+  context.beginPath();
+  context.arc(centerX, centerY, radius, startAngle, startAngle + sweep * clamped);
+  context.stroke();
+
+  context.fillStyle = "#e9ecff";
+  context.font = "700 .62rem ui-monospace, monospace";
+  context.textAlign = "center";
+  context.textBaseline = "middle";
+  context.fillText(`${Math.round(clamped * 100)}%`, centerX, centerY);
+
+  context.fillStyle = "#8b97c8";
+  context.font = "600 .5rem ui-monospace, monospace";
+  context.fillText(label, centerX, height - 6);
 }
 
 function clearCanvas(canvas: HTMLCanvasElement): void {
@@ -256,6 +322,7 @@ export class LiveVoiceVisualizer {
         : "Signal checks passing";
     this.elements.energyCanvas.dataset.sampleCount = String(samples.length);
     this.elements.pitchCanvas.dataset.sampleCount = String(samples.length);
+    this.elements.clarityCanvas.dataset.sampleCount = String(samples.length);
     if (this.animationHandle === null) {
       this.animationHandle = this.scheduler.request(() => {
         this.animationHandle = null;
@@ -279,8 +346,12 @@ export class LiveVoiceVisualizer {
     }
     clearCanvas(this.elements.energyCanvas);
     clearCanvas(this.elements.pitchCanvas);
+    clearCanvas(this.elements.clarityCanvas);
+    clearCanvas(this.elements.levelGauge);
+    clearCanvas(this.elements.pitchGauge);
     this.elements.energyCanvas.dataset.sampleCount = "0";
     this.elements.pitchCanvas.dataset.sampleCount = "0";
+    this.elements.clarityCanvas.dataset.sampleCount = "0";
     this.elements.level.textContent = "—";
     this.elements.pitch.textContent = "—";
     this.elements.snr.textContent = "—";
@@ -298,6 +369,18 @@ export class LiveVoiceVisualizer {
     const samples = this.history.snapshot();
     drawTrace(this.elements.energyCanvas, samples, "energy");
     drawTrace(this.elements.pitchCanvas, samples, "pitch");
+    drawTrace(this.elements.clarityCanvas, samples, "clarity");
+    const latest = samples.at(-1);
+    drawGauge(
+      this.elements.levelGauge,
+      latest ? levelGaugeFraction(latest.levelDbfs) : 0,
+      "LVL"
+    );
+    drawGauge(
+      this.elements.pitchGauge,
+      latest ? pitchGaugeFraction(latest.pitchHz) : 0,
+      "F0"
+    );
   }
 
   private setState(state: LiveVoiceState): void {

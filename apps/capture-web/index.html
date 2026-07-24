@@ -104,24 +104,29 @@
               <section class="live-voice-panel" aria-labelledby="live-voice-title">
                 <div class="live-panel-heading">
                   <div>
-                    <h2 id="live-voice-title">Live voice signal</h2>
+                    <h2 id="live-voice-title">Voice telemetry</h2>
                     <p>Preview only · not report values</p>
                   </div>
                   <strong id="voice-live-state" data-state="waiting">Waiting for signal</strong>
                 </div>
-                <div class="voice-chart-block">
-                  <div><span>Energy</span><small>−60 to 0 dBFS · last 8 seconds</small></div>
-                  <canvas id="voice-energy-chart" aria-label="Live microphone energy history"></canvas>
+                <div class="voice-gauges">
+                  <canvas id="voice-level-gauge" aria-label="Live level gauge"></canvas>
+                  <canvas id="voice-pitch-gauge" aria-label="Live pitch gauge"></canvas>
                 </div>
-                <div class="voice-chart-block">
-                  <div><span>Pitch</span><small>60 to 400 Hz · periodic signal only</small></div>
+                <div class="voice-wave">
+                  <div class="voice-wave-head"><span>Level</span><b id="voice-level-value">—</b></div>
+                  <canvas id="voice-energy-chart" aria-label="Live microphone level history"></canvas>
+                </div>
+                <div class="voice-wave">
+                  <div class="voice-wave-head"><span>Pitch · F0</span><b id="voice-pitch-value">—</b></div>
                   <canvas id="voice-pitch-chart" aria-label="Live periodic pitch history"></canvas>
                 </div>
+                <div class="voice-wave">
+                  <div class="voice-wave-head"><span>Clarity · confidence</span><b id="voice-confidence-value">—</b></div>
+                  <canvas id="voice-clarity-chart" aria-label="Live F0 confidence history"></canvas>
+                </div>
                 <dl class="voice-live-values">
-                  <div><dt>Level</dt><dd id="voice-level-value">—</dd></div>
-                  <div><dt>Pitch</dt><dd id="voice-pitch-value">—</dd></div>
                   <div><dt>SNR</dt><dd id="voice-snr-value">—</dd></div>
-                  <div><dt>F0 confidence</dt><dd id="voice-confidence-value">—</dd></div>
                   <div><dt>Agreement</dt><dd id="voice-agreement-value">—</dd></div>
                 </dl>
                 <p id="voice-quality-state" class="voice-quality-state">No live signal yet.</p>
