@@ -58,7 +58,8 @@ In current Chrome on the target MacBook:
    before the report appears.
 7. Confirm the report contains exactly 16 terminal outcomes and eight sections.
 8. Discard a second session and verify no report appears.
-9. Withdraw consent and verify tracks stop.
+9. Confirm mid-session consent withdrawal is performed through Discard and
+   verify that it stops all tracks.
 10. Reset after a report and verify session-only state is cleared.
 
 No live media or resulting health-related artifact may be saved or committed.

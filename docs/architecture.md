@@ -63,9 +63,11 @@ shown as not measurable rather than blocking the other lane. The ambient
 observation can run for at most 300 seconds and can be ended or discarded at
 any time.
 
-Finish stops acquisition before creating the report. Discard, consent
-withdrawal, page hiding, page unload, and stale asynchronous media resolution
-all use the same generation-guarded disposal path.
+Finish stops acquisition before creating the report. Discard, page hiding,
+page unload, and stale asynchronous media resolution all use the same
+generation-guarded disposal path. There is no separate in-session withdraw
+control; during an active session, consent withdrawal is performed through
+Discard, which routes to that same disposal path.
 
 ## Measurement and abstention
 

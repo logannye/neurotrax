@@ -38,8 +38,8 @@ Open `http://127.0.0.1:4173` in Chrome.
 8. Clear and start again, then verify the report and prior session state are
    gone.
 
-Also rehearse camera denial, microphone denial, both-device denial, discard,
-and consent withdrawal.
+Also rehearse camera denial, microphone denial, both-device denial, and
+discard, which is also the in-session consent-withdrawal path.
 
 ## Automated smoke
 

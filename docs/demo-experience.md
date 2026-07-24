@@ -57,7 +57,8 @@ export, or baseline creation.
 - Deny one device and show that the other lane continues.
 - Deny both devices and show that no report is created.
 - End a short session and show specific reason-coded abstentions.
-- Discard or withdraw consent and show that devices turn off without a report.
+- Discard mid-session (the in-session consent-withdrawal path) and show that
+  devices turn off without a report.
 - Reset after a report and show that session memory is cleared.
 - Make voiced sound, unvoiced sound, and background noise and show the live
   voice state and traces changing without creating a recording.

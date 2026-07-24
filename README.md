@@ -108,8 +108,8 @@ disabled-by-default research surface. The browser does not import or call it.
 - PCM, spectral arrays, transcripts, embeddings, native landmarks, and native
   video frames are excluded from ObservationV3 and report contracts.
 - Device tracks, workers, audio nodes, timers, derived frame buffers, and the
-  in-memory event journal are disposed on finish, discard, withdrawal,
-  visibility loss, or reset.
+  in-memory event journal are disposed on finish, discard (which is also the
+  in-session consent-withdrawal path), visibility loss, or reset.
 - Identity is not verified and speaker attribution is explicitly unverified.
 - `Not measurable` is a valid terminal result; missing evidence is never
   imputed as a measurement.
