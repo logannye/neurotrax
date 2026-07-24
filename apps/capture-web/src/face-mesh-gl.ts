@@ -20,12 +20,18 @@ function compile(gl: WebGL2RenderingContext, type: number, src: string): WebGLSh
 }
 function link(gl: WebGL2RenderingContext, vs: string, fs: string): WebGLProgram {
   const p = gl.createProgram()!;
-  gl.attachShader(p, compile(gl, gl.VERTEX_SHADER, vs));
-  gl.attachShader(p, compile(gl, gl.FRAGMENT_SHADER, fs));
+  const vShader = compile(gl, gl.VERTEX_SHADER, vs);
+  const fShader = compile(gl, gl.FRAGMENT_SHADER, fs);
+  gl.attachShader(p, vShader);
+  gl.attachShader(p, fShader);
   gl.linkProgram(p);
   if (!gl.getProgramParameter(p, gl.LINK_STATUS)) {
     throw new Error(gl.getProgramInfoLog(p) ?? "program link failed");
   }
+  // Shaders marked for deletion stay alive while attached to the program,
+  // then free automatically when the program itself is deleted.
+  gl.deleteShader(vShader);
+  gl.deleteShader(fShader);
   return p;
 }
 
@@ -53,16 +59,33 @@ export class FaceMeshGLRenderer implements FaceMeshRenderer {
       antialias: true
     });
     if (!gl) return false;
-    this.canvas = canvas;
-    this.gl = gl;
-    this.program = link(gl, MESH_VERT, MESH_FRAG);
-    this.posBuf = gl.createBuffer();
-    this.depthBuf = gl.createBuffer();
-    this.lineIndexBuf = gl.createBuffer();
-    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.lineIndexBuf);
-    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(TESS_INDICES), gl.STATIC_DRAW);
-    gl.enable(gl.BLEND);
-    gl.blendFunc(gl.ONE, gl.ONE); // additive (premultiplied)
+    try {
+      this.canvas = canvas;
+      this.gl = gl;
+      this.program = link(gl, MESH_VERT, MESH_FRAG);
+      this.posBuf = gl.createBuffer();
+      this.depthBuf = gl.createBuffer();
+      this.lineIndexBuf = gl.createBuffer();
+      gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.lineIndexBuf);
+      gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(TESS_INDICES), gl.STATIC_DRAW);
+      gl.enable(gl.BLEND);
+      gl.blendFunc(gl.ONE, gl.ONE); // additive (premultiplied)
+    } catch {
+      // Any GL-init failure (blocklisted GPU, shader compile/link bug, driver
+      // quirk) must be isolated here so the caller can fall back to the 2D
+      // renderer instead of the exception propagating out of attach().
+      if (this.program) gl.deleteProgram(this.program);
+      if (this.posBuf) gl.deleteBuffer(this.posBuf);
+      if (this.depthBuf) gl.deleteBuffer(this.depthBuf);
+      if (this.lineIndexBuf) gl.deleteBuffer(this.lineIndexBuf);
+      this.gl = null;
+      this.canvas = null;
+      this.program = null;
+      this.posBuf = null;
+      this.depthBuf = null;
+      this.lineIndexBuf = null;
+      return false;
+    }
     return true;
   }
 
@@ -79,6 +102,13 @@ export class FaceMeshGLRenderer implements FaceMeshRenderer {
     const canvas = this.canvas;
     const input = this.latest;
     if (!gl || !canvas || !this.program || !input) return EMPTY_RESULT;
+    if (
+      !Number.isFinite(input.width) ||
+      !Number.isFinite(input.height) ||
+      !Number.isFinite(nowMs)
+    ) {
+      return EMPTY_RESULT;
+    }
     const width = Math.round(input.width);
     const height = Math.round(input.height);
     if (width <= 0 || height <= 0) return EMPTY_RESULT;
