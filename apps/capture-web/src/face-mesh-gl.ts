@@ -8,14 +8,11 @@ import {
   type MeshDrawOptions
 } from "./face-mesh-renderer.js";
 import { depthToColor, normalizeDepth } from "./mesh-depth.js";
-import { MoteField } from "./mesh-motes.js";
 import {
   BLUR_FRAG,
   COMPOSITE_FRAG,
   MESH_FRAG,
   MESH_VERT,
-  MOTE_FRAG,
-  MOTE_VERT,
   QUAD_VERT
 } from "./face-mesh-gl-shaders.js";
 
@@ -80,10 +77,6 @@ const CONTOUR_INDICES: number[] = [
   ...FaceLandmarker.FACE_LANDMARKS_RIGHT_IRIS
 ].flatMap((c) => [c.start, c.end]);
 
-// Ceiling on live motes; the field pre-allocates flat position/alpha arrays of
-// this size, so it also bounds the per-frame GL_POINTS upload.
-const MOTE_CAPACITY = 96;
-
 /** An offscreen color-texture render target: an FBO with a single RGBA8 color texture. */
 interface RenderTarget {
   fbo: WebGLFramebuffer;
@@ -103,14 +96,6 @@ export class FaceMeshGLRenderer implements FaceMeshRenderer {
   private depthBuf: WebGLBuffer | null = null;
   private lineIndexBuf: WebGLBuffer | null = null;
   private contourIndexBuf: WebGLBuffer | null = null;
-  // Motes: a tiny additive-point program with its own VAO + dynamic pos/alpha
-  // buffers, driven by the deterministic MoteField.
-  private moteProgram: WebGLProgram | null = null;
-  private moteVao: WebGLVertexArrayObject | null = null;
-  private motePosBuf: WebGLBuffer | null = null;
-  private moteAlphaBuf: WebGLBuffer | null = null;
-  private moteField = new MoteField(MOTE_CAPACITY);
-  private lastNowMs: number | null = null;
   // Bloom pipeline: post-process programs, a no-op VAO for the fullscreen
   // triangle, the full-res scene target and two half-res ping-pong blur targets.
   private blurProgram: WebGLProgram | null = null;
@@ -155,26 +140,6 @@ export class FaceMeshGLRenderer implements FaceMeshRenderer {
       // Allocate placeholder targets now (validates the FBO-completeness path);
       // drawFrame reallocates them at the real canvas size on the first frame.
       this.allocTargets(gl, 1, 1);
-      // Mote program + dedicated VAO wiring its own pos/alpha buffers, so mote
-      // attribute state never collides with the mesh's default-VAO attributes.
-      // Created inside this try too, so any failure yields attach()===false.
-      this.moteProgram = link(gl, MOTE_VERT, MOTE_FRAG);
-      this.motePosBuf = gl.createBuffer();
-      this.moteAlphaBuf = gl.createBuffer();
-      this.moteVao = gl.createVertexArray();
-      if (!this.motePosBuf || !this.moteAlphaBuf || !this.moteVao) {
-        throw new Error("failed to create mote GL objects");
-      }
-      gl.bindVertexArray(this.moteVao);
-      const aMotePos = gl.getAttribLocation(this.moteProgram, "aPos");
-      const aMoteAlpha = gl.getAttribLocation(this.moteProgram, "aAlpha");
-      gl.bindBuffer(gl.ARRAY_BUFFER, this.motePosBuf);
-      gl.enableVertexAttribArray(aMotePos);
-      gl.vertexAttribPointer(aMotePos, 2, gl.FLOAT, false, 0, 0);
-      gl.bindBuffer(gl.ARRAY_BUFFER, this.moteAlphaBuf);
-      gl.enableVertexAttribArray(aMoteAlpha);
-      gl.vertexAttribPointer(aMoteAlpha, 1, gl.FLOAT, false, 0, 0);
-      gl.bindVertexArray(null);
       gl.enable(gl.BLEND);
       gl.blendFunc(gl.ONE, gl.ONE); // additive (premultiplied)
     } catch {
@@ -186,10 +151,6 @@ export class FaceMeshGLRenderer implements FaceMeshRenderer {
       if (this.depthBuf) gl.deleteBuffer(this.depthBuf);
       if (this.lineIndexBuf) gl.deleteBuffer(this.lineIndexBuf);
       if (this.contourIndexBuf) gl.deleteBuffer(this.contourIndexBuf);
-      if (this.moteProgram) gl.deleteProgram(this.moteProgram);
-      if (this.moteVao) gl.deleteVertexArray(this.moteVao);
-      if (this.motePosBuf) gl.deleteBuffer(this.motePosBuf);
-      if (this.moteAlphaBuf) gl.deleteBuffer(this.moteAlphaBuf);
       if (this.blurProgram) gl.deleteProgram(this.blurProgram);
       if (this.compositeProgram) gl.deleteProgram(this.compositeProgram);
       if (this.quadVao) gl.deleteVertexArray(this.quadVao);
@@ -201,10 +162,6 @@ export class FaceMeshGLRenderer implements FaceMeshRenderer {
       this.depthBuf = null;
       this.lineIndexBuf = null;
       this.contourIndexBuf = null;
-      this.moteProgram = null;
-      this.moteVao = null;
-      this.motePosBuf = null;
-      this.moteAlphaBuf = null;
       this.blurProgram = null;
       this.compositeProgram = null;
       this.quadVao = null;
@@ -298,15 +255,14 @@ export class FaceMeshGLRenderer implements FaceMeshRenderer {
     options?: MeshDrawOptions
   ): FaceMeshRenderResult {
     // Reduced motion forces a static frame; the governor's effectLevel (0..1)
-    // sheds effects in order — motes first, then bloom, then hue drift last.
+    // sheds effects in order — bloom first, then hue drift last.
     const reducedMotion = options?.reducedMotion === true;
     const rawEffect = options?.effectLevel;
     const effectLevel =
       typeof rawEffect === "number" && Number.isFinite(rawEffect)
         ? Math.min(1, Math.max(0, rawEffect))
         : 1;
-    // Shed order: motes (below 0.66) -> bloom (below 0.33) -> hue freeze (~0).
-    const drawMotes = !reducedMotion && effectLevel > 0.66;
+    // Shed order: bloom (below 0.33) -> hue freeze (~0).
     const applyBloom = effectLevel > 0.33;
     const freezeHue = reducedMotion || effectLevel <= 0.05;
     // Reduced motion collapses the intro so the mesh renders at its resting
@@ -377,28 +333,9 @@ export class FaceMeshGLRenderer implements FaceMeshRenderer {
     const far = depthToColor(0, hueShift);
     const alpha = introProgressEff; // fade in during localize
 
-    // Frame delta for the mote sim; clamped so a stalled tab (huge gap) or a
-    // non-monotonic clock can't fling motes off-screen or run life negative in
-    // one step. First frame has no prior timestamp, so assume ~60fps.
-    const dtMs = this.lastNowMs === null ? 16 : Math.min(100, Math.max(0, nowMs - this.lastNowMs));
-    this.lastNowMs = nowMs;
     // Intro scale-in: clip positions ease from 0.965 -> 1.0 as introProgress->1.
     const introP = Math.min(1, Math.max(0, introProgressEff));
     const uScaleVal = 0.965 + (1 - 0.965) * introP;
-
-    // Advance the deterministic mote field, seeding new motes off live landmark
-    // positions (mote positions come back already in clip space). Skipped under
-    // reduced motion and when the governor has shed motes, so no CPU sim burns.
-    if (drawMotes && n > 0) {
-      this.moteField.update(
-        dtMs,
-        (i) => {
-          const l = input.landmarks[i];
-          return { x: l.x, y: l.y, depth: depthNorm[i] };
-        },
-        n
-      );
-    }
 
     // ---- Pass 1: draw the mesh into the full-res scene target (additive) ----
     gl.bindFramebuffer(gl.FRAMEBUFFER, sceneTarget.fbo);
@@ -440,22 +377,6 @@ export class FaceMeshGLRenderer implements FaceMeshRenderer {
     gl.uniform1f(gl.getUniformLocation(this.program, "uAlpha"), Math.min(1, alpha * 1.8));
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.contourIndexBuf);
     gl.drawElements(gl.LINES, CONTOUR_INDICES.length, gl.UNSIGNED_SHORT, 0);
-
-    // Motes: additive glowing points, into the same scene FBO so they bloom.
-    // Only drawn while the governor keeps them (and never under reduced motion).
-    const moteCount = drawMotes ? this.moteField.count() : 0;
-    if (moteCount > 0 && this.moteProgram && this.moteVao) {
-      gl.useProgram(this.moteProgram);
-      gl.bindVertexArray(this.moteVao);
-      gl.bindBuffer(gl.ARRAY_BUFFER, this.motePosBuf);
-      gl.bufferData(gl.ARRAY_BUFFER, this.moteField.positions().subarray(0, moteCount * 2), gl.DYNAMIC_DRAW);
-      gl.bindBuffer(gl.ARRAY_BUFFER, this.moteAlphaBuf);
-      gl.bufferData(gl.ARRAY_BUFFER, this.moteField.alphas().subarray(0, moteCount), gl.DYNAMIC_DRAW);
-      gl.uniform1f(gl.getUniformLocation(this.moteProgram, "uScale"), uScaleVal);
-      gl.uniform3f(gl.getUniformLocation(this.moteProgram, "uColor"), 0.6, 0.9, 1.0);
-      gl.drawArrays(gl.POINTS, 0, moteCount);
-      gl.bindVertexArray(null);
-    }
 
     // ---- Post-process: optional bloom blur, then composite ----
     // The fullscreen triangle uses no attributes, so bind the quad VAO up front
@@ -534,10 +455,6 @@ export class FaceMeshGLRenderer implements FaceMeshRenderer {
       if (this.depthBuf) gl.deleteBuffer(this.depthBuf);
       if (this.lineIndexBuf) gl.deleteBuffer(this.lineIndexBuf);
       if (this.contourIndexBuf) gl.deleteBuffer(this.contourIndexBuf);
-      if (this.moteProgram) gl.deleteProgram(this.moteProgram);
-      if (this.moteVao) gl.deleteVertexArray(this.moteVao);
-      if (this.motePosBuf) gl.deleteBuffer(this.motePosBuf);
-      if (this.moteAlphaBuf) gl.deleteBuffer(this.moteAlphaBuf);
       if (this.blurProgram) gl.deleteProgram(this.blurProgram);
       if (this.compositeProgram) gl.deleteProgram(this.compositeProgram);
       if (this.quadVao) gl.deleteVertexArray(this.quadVao);
@@ -550,10 +467,6 @@ export class FaceMeshGLRenderer implements FaceMeshRenderer {
     this.depthBuf = null;
     this.lineIndexBuf = null;
     this.contourIndexBuf = null;
-    this.moteProgram = null;
-    this.moteVao = null;
-    this.motePosBuf = null;
-    this.moteAlphaBuf = null;
     this.blurProgram = null;
     this.compositeProgram = null;
     this.quadVao = null;
@@ -562,8 +475,5 @@ export class FaceMeshGLRenderer implements FaceMeshRenderer {
     this.fboWidth = 0;
     this.fboHeight = 0;
     this.latest = null;
-    // Fresh, deterministic mote field for the next attach session.
-    this.moteField = new MoteField(MOTE_CAPACITY);
-    this.lastNowMs = null;
   }
 }

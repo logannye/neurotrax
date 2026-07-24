@@ -20,10 +20,10 @@ export interface FaceMeshRenderResult {
 
 /**
  * Per-frame presentation hints. `reducedMotion` forces a static frame (no hue
- * drift, no motes, no twinkle, intro treated as complete). `effectLevel` (0..1)
- * is the adaptive performance governor's budget: as it drops the renderer sheds
- * motes first, then bloom, then finally freezes hue drift. Both are optional;
- * an undefined `effectLevel` means full effects (1).
+ * drift, no twinkle, intro treated as complete). `effectLevel` (0..1) is the
+ * adaptive performance governor's budget: as it drops the renderer sheds bloom
+ * first, then finally freezes hue drift. Both are optional; an undefined
+ * `effectLevel` means full effects (1).
  */
 export interface MeshDrawOptions {
   reducedMotion?: boolean;

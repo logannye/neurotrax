@@ -33,34 +33,6 @@ void main() {
   outColor = vec4(col * a, a); // premultiplied for additive blending
 }`;
 
-// Motes: additive glowing particles. Positions arrive in clip space from
-// MoteField; uScale applies the same intro scale-in as the mesh. Each point is
-// drawn as a soft round sprite via gl_PointCoord, alpha driven by its life.
-export const MOTE_VERT = `#version 300 es
-precision highp float;
-in vec2 aPos;
-in float aAlpha;
-uniform float uScale;
-out float vAlpha;
-void main() {
-  vAlpha = aAlpha;
-  gl_PointSize = 2.0 + aAlpha * 5.0;
-  gl_Position = vec4(aPos * uScale, 0.0, 1.0);
-}`;
-
-export const MOTE_FRAG = `#version 300 es
-precision highp float;
-in float vAlpha;
-uniform vec3 uColor;
-out vec4 outColor;
-void main() {
-  // Soft-edged circular sprite; discard the square corners.
-  float r = length(gl_PointCoord - vec2(0.5));
-  float mask = smoothstep(0.5, 0.0, r);
-  float a = vAlpha * mask * 0.9;
-  outColor = vec4(uColor * a, a); // premultiplied for additive blending
-}`;
-
 // Fullscreen-triangle vertex shader. No vertex buffers: gl_VertexID 0..2 emits a
 // triangle that covers the clip-space quad, and vUv spans 0..1 over the viewport.
 //   id 0 -> uv (0,0) -> pos (-1,-1)

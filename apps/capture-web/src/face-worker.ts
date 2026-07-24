@@ -65,12 +65,12 @@ const localizeIntro = new LocalizeIntro();
 // DedicatedWorkerGlobalScope, so the main thread detects the preference and
 // passes it in via the attach-overlay message; this flag is (re)set from that
 // message on every attach. Reduced motion forces the mesh into a static frame
-// (no hue drift, motes, twinkle, or intro animation). Defaults to full motion.
+// (no hue drift, twinkle, or intro animation). Defaults to full motion.
 let prefersReducedMotion = false;
 
 // Adaptive performance governor: an EMA of the rAF inter-frame time drives an
-// effectLevel (0..1) that the renderer uses to shed effects (motes -> bloom ->
-// hue drift) under load and recover them when frame time is comfortable again.
+// effectLevel (0..1) that the renderer uses to shed effects (bloom -> hue
+// drift) under load and recover them when frame time is comfortable again.
 const GOVERNOR_EMA_ALPHA = 0.1;
 const GOVERNOR_SHED_THRESHOLD_MS = 20;
 const GOVERNOR_RECOVER_THRESHOLD_MS = 14;
