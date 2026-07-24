@@ -1,26 +1,64 @@
 // Positions arrive already in clip space (x,y in -1..1, y flipped by the CPU).
+// uScale scales-in during the intro (mix(0.965, 1.0, introProgress)); uTime
+// drives a per-point twinkle keyed off gl_VertexID so each node shimmers on its
+// own phase. The twinkle rides both gl_PointSize and the fragment alpha.
 export const MESH_VERT = `#version 300 es
 precision highp float;
 in vec2 aPos;
 in float aDepth;
+uniform float uTime;
+uniform float uScale;
 out float vDepth;
+out float vTwinkle;
 void main() {
   vDepth = aDepth;
-  gl_PointSize = 1.5 + aDepth * 3.0;
-  gl_Position = vec4(aPos, 0.0, 1.0);
+  // 0..1 shimmer, one phase per vertex.
+  float tw = 0.5 + 0.5 * sin(uTime + float(gl_VertexID));
+  vTwinkle = 0.75 + 0.25 * tw;
+  gl_PointSize = (1.5 + aDepth * 3.0) * (0.85 + 0.3 * tw);
+  gl_Position = vec4(aPos * uScale, 0.0, 1.0);
 }`;
 
 export const MESH_FRAG = `#version 300 es
 precision highp float;
 in float vDepth;
+in float vTwinkle;
 uniform vec3 uNearColor;
 uniform vec3 uFarColor;
 uniform float uAlpha;
 out vec4 outColor;
 void main() {
   vec3 col = mix(uFarColor, uNearColor, vDepth);
-  float a = uAlpha * (0.28 + 0.5 * vDepth);
+  float a = uAlpha * (0.28 + 0.5 * vDepth) * vTwinkle;
   outColor = vec4(col * a, a); // premultiplied for additive blending
+}`;
+
+// Motes: additive glowing particles. Positions arrive in clip space from
+// MoteField; uScale applies the same intro scale-in as the mesh. Each point is
+// drawn as a soft round sprite via gl_PointCoord, alpha driven by its life.
+export const MOTE_VERT = `#version 300 es
+precision highp float;
+in vec2 aPos;
+in float aAlpha;
+uniform float uScale;
+out float vAlpha;
+void main() {
+  vAlpha = aAlpha;
+  gl_PointSize = 2.0 + aAlpha * 5.0;
+  gl_Position = vec4(aPos * uScale, 0.0, 1.0);
+}`;
+
+export const MOTE_FRAG = `#version 300 es
+precision highp float;
+in float vAlpha;
+uniform vec3 uColor;
+out vec4 outColor;
+void main() {
+  // Soft-edged circular sprite; discard the square corners.
+  float r = length(gl_PointCoord - vec2(0.5));
+  float mask = smoothstep(0.5, 0.0, r);
+  float a = vAlpha * mask * 0.9;
+  outColor = vec4(uColor * a, a); // premultiplied for additive blending
 }`;
 
 // Fullscreen-triangle vertex shader. No vertex buffers: gl_VertexID 0..2 emits a
