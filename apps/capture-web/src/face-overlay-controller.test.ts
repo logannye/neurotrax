@@ -58,14 +58,14 @@ describe("FaceOverlayController", () => {
       [item.offscreen]
     );
     expect(item.canvas.hidden).toBe(true);
-    expect(item.status.textContent).toBe("Looking for one face");
+    expect(item.status.textContent).toBe("◇ LOCATING…");
 
     item.controller.acknowledge(7, true);
     expect(item.canvas.hidden).toBe(false);
     item.controller.updateFaceCount(1);
-    expect(item.status.textContent).toBe("Face mesh active");
+    expect(item.status.textContent).toBe("◆ TRACKING · 478 pts");
     item.controller.updateFaceCount(2);
-    expect(item.status.textContent).toBe("Looking for one face");
+    expect(item.status.textContent).toBe("◇ LOCATING…");
   });
 
   it("ignores stale acknowledgements and fails presentation closed", () => {

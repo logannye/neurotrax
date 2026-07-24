@@ -140,9 +140,9 @@ export class FaceOverlayController {
     this.status.hidden = state === "inactive";
     this.status.textContent =
       state === "active"
-        ? "Face mesh active"
+        ? "◆ TRACKING · 478 pts"
         : state === "searching"
-          ? "Looking for one face"
+          ? "◇ LOCATING…"
           : state === "unavailable"
             ? "Mesh display unavailable"
             : "";
