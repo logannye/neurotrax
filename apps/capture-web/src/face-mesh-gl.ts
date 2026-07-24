@@ -4,7 +4,8 @@ import {
   FACE_MESH_LANDMARK_COUNT,
   type FaceMeshRenderer,
   type FaceMeshRenderInput,
-  type FaceMeshRenderResult
+  type FaceMeshRenderResult,
+  type MeshDrawOptions
 } from "./face-mesh-renderer.js";
 import { depthToColor, normalizeDepth } from "./mesh-depth.js";
 import { MoteField } from "./mesh-motes.js";
@@ -291,7 +292,26 @@ export class FaceMeshGLRenderer implements FaceMeshRenderer {
     this.fboHeight = height;
   }
 
-  drawFrame(nowMs: number, introProgress = 1): FaceMeshRenderResult {
+  drawFrame(
+    nowMs: number,
+    introProgress = 1,
+    options?: MeshDrawOptions
+  ): FaceMeshRenderResult {
+    // Reduced motion forces a static frame; the governor's effectLevel (0..1)
+    // sheds effects in order — motes first, then bloom, then hue drift last.
+    const reducedMotion = options?.reducedMotion === true;
+    const rawEffect = options?.effectLevel;
+    const effectLevel =
+      typeof rawEffect === "number" && Number.isFinite(rawEffect)
+        ? Math.min(1, Math.max(0, rawEffect))
+        : 1;
+    // Shed order: motes (below 0.66) -> bloom (below 0.33) -> hue freeze (~0).
+    const drawMotes = !reducedMotion && effectLevel > 0.66;
+    const applyBloom = effectLevel > 0.33;
+    const freezeHue = reducedMotion || effectLevel <= 0.05;
+    // Reduced motion collapses the intro so the mesh renders at its resting
+    // scale/alpha/bloom with no animation.
+    const introProgressEff = reducedMotion ? 1 : introProgress;
     const gl = this.gl;
     const canvas = this.canvas;
     const input = this.latest;
@@ -350,9 +370,12 @@ export class FaceMeshGLRenderer implements FaceMeshRenderer {
       if (ok) dots += 1;
     }
 
-    const near = depthToColor(1, (nowMs * 0.02) % 360);
-    const far = depthToColor(0, (nowMs * 0.02) % 360);
-    const alpha = introProgress; // fade in during localize
+    // Hue drift is the last effect the governor sheds (and is off under reduced
+    // motion): a frozen hue holds the base palette with no time-varying shift.
+    const hueShift = freezeHue ? 0 : (nowMs * 0.02) % 360;
+    const near = depthToColor(1, hueShift);
+    const far = depthToColor(0, hueShift);
+    const alpha = introProgressEff; // fade in during localize
 
     // Frame delta for the mote sim; clamped so a stalled tab (huge gap) or a
     // non-monotonic clock can't fling motes off-screen or run life negative in
@@ -360,12 +383,13 @@ export class FaceMeshGLRenderer implements FaceMeshRenderer {
     const dtMs = this.lastNowMs === null ? 16 : Math.min(100, Math.max(0, nowMs - this.lastNowMs));
     this.lastNowMs = nowMs;
     // Intro scale-in: clip positions ease from 0.965 -> 1.0 as introProgress->1.
-    const introP = Math.min(1, Math.max(0, introProgress));
+    const introP = Math.min(1, Math.max(0, introProgressEff));
     const uScaleVal = 0.965 + (1 - 0.965) * introP;
 
     // Advance the deterministic mote field, seeding new motes off live landmark
-    // positions (mote positions come back already in clip space).
-    if (n > 0) {
+    // positions (mote positions come back already in clip space). Skipped under
+    // reduced motion and when the governor has shed motes, so no CPU sim burns.
+    if (drawMotes && n > 0) {
       this.moteField.update(
         dtMs,
         (i) => {
@@ -399,7 +423,12 @@ export class FaceMeshGLRenderer implements FaceMeshRenderer {
     gl.uniform3f(gl.getUniformLocation(this.program, "uNearColor"), near.r, near.g, near.b);
     gl.uniform3f(gl.getUniformLocation(this.program, "uFarColor"), far.r, far.g, far.b);
     gl.uniform1f(gl.getUniformLocation(this.program, "uAlpha"), alpha);
-    gl.uniform1f(gl.getUniformLocation(this.program, "uTime"), nowMs * 0.001);
+    // uTime drives the per-vertex twinkle; zeroed under reduced motion so the
+    // shimmer holds a static phase instead of animating.
+    gl.uniform1f(
+      gl.getUniformLocation(this.program, "uTime"),
+      reducedMotion ? 0 : nowMs * 0.001
+    );
     gl.uniform1f(gl.getUniformLocation(this.program, "uScale"), uScaleVal);
 
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.lineIndexBuf);
@@ -413,7 +442,8 @@ export class FaceMeshGLRenderer implements FaceMeshRenderer {
     gl.drawElements(gl.LINES, CONTOUR_INDICES.length, gl.UNSIGNED_SHORT, 0);
 
     // Motes: additive glowing points, into the same scene FBO so they bloom.
-    const moteCount = this.moteField.count();
+    // Only drawn while the governor keeps them (and never under reduced motion).
+    const moteCount = drawMotes ? this.moteField.count() : 0;
     if (moteCount > 0 && this.moteProgram && this.moteVao) {
       gl.useProgram(this.moteProgram);
       gl.bindVertexArray(this.moteVao);
@@ -427,36 +457,45 @@ export class FaceMeshGLRenderer implements FaceMeshRenderer {
       gl.bindVertexArray(null);
     }
 
-    // ---- Pass 2: separable Gaussian blur (half res, no blending) ----
-    // Each fullscreen pass fully overwrites its target, so disable blending
-    // rather than accumulate onto stale contents.
+    // ---- Post-process: optional bloom blur, then composite ----
+    // The fullscreen triangle uses no attributes, so bind the quad VAO up front
+    // for both the (optional) blur and the always-run composite. Each fullscreen
+    // pass fully overwrites its target, so disable blending here.
     gl.bindVertexArray(this.quadVao);
     gl.disable(gl.BLEND);
-    gl.viewport(0, 0, halfW, halfH);
-    gl.useProgram(this.blurProgram);
-    const uTexel = gl.getUniformLocation(this.blurProgram, "uTexel");
-    const uDir = gl.getUniformLocation(this.blurProgram, "uDir");
-    const uTex = gl.getUniformLocation(this.blurProgram, "uTex");
-    gl.uniform1i(uTex, 0);
-    gl.uniform2f(uTexel, 1 / halfW, 1 / halfH);
-    gl.activeTexture(gl.TEXTURE0);
 
-    // Horizontal: scene.tex -> blurTargets[0]
-    gl.bindFramebuffer(gl.FRAMEBUFFER, blurTargets[0].fbo);
-    gl.bindTexture(gl.TEXTURE_2D, sceneTarget.tex);
-    gl.uniform2f(uDir, 1, 0);
-    gl.drawArrays(gl.TRIANGLES, 0, 3);
+    // Pass 2: separable Gaussian blur (half res). Skipped once the governor has
+    // shed bloom — the composite below then draws the scene straight.
+    if (applyBloom) {
+      gl.viewport(0, 0, halfW, halfH);
+      gl.useProgram(this.blurProgram);
+      const uTexel = gl.getUniformLocation(this.blurProgram, "uTexel");
+      const uDir = gl.getUniformLocation(this.blurProgram, "uDir");
+      const uTex = gl.getUniformLocation(this.blurProgram, "uTex");
+      gl.uniform1i(uTex, 0);
+      gl.uniform2f(uTexel, 1 / halfW, 1 / halfH);
+      gl.activeTexture(gl.TEXTURE0);
 
-    // Vertical: blurTargets[0].tex -> blurTargets[1]
-    gl.bindFramebuffer(gl.FRAMEBUFFER, blurTargets[1].fbo);
-    gl.bindTexture(gl.TEXTURE_2D, blurTargets[0].tex);
-    gl.uniform2f(uDir, 0, 1);
-    gl.drawArrays(gl.TRIANGLES, 0, 3);
+      // Horizontal: scene.tex -> blurTargets[0]
+      gl.bindFramebuffer(gl.FRAMEBUFFER, blurTargets[0].fbo);
+      gl.bindTexture(gl.TEXTURE_2D, sceneTarget.tex);
+      gl.uniform2f(uDir, 1, 0);
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+
+      // Vertical: blurTargets[0].tex -> blurTargets[1]
+      gl.bindFramebuffer(gl.FRAMEBUFFER, blurTargets[1].fbo);
+      gl.bindTexture(gl.TEXTURE_2D, blurTargets[0].tex);
+      gl.uniform2f(uDir, 0, 1);
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+    }
 
     // ---- Pass 3: composite scene + bloom to the default framebuffer ----
-    const p = Math.min(1, Math.max(0, introProgress));
-    const bloomStrength =
-      BLOOM_REST_STRENGTH + (BLOOM_PEAK_STRENGTH - BLOOM_REST_STRENGTH) * (1 - p);
+    // When bloom is shed, strength is 0 so the (stale but valid) bloom texture
+    // contributes nothing and the scene is drawn straight.
+    const p = Math.min(1, Math.max(0, introProgressEff));
+    const bloomStrength = applyBloom
+      ? BLOOM_REST_STRENGTH + (BLOOM_PEAK_STRENGTH - BLOOM_REST_STRENGTH) * (1 - p)
+      : 0;
 
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     gl.viewport(0, 0, width, height);

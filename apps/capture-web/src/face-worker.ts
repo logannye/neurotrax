@@ -60,6 +60,26 @@ let overlayMaxRenderHz = 24;
 let rafHandle: number | null = null;
 let hasLandmarks = false;
 const localizeIntro = new LocalizeIntro();
+
+// Detected once: honor the OS "reduce motion" setting where the worker can see
+// it. matchMedia is absent in some worker environments, so it is guarded; when
+// unavailable we default to full motion. Reduced motion forces the mesh into a
+// static frame (no hue drift, motes, twinkle, or intro animation).
+const prefersReducedMotion =
+  typeof self.matchMedia === "function" &&
+  self.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+// Adaptive performance governor: an EMA of the rAF inter-frame time drives an
+// effectLevel (0..1) that the renderer uses to shed effects (motes -> bloom ->
+// hue drift) under load and recover them when frame time is comfortable again.
+const GOVERNOR_EMA_ALPHA = 0.1;
+const GOVERNOR_SHED_THRESHOLD_MS = 20;
+const GOVERNOR_RECOVER_THRESHOLD_MS = 14;
+const GOVERNOR_SHED_STEP = 0.05;
+const GOVERNOR_RECOVER_STEP = 0.02;
+let governorEmaDtMs = 16;
+let governorEffectLevel = 1;
+let lastDrawNowMs: number | null = null;
 const qualityCanvas = new OffscreenCanvas(
   QUALITY_ROI_SIZE,
   QUALITY_ROI_SIZE
@@ -106,15 +126,43 @@ function startRenderLoop(): void {
   if (rafHandle !== null) {
     return;
   }
+  // Fresh governor pacing for each loop (re)start (e.g. after context restore).
+  lastDrawNowMs = null;
+  governorEmaDtMs = 16;
+  governorEffectLevel = 1;
   const tick = (now: number): void => {
     rafHandle = requestAnimationFrame(tick);
     if (!meshRenderer || !hasLandmarks) {
+      // Pause frame-time pacing while nothing is drawn so an idle gap does not
+      // corrupt the EMA when drawing resumes.
+      lastDrawNowMs = null;
       return;
     }
+    // Update the frame-time EMA from the interval since the last drawn frame and
+    // adjust the shed level: over budget -> shed toward 0; comfortable -> recover
+    // toward 1; the hysteresis band in between holds the current level steady.
+    if (lastDrawNowMs !== null) {
+      const dtMs = now - lastDrawNowMs;
+      if (Number.isFinite(dtMs) && dtMs > 0 && dtMs < 1_000) {
+        governorEmaDtMs =
+          governorEmaDtMs * (1 - GOVERNOR_EMA_ALPHA) + dtMs * GOVERNOR_EMA_ALPHA;
+        if (governorEmaDtMs > GOVERNOR_SHED_THRESHOLD_MS) {
+          governorEffectLevel = Math.max(0, governorEffectLevel - GOVERNOR_SHED_STEP);
+        } else if (governorEmaDtMs < GOVERNOR_RECOVER_THRESHOLD_MS) {
+          governorEffectLevel = Math.min(1, governorEffectLevel + GOVERNOR_RECOVER_STEP);
+        }
+      }
+    }
+    lastDrawNowMs = now;
+    // Reduced motion collapses the intro to its resting state (no animation).
+    const introProgress = prefersReducedMotion ? 1 : localizeIntro.progress(now);
     // Presentation only: a redraw failure must never propagate into the
     // measurement path, so it is contained here.
     try {
-      meshRenderer.drawFrame(now, localizeIntro.progress(now));
+      meshRenderer.drawFrame(now, introProgress, {
+        reducedMotion: prefersReducedMotion,
+        effectLevel: governorEffectLevel
+      });
     } catch {
       // drop the frame; the next tick retries
     }

@@ -18,6 +18,18 @@ export interface FaceMeshRenderResult {
   accentAnchors: number;
 }
 
+/**
+ * Per-frame presentation hints. `reducedMotion` forces a static frame (no hue
+ * drift, no motes, no twinkle, intro treated as complete). `effectLevel` (0..1)
+ * is the adaptive performance governor's budget: as it drops the renderer sheds
+ * motes first, then bloom, then finally freezes hue drift. Both are optional;
+ * an undefined `effectLevel` means full effects (1).
+ */
+export interface MeshDrawOptions {
+  reducedMotion?: boolean;
+  effectLevel?: number;
+}
+
 /** Presentation-only renderer contract shared by the 2D and WebGL2 backends. */
 export interface FaceMeshRenderer {
   attach(canvas: OffscreenCanvas, maxRenderHz: number): boolean;
@@ -25,7 +37,11 @@ export interface FaceMeshRenderer {
   /** Cache the latest landmark frame; does not draw. */
   updateLandmarks(input: FaceMeshRenderInput): void;
   /** Draw the cached frame at nowMs with optional intro progress (0..1). */
-  drawFrame(nowMs: number, introProgress?: number): FaceMeshRenderResult;
+  drawFrame(
+    nowMs: number,
+    introProgress?: number,
+    options?: MeshDrawOptions
+  ): FaceMeshRenderResult;
   clear(): void;
   detach(): void;
 }
