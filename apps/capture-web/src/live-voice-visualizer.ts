@@ -16,6 +16,7 @@ export interface LiveVoiceSample {
   tMs: number;
   levelDbfs: number;
   pitchHz: number | null;
+  confidence: number;
 }
 
 export interface LiveVoiceElements {
@@ -53,6 +54,19 @@ export function liveVoiceStateFor(
   return "quiet";
 }
 
+/** -60..0 dBFS -> 0..1 (clamped). */
+export function levelGaugeFraction(levelDbfs: number): number {
+  if (!Number.isFinite(levelDbfs)) return 0;
+  return Math.max(0, Math.min(1, (levelDbfs + 60) / 60));
+}
+
+/** MIN..MAX live pitch Hz -> 0..1; null -> 0. */
+export function pitchGaugeFraction(pitchHz: number | null): number {
+  if (pitchHz === null || !Number.isFinite(pitchHz)) return 0;
+  const span = MAX_LIVE_PITCH_HZ - MIN_LIVE_PITCH_HZ;
+  return Math.max(0, Math.min(1, (pitchHz - MIN_LIVE_PITCH_HZ) / span));
+}
+
 export class LiveVoiceHistory {
   private samples: LiveVoiceSample[] = [];
 
@@ -68,7 +82,10 @@ export class LiveVoiceHistory {
               MIN_LIVE_PITCH_HZ,
               Math.min(MAX_LIVE_PITCH_HZ, frame.f0Hz)
             )
-          : null
+          : null,
+      confidence: Number.isFinite(frame.f0Confidence)
+        ? Math.max(0, Math.min(1, frame.f0Confidence))
+        : 0
     });
     const cutoff = frame.tMs - LIVE_VOICE_WINDOW_MS;
     while (

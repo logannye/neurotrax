@@ -4,6 +4,8 @@ import {
   LiveVoiceHistory,
   LiveVoiceVisualizer,
   MAX_LIVE_VOICE_SAMPLES,
+  levelGaugeFraction,
+  pitchGaugeFraction,
   liveVoiceStateFor,
   rmsToDbfs,
   type AnimationScheduler,
@@ -154,5 +156,22 @@ describe("live voice visualization", () => {
     expect(visualizer.sampleCount()).toBe(0);
     expect(fixture.elements.state.textContent).toBe("Waiting for signal");
     expect(fixture.elements.energyCanvas.dataset.sampleCount).toBe("0");
+  });
+
+  it("records clamped confidence on each history sample", () => {
+    const history = new LiveVoiceHistory();
+    const samples = history.add(frame({ f0Confidence: 0.73 }));
+    expect(samples.at(-1)?.confidence).toBeCloseTo(0.73);
+    expect(history.add(frame({ tMs: 10, f0Confidence: 5 })).at(-1)?.confidence).toBe(1);
+    expect(history.add(frame({ tMs: 20, f0Confidence: -1 })).at(-1)?.confidence).toBe(0);
+  });
+
+  it("maps level and pitch onto 0..1 gauge fractions", () => {
+    expect(levelGaugeFraction(0)).toBeCloseTo(1);
+    expect(levelGaugeFraction(-60)).toBeCloseTo(0);
+    expect(levelGaugeFraction(-30)).toBeCloseTo(0.5);
+    expect(pitchGaugeFraction(null)).toBe(0);
+    expect(pitchGaugeFraction(60)).toBeCloseTo(0);
+    expect(pitchGaugeFraction(400)).toBeCloseTo(1);
   });
 });
