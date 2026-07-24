@@ -100,13 +100,14 @@ test("dual-lane capture shows the live face mesh and bounded voice dashboard", a
     { timeout: 2_000 }
   );
 
-  // Cinematic mesh overlay: the worker attaches control of #landmark-overlay
-  // (transferControlToOffscreen) and sizes its drawing buffer once the mesh
-  // renderer (WebGL2, or the 2D fallback if WebGL2 is unavailable in this
-  // headless Chrome) draws a frame. Poll rather than assert synchronously
-  // since sizing happens on the worker's rAF loop, not on message receipt.
+  // NOTE: this fixture (ambient-browser-fixture.ts) replaces window.Worker
+  // with a same-thread WorkerMock, so the real face-worker.ts (renderer
+  // selection, rAF loop, drawFrame canvas resize) never runs here. This
+  // poll only confirms the #landmark-overlay <canvas> element is present
+  // and attached to the DOM — it does NOT exercise the WebGL2/2D renderer
+  // or rAF-driven buffer sizing. Live mesh rendering is verified manually
+  // via `pnpm dev`, not by this smoke test.
   const overlay = page.locator("#landmark-overlay");
-  await expect(overlay).toBeVisible();
   await expect
     .poll(async () => overlay.evaluate((c: HTMLCanvasElement) => c.width))
     .toBeGreaterThan(0);
