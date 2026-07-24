@@ -117,7 +117,7 @@ h2 { margin: 0; font-size: 1.25rem; }
 .live-panel-heading > strong[data-state="speech-noise"] { background: rgba(150,120,255,.16); color: #c3b0ff; }
 .live-panel-heading > strong[data-state="unavailable"] { background: rgba(148,98,10,.2); color: #ffe2a8; }
 .voice-gauges { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-.voice-gauges canvas { display: block; width: 100%; aspect-ratio: 1 / .6; }
+.voice-gauges canvas { display: block; width: 100%; aspect-ratio: 1 / .82; }
 .voice-wave { background: #080815; border: 1px solid rgba(140,128,255,.14); border-radius: 12px; padding: .4rem .55rem .3rem; }
 .voice-wave-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: .18rem; }
 .voice-wave-head span { font: 600 .58rem/1 ui-monospace, monospace; letter-spacing: .09em; color: #8b97c8; }
